@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PollStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum PollVotingStyle {
+  PUBLIC
+  PARTIALLY_SECRET
+  SECRET
+  ANONYMOUS
+}
+
+enum PollVoterEligibilitySource {
+  AUTHENTICATED_USERS
+  UNESP_USERS
+  COMPUTER_SCIENCE_STUDENTS
+  EVENT_ATTENDANCE
+  EVENT_ATTENDANCE_UNESP_USERS
+  EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS
+  ENROLLMENT_LIST
+}
+
+enum PollElementType {
+  SECTION
+  STATEMENT
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  SINGLE_SELECTION_GRID
+  MULTIPLE_SELECTION_GRID
+  SELECTION_DROPDOWN
+  LINEAR_SCALE
+  STAR_RATING
+  DATE
+  TIME
+  SCHEDULING
+}
+
+enum PollImagePlacement {
+  UNUSED
+  POLL_DESCRIPTION
+  ELEMENT_DESCRIPTION
+}
+
+model User {
+  id                String         @id
+  preferredUsername String?
+  email             String?
+  name              String?
+  roles             String[]       @default([])
+  permissions       String[]       @default([])
+  claims            Json?
+  lastLoginAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  createdPolls      Poll[]         @relation("PollCreatedBy")
+  updatedPolls      Poll[]         @relation("PollUpdatedBy")
+  responses         PollResponse[]
+  pollVotes         PollVoter[]
+  pollEligibilityEnrollments PollEligibilityEnrollment[]
+
+  @@index([email])
+}
+
+model Poll {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  status      PollStatus     @default(DRAFT)
+  votingStyle PollVotingStyle @default(SECRET)
+  voterEligibilitySource      PollVoterEligibilitySource @default(AUTHENTICATED_USERS)
+  requireVerifiedUnespRole    Boolean @default(false)
+  directLinkEnabled           Boolean @default(false)
+  directLinkToken             String? @unique
+  resultsPublic               Boolean @default(false)
+  resultsLive                 Boolean @default(false)
+  allowResponseEditing        Boolean @default(false)
+  allowMultipleResponses      Boolean @default(false)
+  createdById String?
+  updatedById String?
+  linkedEventId                    String?
+  linkedEventName                  String?
+  linkedEventStartDate             DateTime?
+  linkedEventEndDate               DateTime?
+  linkedEventLocationDescription   String?
+  publishedAt DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  createdBy   User?          @relation("PollCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?          @relation("PollUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  elements    PollElement[]
+  responses   PollResponse[]
+  voters      PollVoter[]
+  eligibilityEnrollments PollEligibilityEnrollment[]
+  images      PollImage[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([linkedEventId])
+}
+
+model PollImage {
+  id               String             @id @default(cuid())
+  pollId           String
+  placement        PollImagePlacement @default(UNUSED)
+  elementId        String?
+  objectKey        String             @unique
+  originalFileName String
+  originalMimeType String
+  mimeType         String
+  sizeBytes        Int
+  width            Int
+  height           Int
+  altText          String?
+  caption          String?
+  position         Int                @default(0)
+  createdById      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  poll             Poll               @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@index([pollId, placement, position])
+  @@index([elementId])
+  @@index([createdAt])
+}
+
+model PollEligibilityEnrollment {
+  pollId           String
+  enrollmentNumber String
+  createdById      String?
+  createdAt        DateTime @default(now())
+  poll             Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  createdBy        User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@id([pollId, enrollmentNumber])
+  @@index([enrollmentNumber])
+  @@index([createdAt])
+}
+
+model PollElement {
+  id          String             @id @default(cuid())
+  pollId      String
+  type        PollElementType
+  title       String
+  description String?
+  required    Boolean            @default(false)
+  settings    Json?
+  position    Int
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  poll        Poll               @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  options     PollElementOption[]
+  answers     PollAnswer[]
+
+  @@index([pollId, position])
+}
+
+model PollElementOption {
+  id          String      @id @default(cuid())
+  elementId   String
+  label       String
+  description String?
+  position    Int
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  element     PollElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+
+  @@index([elementId, position])
+}
+
+model PollResponse {
+  id          String       @id @default(cuid())
+  pollId      String
+  userId      String?
+  submittedAt DateTime?    @default(now())
+  createdAt   DateTime     @default(now())
+  poll        Poll         @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  answers     PollAnswer[]
+
+  @@index([pollId, submittedAt])
+  @@index([pollId, createdAt])
+  @@index([userId])
+}
+
+model PollVoter {
+  pollId String
+  userId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([pollId, userId])
+  @@index([userId])
+}
+
+model PollAnswer {
+  id         String       @id @default(cuid())
+  responseId String
+  elementId  String
+  value      Json
+  response   PollResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  element    PollElement  @relation(fields: [elementId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, elementId])
+  @@index([elementId])
+}

@@ -7,6 +7,8 @@ export default [
   {
     ignores: [
       '**/dist',
+      '**/mockServiceWorker.js',
+      '**/storybook-static',
       '**/vite.config.*.timestamp*',
       '**/vitest.config.*.timestamp*',
     ],
@@ -18,7 +20,7 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '^@org/backend/app/.*$'],
           depConstraints: [
             {
               sourceTag: 'scope:shared',

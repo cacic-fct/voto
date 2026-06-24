@@ -1,0 +1,73 @@
+.page-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding-bottom: 1rem;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font: var(--mat-sys-headline-medium);
+}
+
+header p,
+mat-card-content p {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.poll-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+mat-card-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.poll-card,
+.notice-card,
+.empty-card {
+  border-radius: 8px;
+}
+
+.poll-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 17rem;
+}
+
+.poll-card mat-card-header {
+  align-items: flex-start;
+}
+
+.poll-card mat-card-title {
+  font: var(--mat-sys-title-large);
+}
+
+.poll-card mat-card-actions {
+  margin-top: auto;
+}
+
+.empty-card {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 48%, transparent);
+}
+
+@media (max-width: 600px) {
+  h1 {
+    font: var(--mat-sys-headline-small);
+  }
+}

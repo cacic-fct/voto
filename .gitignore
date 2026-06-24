@@ -28,6 +28,7 @@ node_modules
 /.sass-cache
 /connect.lock
 /coverage
+/.env
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log
@@ -52,3 +53,6 @@ vitest.config.*.timestamp*
 
 .nx/polygraph
 .nx/self-healing
+
+storybook-static
+.nx/migrate-runs

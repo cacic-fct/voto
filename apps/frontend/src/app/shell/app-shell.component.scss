@@ -1,0 +1,137 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  background: var(--mat-sys-surface);
+}
+
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface);
+}
+
+.brand {
+  font: var(--mat-sys-title-medium);
+}
+
+main {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  padding: 1rem 1rem 6.75rem;
+  box-sizing: border-box;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.user {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
+.bottom-toolbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  height: auto;
+  padding: 0.75rem 1rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  overflow: auto hidden;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface) 94%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.nav-button {
+  min-width: 5.5rem;
+  height: auto;
+  padding: 0.25rem 0.625rem;
+  color: var(--mat-sys-on-surface-variant);
+  text-transform: none;
+}
+
+.nav-button.mat-mdc-button {
+  line-height: 1;
+}
+
+.nav-button .mdc-button__label,
+.icon-wrap,
+.label {
+  display: grid;
+  place-items: center;
+}
+
+.nav-button .mdc-button__label {
+  gap: 0.125rem;
+}
+
+.icon-wrap {
+  position: relative;
+  width: 3.75rem;
+  height: 2.25rem;
+  border-radius: 999px;
+}
+
+.icon-wrap mat-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.label {
+  min-height: 1rem;
+  font: var(--mat-sys-label-medium);
+}
+
+.nav-button.active {
+  color: var(--mat-sys-on-surface);
+}
+
+.nav-button.active .icon-wrap::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  border-radius: inherit;
+  background: var(--mat-sys-primary);
+  opacity: 0.16;
+}
+
+.nav-button.active mat-icon {
+  color: var(--mat-sys-primary);
+}
+
+@media (max-width: 600px) {
+  main {
+    padding: 0.75rem 0.75rem 6.25rem;
+  }
+
+  .user {
+    display: none;
+  }
+
+  .app-toolbar button[mat-button] span {
+    display: none;
+  }
+
+  .bottom-toolbar {
+    justify-content: space-around;
+    padding-inline: 0.75rem;
+  }
+
+  .nav-button {
+    min-width: 4.75rem;
+    padding-inline: 0.25rem;
+  }
+}

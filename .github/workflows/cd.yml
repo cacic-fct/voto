@@ -1,0 +1,297 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  detect-affected:
+    name: Detect affected deployable apps
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+      has_apps: ${{ steps.affected.outputs.has_apps }}
+
+    steps:
+      - name: Checkout completed commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Detect affected apps
+        id: affected
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          HEAD="${{ github.event.workflow_run.head_sha }}"
+
+          BASE="$(git rev-parse "${HEAD}^" 2>/dev/null || true)"
+
+          if [ -z "$BASE" ]; then
+            echo "No parent commit found."
+            echo "Publishing all deployable apps."
+
+            DEPLOYABLE="$(printf '%s\n' \
+              backend \
+              frontend
+            )"
+          else
+            echo "BASE=$BASE"
+            echo "HEAD=$HEAD"
+
+            git cat-file -e "${BASE}^{commit}"
+            git cat-file -e "${HEAD}^{commit}"
+
+            CHANGED_FILES="$(git diff --name-only "$BASE" "$HEAD")"
+            DEPLOYABLE_APPS_PATTERN='^(backend|frontend)$'
+            GLOBAL_CHANGE_PATTERN='(^package\.json$|^bun\.lock$|^nx\.json$|^tsconfig\.base\.json$|^\.npmrc$|^bunfig\.toml$|^\.github/workflows/.*\.ya?ml$|^Dockerfile$|^apps/[^/]+/Dockerfile(\.dockerignore)?$)'
+
+            if printf '%s\n' "$CHANGED_FILES" | grep -E "$GLOBAL_CHANGE_PATTERN"; then
+              DEPLOYABLE="$(printf '%s\n' \
+                backend \
+                frontend
+              )"
+            else
+              AFFECTED="$(
+                bunx nx show projects \
+                  --affected \
+                  --type=app \
+                  --base="$BASE" \
+                  --head="$HEAD"
+              )"
+
+              DEPLOYABLE="$(
+                printf '%s\n' "$AFFECTED" \
+                  | grep -E "$DEPLOYABLE_APPS_PATTERN" \
+                  || true
+              )"
+            fi
+          fi
+
+          if [ -z "$DEPLOYABLE" ]; then
+            echo "No deployable apps were affected."
+            echo 'matrix={"app":[]}' >> "$GITHUB_OUTPUT"
+            echo 'has_apps=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MATRIX="$(
+            printf '%s\n' "$DEPLOYABLE" \
+              | sed '/^[[:space:]]*$/d' \
+              | jq -R . \
+              | jq -cs '{app: .}'
+          )"
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "has_apps=true" >> "$GITHUB_OUTPUT"
+
+  prepare-release:
+    name: Prepare release version
+    needs: detect-affected
+    runs-on: ubuntu-latest
+
+    if: needs.detect-affected.outputs.has_apps == 'true'
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout completed commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DATE="$(date -u +%F)"
+
+          git fetch --tags origin
+
+          LAST_N="$(
+            git tag -l "${DATE}-*" \
+              | sed -E "s/^${DATE}-([0-9]+)$/\1/" \
+              | sort -n \
+              | tail -1
+          )"
+
+          if [ -z "${LAST_N}" ]; then
+            NEXT_N=1
+          else
+            NEXT_N=$((LAST_N + 1))
+          fi
+
+          VERSION="${DATE}-${NEXT_N}"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  verify-images:
+    name: Verify app images
+    needs:
+      - detect-affected
+      - prepare-release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
+    if: needs.detect-affected.outputs.has_apps == 'true'
+
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.detect-affected.outputs.matrix) }}
+
+    steps:
+      - name: Checkout completed commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          build-args: |
+            APP_VERSION=${{ needs.prepare-release.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          secrets: |
+            "NPM_CONFIG_TOKEN=${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}"
+
+  publish:
+    name: Publish app images
+    needs:
+      - detect-affected
+      - prepare-release
+      - verify-images
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    if: needs.detect-affected.outputs.has_apps == 'true'
+
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.detect-affected.outputs.matrix) }}
+
+    steps:
+      - name: Checkout completed commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.app }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.prepare-release.outputs.version }}
+            type=sha,prefix=
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          secrets: |
+            "NPM_CONFIG_TOKEN=${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}"
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ needs.prepare-release.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  release:
+    name: Create GitHub release
+    needs:
+      - prepare-release
+      - publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout completed commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ needs.prepare-release.outputs.version }}" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "${{ needs.prepare-release.outputs.version }}" \
+            --generate-notes

@@ -1,0 +1,63 @@
+<section class="page-stack">
+  <header class="page-header">
+    <div>
+      <h1>Votações</h1>
+      <p>Escolha uma votação publicada para participar.</p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  @if (error()) {
+    <mat-card appearance="outlined" class="notice-card">
+      <mat-card-content>{{ error() }}</mat-card-content>
+    </mat-card>
+  }
+
+  <div class="poll-grid">
+    @for (poll of polls(); track poll.id) {
+      <mat-card appearance="outlined" class="poll-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>ballot</mat-icon>
+          <mat-card-title>{{ poll.title }}</mat-card-title>
+          <mat-card-subtitle>{{ pollStatusLabel(poll) }}</mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content>
+          <p>{{ poll.description || 'Sem descrição.' }}</p>
+          <mat-chip-set aria-label="Resumo da votação">
+            <mat-chip>{{ poll.elementCount }} itens</mat-chip>
+            <mat-chip>{{ poll.responseCount }} respostas</mat-chip>
+            <mat-chip>{{ votingStyleLabel(poll.votingStyle) }}</mat-chip>
+            <mat-chip>{{ voterEligibilityLabel(poll.voterEligibilitySource) }}</mat-chip>
+            @if (poll.allowResponseEditing) {
+              <mat-chip>Edição permitida</mat-chip>
+            }
+            @if (poll.allowMultipleResponses) {
+              <mat-chip>Múltiplas respostas</mat-chip>
+            }
+          </mat-chip-set>
+        </mat-card-content>
+
+        <mat-card-actions align="end">
+          <a mat-flat-button [routerLink]="['/polls', poll.id]">
+            <mat-icon>{{ poll.status === 'closed' ? 'bar_chart' : 'how_to_vote' }}</mat-icon>
+            {{ poll.status === 'closed' ? 'Ver resultados' : 'Votar' }}
+          </a>
+        </mat-card-actions>
+      </mat-card>
+    } @empty {
+      @if (!loading()) {
+        <mat-card appearance="outlined" class="empty-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>inbox</mat-icon>
+            <mat-card-title>Nenhuma votação publicada</mat-card-title>
+            <mat-card-subtitle>Volte mais tarde para participar.</mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      }
+    }
+  </div>
+</section>

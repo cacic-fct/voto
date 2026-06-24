@@ -1,0 +1,339 @@
+@use '@angular/material' as mat;
+
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource/material-symbols-outlined/index.css';
+@import '@cacic-fct/account-manager-cookie-banner/styles.css';
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: 'Inter Variable',
+      density: 0,
+    )
+  );
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light dark;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+}
+
+.builder-tabs {
+  min-width: 0;
+}
+
+.builder-tabs .mat-mdc-tab-body-content,
+.results-subtabs .mat-mdc-tab-body-content {
+  overflow: visible;
+}
+
+:where(
+  .tab-content,
+  .result-tab-content,
+  .results-content,
+  .text-answer-groups,
+  .text-answer-list,
+  .individual-answer-list
+) {
+  display: grid;
+  gap: 1rem;
+}
+
+.tab-content,
+.result-tab-content {
+  padding-top: 1rem;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-card {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.metric-card span {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.metric-card strong {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-headline-small);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+}
+
+.result-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.result-table-header,
+.result-table-row {
+  min-width: 42rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.result-table-header {
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.result-table-row {
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+}
+
+.voter-table-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.2fr) minmax(12rem, 1.2fr) minmax(9rem, 0.8fr) minmax(8rem, 0.7fr);
+}
+
+.question-answer-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(18rem, 1.4fr);
+}
+
+:where(.result-table-row span, .individual-answer strong, .individual-person span) {
+  overflow-wrap: anywhere;
+}
+
+.text-answer-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.text-answer-list blockquote {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border-inline-start: 4px solid var(--mat-sys-primary);
+  border-radius: 0 8px 8px 0;
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+}
+
+.individual-person {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  padding: 0.875rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.individual-person > div,
+.individual-answer {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.individual-person span,
+.individual-answer span {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.individual-answer {
+  padding: 0.875rem 0;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+}
+
+.individual-answer:last-child {
+  border-block-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+:where(.scheduling-settings, .availability-section) {
+  display: grid;
+  gap: 1rem;
+}
+
+.availability-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .availability-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.scheduling-summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.scheduling-summary > div {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.admin-layout .description-media {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  border: 1px dashed var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.admin-layout .image-editor-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 18rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+  padding-block-start: 0.75rem;
+}
+
+.admin-layout .image-editor-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.admin-layout .image-editor-row app-poll-description-content {
+  --description-preview-width: 18rem;
+}
+
+@media (max-width: 720px) {
+  .admin-layout .image-editor-row,
+  .admin-layout .image-editor-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.schedule-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.schedule-table-header,
+.schedule-table-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.45fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.schedule-table-header {
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+}
+
+.schedule-table-row {
+  align-items: start;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+}
+
+.schedule-date {
+  padding-block: 0.5rem;
+}
+
+.schedule-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.schedule-times button {
+  height: auto;
+  min-height: 3rem;
+  padding-block: 0.5rem;
+}
+
+.schedule-times .slot-label {
+  display: block;
+  white-space: normal;
+}
+
+.schedule-times small {
+  display: block;
+  font: var(--mat-sys-body-small);
+}
+
+.selected-schedule-slot {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.invitee-section h3 {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+}
+
+.invitee-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .schedule-table-header {
+    display: none;
+  }
+
+  .schedule-table-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

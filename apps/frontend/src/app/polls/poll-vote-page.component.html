@@ -1,0 +1,423 @@
+<section class="page-stack">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  @if (poll(); as currentPoll) {
+    <header class="page-header">
+      <a matIconButton routerLink="/polls" aria-label="Voltar para votações">
+        <mat-icon>arrow_back</mat-icon>
+      </a>
+      <div>
+        <h1>{{ currentPoll.title }}</h1>
+        @if (currentPoll.description || currentPoll.descriptionImages?.length) {
+          <app-poll-description-content
+            [text]="currentPoll.description"
+            [images]="currentPoll.descriptionImages ?? []"></app-poll-description-content>
+        }
+      </div>
+    </header>
+
+    <section class="metadata-panel" aria-labelledby="metadata-title">
+      <div>
+        <h2 id="metadata-title">Informações da votação</h2>
+        <p>Habilitados a votar, visibilidade e sigilo.</p>
+      </div>
+      <div class="metadata-content">
+        <mat-chip-set aria-label="Metadados da votação">
+          <mat-chip>Estilo: {{ votingStyleLabel(currentPoll.votingStyle) }}</mat-chip>
+          <mat-chip>Habilitados: {{ voterEligibilityLabel(currentPoll.voterEligibilitySource) }}</mat-chip>
+        </mat-chip-set>
+        <p>{{ votingStyleVoterDescription(currentPoll.votingStyle) }}</p>
+        <p>{{ voterEligibilityDescription(currentPoll.voterEligibilitySource) }}</p>
+        @if (currentPoll.allowResponseEditing) {
+          <p>Você poderá editar sua resposta enquanto a votação estiver aberta.</p>
+        }
+        @if (currentPoll.allowMultipleResponses) {
+          <p>Você poderá enviar mais de uma resposta enquanto a votação estiver aberta.</p>
+        }
+        @if (currentPoll.linkedEvent; as linkedEvent) {
+          <p>Evento vinculado: {{ linkedEvent.name }}</p>
+        }
+      </div>
+    </section>
+
+    @if (responseState().hasSubmitted) {
+      <mat-card appearance="outlined" class="notice-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>check_circle</mat-icon>
+          <mat-card-title>Resposta registrada</mat-card-title>
+          @if (responseState().canEdit) {
+            <mat-card-subtitle>Você pode editar sua resposta enquanto a votação estiver aberta.</mat-card-subtitle>
+          } @else if (responseState().canSubmitAnother) {
+            <mat-card-subtitle>Você pode enviar outra resposta enquanto a votação estiver aberta.</mat-card-subtitle>
+          } @else {
+            <mat-card-subtitle>Obrigado por participar.</mat-card-subtitle>
+          }
+        </mat-card-header>
+      </mat-card>
+    }
+
+    @if (canVote()) {
+      <div class="question-list">
+        @for (element of currentPoll.elements; track element.id) {
+          <mat-card appearance="outlined" class="question-card">
+            <mat-card-header>
+              <mat-card-title>{{ element.title }}</mat-card-title>
+              @if (element.required) {
+                <mat-card-subtitle>Obrigatório</mat-card-subtitle>
+              }
+            </mat-card-header>
+
+            @if (element.description || element.descriptionImages?.length) {
+              <mat-card-content>
+                <app-poll-description-content
+                  [text]="element.description"
+                  [images]="element.descriptionImages ?? []"></app-poll-description-content>
+              </mat-card-content>
+            }
+
+            <mat-card-content>
+              @switch (element.type) {
+                @case ('section') {
+                  <mat-divider></mat-divider>
+                }
+                @case ('statement') {
+                  <p class="statement">Leia atentamente antes de continuar.</p>
+                }
+                @case ('shortText') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Resposta curta</mat-label>
+                    <input
+                      matInput
+                      type="text"
+                      [value]="textAnswerValue(element.id)"
+                      (input)="setTextAnswer(element.id, $event)" />
+                  </mat-form-field>
+                }
+                @case ('longText') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Resposta longa</mat-label>
+                    <textarea
+                      matInput
+                      rows="4"
+                      [value]="textAnswerValue(element.id)"
+                      (input)="setTextAnswer(element.id, $event)"></textarea>
+                  </mat-form-field>
+                }
+                @case ('singleChoice') {
+                  <mat-radio-group [value]="singleAnswerValue(element.id)" (change)="setSingleAnswer(element.id, $event)">
+                    @for (option of element.options; track option.id) {
+                      <mat-radio-button [value]="option.id" [checked]="isSingleAnswerSelected(element.id, option.id)">
+                        {{ option.label }}
+                        @if (option.description) {
+                          <span>{{ option.description }}</span>
+                        }
+                      </mat-radio-button>
+                    }
+                  </mat-radio-group>
+                }
+                @case ('selectionDropdown') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Selecione uma opção</mat-label>
+                    <mat-select [value]="singleAnswerValue(element.id)" (selectionChange)="setDropdownAnswer(element.id, $event)">
+                      @for (option of element.options; track option.id) {
+                        <mat-option [value]="option.id">
+                          {{ option.label }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                }
+                @case ('multipleChoice') {
+                  <div class="option-list">
+                    @for (option of element.options; track option.id) {
+                      <mat-checkbox
+                        [checked]="isMultipleAnswerSelected(element.id, option.id)"
+                        (change)="toggleMultipleAnswer(element.id, option.id, $event)">
+                        {{ option.label }}
+                        @if (option.description) {
+                          <span>{{ option.description }}</span>
+                        }
+                      </mat-checkbox>
+                    }
+                  </div>
+                }
+                @case ('singleSelectionGrid') {
+                  @if (element.settings?.grid; as grid) {
+                    <div class="selection-grid" [style.grid-template-columns]="gridTemplateColumns(element)">
+                      <span></span>
+                      @for (column of grid.columns; track column.id) {
+                        <strong>{{ column.label }}</strong>
+                      }
+
+                      @for (row of grid.rows; track row.id) {
+                        <div class="grid-row-label">
+                          <strong>{{ row.label }}</strong>
+                          @if (row.description) {
+                            <span>{{ row.description }}</span>
+                          }
+                        </div>
+                        @for (column of grid.columns; track column.id) {
+                          <mat-radio-button
+                            [name]="element.id + '-' + row.id"
+                            [value]="column.id"
+                            [checked]="isSingleGridColumnSelected(element.id, row.id, column.id)"
+                            [attr.aria-label]="row.label + ': ' + column.label"
+                            (change)="setSingleGridAnswer(element.id, row.id, column.id)">
+                          </mat-radio-button>
+                        }
+                      }
+                    </div>
+                  }
+                }
+                @case ('multipleSelectionGrid') {
+                  @if (element.settings?.grid; as grid) {
+                    <div class="selection-grid" [style.grid-template-columns]="gridTemplateColumns(element)">
+                      <span></span>
+                      @for (column of grid.columns; track column.id) {
+                        <strong>{{ column.label }}</strong>
+                      }
+
+                      @for (row of grid.rows; track row.id) {
+                        <div class="grid-row-label">
+                          <strong>{{ row.label }}</strong>
+                          @if (row.description) {
+                            <span>{{ row.description }}</span>
+                          }
+                        </div>
+                        @for (column of grid.columns; track column.id) {
+                          <mat-checkbox
+                            [checked]="isMultipleGridColumnSelected(element.id, row.id, column.id)"
+                            [attr.aria-label]="row.label + ': ' + column.label"
+                            (change)="toggleMultipleGridAnswer(element.id, row.id, column.id, $event)">
+                          </mat-checkbox>
+                        }
+                      }
+                    </div>
+                  }
+                }
+                @case ('linearScale') {
+                  <div class="scale-control">
+                    <div class="scale-options">
+                      @for (value of linearScaleValues(element); track value) {
+                        <button
+                          mat-stroked-button
+                          type="button"
+                          [class.selected-scale-option]="isNumberAnswerSelected(element.id, value)"
+                          (click)="setNumberAnswer(element.id, value)">
+                          {{ value }}
+                        </button>
+                      }
+                    </div>
+                    <div class="scale-labels">
+                      <span>{{ element.settings?.linearScale?.minLabel || '' }}</span>
+                      <span>{{ element.settings?.linearScale?.maxLabel || '' }}</span>
+                    </div>
+                  </div>
+                }
+                @case ('starRating') {
+                  <div class="rating-control" role="radiogroup" [attr.aria-label]="element.title">
+                    @for (value of starRatingValues(element); track value) {
+                      <button
+                        matIconButton
+                        type="button"
+                        [class.selected-rating-option]="isRatingFilled(element.id, value)"
+                        [attr.aria-label]="value + ' estrelas'"
+                        (click)="setNumberAnswer(element.id, value)">
+                        <mat-icon>{{ isRatingFilled(element.id, value) ? 'star' : 'star_border' }}</mat-icon>
+                      </button>
+                    }
+                  </div>
+                }
+                @case ('date') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Data</mat-label>
+                    <input
+                      matInput
+                      type="date"
+                      [value]="textAnswerValue(element.id)"
+                      (input)="setTextAnswer(element.id, $event)" />
+                  </mat-form-field>
+                }
+                @case ('time') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Hora</mat-label>
+                    <input
+                      matInput
+                      type="time"
+                      [value]="textAnswerValue(element.id)"
+                      (input)="setTextAnswer(element.id, $event)" />
+                  </mat-form-field>
+                }
+                @case ('scheduling') {
+                  @if (element.settings?.scheduling; as scheduling) {
+                    <div class="scheduling-control">
+                      <div class="scheduling-summary">
+                        <mat-icon>event_available</mat-icon>
+                        <div>
+                          @if (scheduling.hostName) {
+                            <strong>{{ scheduling.hostName }}</strong>
+                          }
+                          <span>{{ scheduling.durationMinutes }} min · {{ scheduling.timezone }}</span>
+                          @if (scheduling.location) {
+                            <span>{{ scheduling.location }}</span>
+                          }
+                        </div>
+                      </div>
+
+                      @if (schedulingSlotGroups(element); as slotGroups) {
+                        <div class="schedule-table" role="table" aria-label="Horários disponíveis">
+                          <div class="schedule-table-header" role="row">
+                            <span role="columnheader">Data</span>
+                            <span role="columnheader">Horários</span>
+                          </div>
+                          @for (group of slotGroups; track group.date) {
+                            <div class="schedule-table-row" role="row">
+                              <strong class="schedule-date" role="cell">{{ group.label }}</strong>
+                              <div class="schedule-times" role="cell">
+                                @for (slot of group.slots; track slot.id) {
+                                  <button
+                                    mat-stroked-button
+                                    type="button"
+                                    [class.selected-schedule-slot]="isSchedulingSlotSelected(element.id, slot.id)"
+                                    (click)="setSchedulingSlot(element.id, slot.id)">
+                                    <span class="slot-label">{{ slot.label }}</span>
+                                    <small>{{ slot.meta }}</small>
+                                  </button>
+                                }
+                              </div>
+                            </div>
+                          } @empty {
+                            <p class="empty-note">Nenhum horário disponível para este agendamento.</p>
+                          }
+                        </div>
+                      }
+
+                      @if (schedulingInviteeIndexes(element).length > 0) {
+                        <div class="invitee-section">
+                          <h3>{{ schedulingInviteeLabel(scheduling) }}</h3>
+                          <div class="invitee-grid">
+                            @for (index of schedulingInviteeIndexes(element); track index) {
+                              <div class="invitee-row">
+                                <mat-form-field appearance="outline">
+                                  <mat-label>Nome do convidado {{ index + 1 }}</mat-label>
+                                  <input
+                                    matInput
+                                    type="text"
+                                    [value]="schedulingInviteeValue(element.id, index, 'name')"
+                                    (input)="setSchedulingInvitee(element.id, index, 'name', $event)" />
+                                </mat-form-field>
+                                <mat-form-field appearance="outline">
+                                  <mat-label>E-mail</mat-label>
+                                  <input
+                                    matInput
+                                    type="email"
+                                    [value]="schedulingInviteeValue(element.id, index, 'email')"
+                                    (input)="setSchedulingInvitee(element.id, index, 'email', $event)" />
+                                </mat-form-field>
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              }
+            </mat-card-content>
+          </mat-card>
+        }
+      </div>
+
+      <div class="actions">
+        <button mat-flat-button type="button" [disabled]="saving()" (click)="submit(currentPoll)">
+          <mat-icon>send</mat-icon>
+          {{ submitButtonLabel() }}
+        </button>
+      </div>
+    } @else if (!responseState().hasSubmitted) {
+      <mat-card appearance="outlined" class="notice-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>lock</mat-icon>
+          <mat-card-title>Votação encerrada</mat-card-title>
+          <mat-card-subtitle>Não é mais possível enviar respostas.</mat-card-subtitle>
+        </mat-card-header>
+      </mat-card>
+    }
+
+    @if (loadingResults()) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+
+    @if (resultsError()) {
+      <mat-card appearance="outlined" class="notice-card">
+        <mat-card-content>{{ resultsError() }}</mat-card-content>
+      </mat-card>
+    }
+
+    @if (results(); as currentResults) {
+      <section class="public-results" aria-labelledby="public-results-title">
+        <div class="results-heading">
+          <div>
+            <h2 id="public-results-title">Resultados</h2>
+            <p>{{ currentResults.responseCount }} respostas registradas.</p>
+          </div>
+          @if (currentPoll.status === 'published' && currentPoll.resultsLive) {
+            <span class="live-pill">Ao vivo</span>
+          }
+        </div>
+
+        @if (currentResults.responseCount === 0) {
+          <mat-card appearance="outlined" class="notice-card">
+            <mat-card-content>Nenhuma resposta registrada até o momento.</mat-card-content>
+          </mat-card>
+        } @else {
+          <div class="public-result-list">
+            @for (summary of publicQuestionSummaries(); track summary.element.id) {
+              <mat-card appearance="outlined" class="public-result-card">
+                <mat-card-header>
+                  <mat-icon mat-card-avatar>bar_chart</mat-icon>
+                  <mat-card-title>{{ summary.element.title }}</mat-card-title>
+                  <mat-card-subtitle>{{ summary.answeredCount }} respostas</mat-card-subtitle>
+                </mat-card-header>
+
+                <mat-card-content>
+                  @if (summary.buckets.length > 0) {
+                    <div class="result-bucket-list">
+                      @for (bucket of summary.buckets; track bucket.label) {
+                        <div class="result-bucket">
+                          <div>
+                            <span>{{ bucket.label }}</span>
+                            <strong>{{ bucket.count }}</strong>
+                          </div>
+                          <div class="result-bar-track" aria-hidden="true">
+                            <span [style.width.%]="resultBucketPercent(summary, bucket)"></span>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  } @else if (summary.textAnswers.length > 0) {
+                    <div class="public-text-answers">
+                      @for (answer of summary.textAnswers; track $index) {
+                        <blockquote>{{ answer }}</blockquote>
+                      }
+                    </div>
+                  } @else {
+                    <p class="empty-note">Nenhuma resposta para esta pergunta.</p>
+                  }
+                </mat-card-content>
+              </mat-card>
+            }
+          </div>
+        }
+      </section>
+    }
+  }
+
+  @if (error()) {
+    <mat-card appearance="outlined" class="notice-card">
+      <mat-card-content>{{ error() }}</mat-card-content>
+    </mat-card>
+  }
+</section>

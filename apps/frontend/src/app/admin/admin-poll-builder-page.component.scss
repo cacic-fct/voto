@@ -1,0 +1,282 @@
+.admin-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+:where(.panel, .surface) {
+  min-width: 0;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  background: var(--mat-sys-surface);
+}
+
+.panel {
+  padding: 1rem;
+}
+
+.surface {
+  padding: 0.875rem;
+}
+
+:where(
+  .panel-stack,
+  .field-group,
+  .element-list,
+  .eligibility-list,
+  .options,
+  .grid-settings,
+  .grid-option-section
+) {
+  display: grid;
+  gap: 1rem;
+}
+
+:where(
+  .panel-heading,
+  .surface-heading,
+  .builder-header,
+  .builder-actions,
+  .panel-actions,
+  .status-row,
+  .manual-enrollment-row,
+  .event-manager-source,
+  .eligibility-row,
+  .list-title,
+  .type-option
+) {
+  display: flex;
+  gap: 1rem;
+}
+
+:where(.panel-heading, .surface-heading, .builder-header) {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+:where(.builder-actions, .panel-actions) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+:where(
+  .builder-actions,
+  .status-row,
+  .manual-enrollment-row,
+  .event-manager-source,
+  .eligibility-row,
+  .list-title,
+  .type-option
+) {
+  align-items: center;
+}
+
+:where(h1, h2, h3, h4, p) {
+  margin: 0;
+}
+
+h1 {
+  font: var(--mat-sys-title-large);
+}
+
+h2 {
+  font: var(--mat-sys-headline-small);
+}
+
+:where(h3, h4) {
+  font: var(--mat-sys-title-medium);
+}
+
+:where(
+  p,
+  mat-card-subtitle,
+  .empty-note,
+  .event-option small,
+  .metadata-option small,
+  .eligibility-row span,
+  .status-row,
+  .verified-role-option p
+) {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.eyebrow {
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+  text-transform: uppercase;
+}
+
+.status-row {
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+  font: var(--mat-sys-body-small);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0 0.625rem;
+  border-radius: 999px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--mat-sys-label-medium);
+}
+
+.poll-list {
+  display: grid;
+  margin: 0.75rem -1rem -1rem;
+  padding: 0;
+}
+
+.poll-list-item {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 0.125rem;
+  padding: 0.875rem 1rem;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0;
+  border-inline: 0;
+  border-block-end: 0;
+  background: transparent;
+  color: var(--mat-sys-on-surface);
+  font: inherit;
+  text-align: left;
+}
+
+.poll-list-item:not(.empty-list-item) {
+  cursor: pointer;
+}
+
+.poll-list-item:not(.empty-list-item):hover {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent);
+}
+
+.poll-list-item:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
+}
+
+.poll-list-item.selected-list-item {
+  background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+}
+
+.list-title {
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.list-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-line {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  padding-left: 2rem;
+}
+
+:where(.field-grid, .element-fields) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+:where(.event-option, .metadata-option, .eligibility-row > div) {
+  display: grid;
+  gap: 0.125rem;
+  line-height: 1.2;
+}
+
+.type-option {
+  gap: 0.5rem;
+}
+
+.verified-role-option {
+  display: grid;
+  gap: 0.25rem;
+  align-content: start;
+  padding: 0.25rem 0;
+}
+
+.verified-role-option p {
+  padding-left: 2.75rem;
+  font: var(--mat-sys-body-small);
+}
+
+.manual-enrollment-row {
+  align-items: flex-start;
+}
+
+.manual-enrollment-row mat-form-field {
+  flex: 1 1 18rem;
+}
+
+.eligibility-row {
+  justify-content: space-between;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+  padding-block: 0.75rem;
+}
+
+.eligibility-row:last-child {
+  border-block-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+mat-card-header {
+  align-items: center;
+}
+
+mat-card-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.empty-card {
+  border-style: dashed;
+}
+
+@media (min-width: 960px) {
+  .admin-layout {
+    grid-template-columns: minmax(18rem, 0.75fr) minmax(34rem, 1.75fr);
+    align-items: start;
+  }
+
+  .option-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 720px) {
+  :where(.panel-heading, .surface-heading, .builder-header, .manual-enrollment-row) {
+    flex-direction: column;
+  }
+
+  :where(.builder-actions, .panel-actions) {
+    justify-content: flex-start;
+  }
+
+  :where(.builder-actions, .panel-actions, .surface-heading, .manual-enrollment-row) > button {
+    width: 100%;
+  }
+
+  .span-2 {
+    grid-column: auto;
+  }
+}

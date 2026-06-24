@@ -1,0 +1,21 @@
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+mat-card {
+  width: min(100%, 28rem);
+}
+
+h1 {
+  margin: 1.5rem 0 0.5rem;
+  font: var(--mat-sys-headline-medium);
+}
+
+p {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}

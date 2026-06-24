@@ -1,0 +1,83 @@
+# syntax=docker/dockerfile:1
+FROM oven/bun:1 AS bun
+
+FROM node:26-trixie-slim AS base
+ENV BUN_INSTALL=/usr/local \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROME_DOWNLOAD=true
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+
+WORKDIR /workspace
+
+FROM base AS deps
+COPY package.json bun.lock ./
+COPY .npmrc ./
+
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    --mount=type=secret,id=NPM_CONFIG_TOKEN,required=true \
+    set -eu; \
+    export NPM_CONFIG_TOKEN="$(cat /run/secrets/NPM_CONFIG_TOKEN)"; \
+    bun install --frozen-lockfile
+
+FROM deps AS prisma-deps
+COPY apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
+COPY apps/backend/prisma ./apps/backend/prisma
+
+WORKDIR /workspace/apps/backend
+
+RUN DATABASE_URL="postgresql://user:password@localhost:5432/db?schema=public" \
+    bun x prisma generate --schema prisma/schema.prisma
+
+FROM prisma-deps AS builder
+WORKDIR /workspace
+
+COPY nx.json tsconfig.base.json ./
+COPY eslint.config.mjs jest.config.ts jest.preset.js ./
+
+COPY apps/backend ./apps/backend
+COPY libs ./libs
+
+RUN bun x nx run backend:build:production
+
+FROM base AS production-deps
+ENV NODE_ENV=production
+
+COPY package.json bun.lock ./
+COPY .npmrc ./
+
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    --mount=type=secret,id=NPM_CONFIG_TOKEN,required=true \
+    set -eu; \
+    export NPM_CONFIG_TOKEN="$(cat /run/secrets/NPM_CONFIG_TOKEN)"; \
+    bun install --frozen-lockfile --production
+
+COPY --from=prisma-deps /workspace/node_modules/.prisma ./node_modules/.prisma
+COPY --from=prisma-deps /workspace/node_modules/@prisma ./node_modules/@prisma
+
+COPY apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
+COPY apps/backend/prisma ./apps/backend/prisma
+
+FROM base AS runtime
+ENV NODE_ENV=production \
+    PORT=3000
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends dumb-init \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app --home-dir /app app
+
+COPY --from=production-deps --chown=app:app /workspace/node_modules ./node_modules
+COPY --from=production-deps --chown=app:app /workspace/apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
+COPY --from=production-deps --chown=app:app /workspace/apps/backend/prisma ./apps/backend/prisma
+COPY --from=builder --chown=app:app /workspace/dist/apps/backend ./
+
+USER app
+
+EXPOSE 3000
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "main.js"]

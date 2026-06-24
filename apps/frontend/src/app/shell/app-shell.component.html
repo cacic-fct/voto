@@ -1,0 +1,31 @@
+<mat-toolbar class="app-toolbar">
+  <mat-icon>how_to_vote</mat-icon>
+  <span class="brand">CACiC Voto</span>
+  <span class="spacer"></span>
+  <span class="user">{{ auth.user()?.email }}</span>
+  <button mat-button type="button" (click)="logout()">
+    <mat-icon>logout</mat-icon>
+    <span>Sair</span>
+  </button>
+</mat-toolbar>
+
+<main>
+  <router-outlet></router-outlet>
+</main>
+
+<mat-toolbar class="bottom-toolbar" role="navigation" aria-label="Menu principal">
+  @for (item of navItems(); track item.path) {
+    <a
+      mat-button
+      class="nav-button"
+      [routerLink]="item.path"
+      [class.active]="isActive(item.path)"
+      [attr.aria-current]="isActive(item.path) ? 'page' : null"
+      [attr.aria-label]="item.label">
+      <span class="icon-wrap">
+        <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+      </span>
+      <span class="label">{{ item.label }}</span>
+    </a>
+  }
+</mat-toolbar>

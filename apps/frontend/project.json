@@ -1,0 +1,138 @@
+{
+  "name": "frontend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "prefix": "app",
+  "sourceRoot": "apps/frontend/src",
+  "tags": [
+    "scope:shop"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@angular/build:application",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/apps/frontend",
+        "browser": "apps/frontend/src/main.ts",
+        "tsConfig": "apps/frontend/tsconfig.app.json",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/frontend/public"
+          }
+        ],
+        "styles": [
+          "apps/frontend/src/styles.scss"
+        ],
+        "server": "apps/frontend/src/main.server.ts",
+        "ssr": {
+          "entry": "apps/frontend/src/server.ts"
+        },
+        "outputMode": "server"
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all"
+        },
+        "development": {
+          "optimization": false,
+          "extractLicenses": false,
+          "sourceMap": true
+        },
+        "storybook": {
+          "optimization": false,
+          "extractLicenses": false,
+          "sourceMap": false
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@angular/build:dev-server",
+      "configurations": {
+        "production": {
+          "buildTarget": "frontend:build:production"
+        },
+        "development": {
+          "buildTarget": "frontend:build:development"
+        }
+      },
+      "defaultConfiguration": "development",
+      "dependsOn": [
+        "backend:serve"
+      ],
+      "options": {
+        "proxyConfig": "apps/frontend/proxy.conf.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "storybook": {
+      "executor": "@storybook/angular:start-storybook",
+      "options": {
+        "port": 4400,
+        "configDir": "apps/frontend/.storybook",
+        "browserTarget": "frontend:build:storybook",
+        "compodoc": false,
+        "styles": [
+          "@fontsource/material-symbols-outlined",
+          "@fontsource-variable/inter",
+          "apps/frontend/src/styles.scss"
+        ]
+      }
+    },
+    "build-storybook": {
+      "executor": "@storybook/angular:build-storybook",
+      "outputs": [
+        "{options.outputDir}"
+      ],
+      "options": {
+        "outputDir": "dist/storybook/frontend",
+        "configDir": "apps/frontend/.storybook",
+        "browserTarget": "frontend:build:storybook",
+        "compodoc": false
+      },
+      "configurations": {
+        "ci": {
+          "quiet": true
+        }
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/coverage/apps/frontend"
+      ],
+      "options": {
+        "cwd": "apps/frontend",
+        "command": "vitest"
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "frontend:build",
+        "port": 4200,
+        "staticFilePath": "dist/apps/frontend/browser",
+        "spa": true
+      }
+    }
+  }
+}

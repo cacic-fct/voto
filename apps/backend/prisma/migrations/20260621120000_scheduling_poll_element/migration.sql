@@ -1,0 +1,1 @@
+ALTER TYPE "PollElementType" ADD VALUE 'SCHEDULING';
