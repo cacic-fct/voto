@@ -371,8 +371,12 @@ export function normalizePermissions(permissions: readonly string[]): string[] {
   return [...new Set(permissions.map((permission) => permission.trim()).filter(Boolean))];
 }
 
+export function hasVotingAdminRole(roles: readonly string[] = []): boolean {
+  return roles.some((role) => ['admin', 'administrator', 'voting-admin'].includes(role));
+}
+
 export function hasVotingAdminPermission(permissions: readonly string[], roles: readonly string[] = []): boolean {
-  if (roles.some((role) => ['admin', 'administrator', 'voting-admin'].includes(role))) {
+  if (hasVotingAdminRole(roles)) {
     return true;
   }
 
