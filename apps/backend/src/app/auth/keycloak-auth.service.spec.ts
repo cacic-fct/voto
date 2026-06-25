@@ -373,6 +373,26 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
+  it('does not treat read-only poll permission as a privileged admin bypass', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      sub: 'reader-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+      permissions: ['poll#read'],
+    });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    mockedAxios.get.mockResolvedValue({ data: { sub: 'reader-1' } });
+    mockedAxios.post.mockResolvedValue({ data: [] });
+
+    await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mockedAxios.post).toHaveBeenCalled();
+  });
+
   it('evaluates session permissions with normalization and persistence', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
@@ -455,6 +475,28 @@ describe('KeycloakAuthService', () => {
       'poll#read',
       'poll#edit',
     ]);
+  });
+
+  it('does not return privileged permissions just because poll read is granted', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      sub: 'reader-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+      permissions: ['poll#read'],
+    });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    mockedAxios.get.mockResolvedValue({ data: { sub: 'reader-1' } });
+    mockedAxios.post.mockResolvedValue({ data: [] });
+
+    await expect(service.evaluateSessionPermissions('session-1', ['poll#read', 'poll#edit'])).resolves.toEqual([
+      'poll#read',
+    ]);
+    expect(mockedAxios.post).toHaveBeenCalled();
   });
 
   it('refreshes sessions after waiting for another refresh lock holder', async () => {

@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { hasVotingAdminPermission, normalizePermissions } from '@org/voting-contracts';
+import { hasVotingAdminRole, normalizePermissions } from '@org/voting-contracts';
 import { Prisma } from '@prisma/client';
 import axios from 'axios';
 import { randomBytes } from 'node:crypto';
@@ -183,7 +183,7 @@ export class KeycloakAuthService {
     const principal = await this.getOrCreatePrincipal(session.accessToken);
     const missingPermissions = requiredPermissions.filter((permission) => !principal.permissionSet.has(permission));
 
-    if (missingPermissions.length > 0 && !hasVotingAdminPermission(principal.permissions, principal.roles)) {
+    if (missingPermissions.length > 0 && !hasVotingAdminRole(principal.roles)) {
       const granted = await this.evaluatePermissions(session.accessToken, missingPermissions);
 
       for (const permission of granted) {
@@ -194,7 +194,7 @@ export class KeycloakAuthService {
     }
 
     const stillMissing = requiredPermissions.filter((permission) => !principal.permissionSet.has(permission));
-    if (stillMissing.length > 0 && !hasVotingAdminPermission(principal.permissions, principal.roles)) {
+    if (stillMissing.length > 0 && !hasVotingAdminRole(principal.roles)) {
       throw new ForbiddenException(`Missing permissions: ${stillMissing.join(', ')}.`);
     }
 
@@ -210,7 +210,7 @@ export class KeycloakAuthService {
 
     const principal = await this.getOrCreatePrincipal(session.accessToken);
     const normalized = normalizePermissions(requiredPermissions);
-    if (hasVotingAdminPermission(principal.permissions, principal.roles)) {
+    if (hasVotingAdminRole(principal.roles)) {
       return normalized;
     }
 
