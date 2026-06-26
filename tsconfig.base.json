@@ -40,6 +40,9 @@
       ],
       "@org/voting-contracts": [
         "./libs/shared/voting-contracts/src/index.ts"
+      ],
+      "@cacic-fct/form-contracts": [
+        "./libs/shared/form-contracts/src/index.ts"
       ]
     }
   },

@@ -1,4 +1,26 @@
 import type { EventManagerVotingEvent } from '@cacic-fct/event-manager-m2m-contracts';
+import type {
+  FormAnswerValue,
+  FormChoiceOption,
+  FormElement,
+  FormElementSettings,
+  FormElementType,
+  FormGridSettings,
+  FormImage,
+  FormImageReference,
+  FormLinearScaleSettings,
+  FormMultipleSelectionGridAnswer,
+  FormResponseAnswer,
+  FormSchedulingAnswer,
+  FormSchedulingAvailabilityWindow,
+  FormSchedulingInvitee,
+  FormSchedulingInviteeMode,
+  FormSchedulingSettings,
+  FormSingleSelectionGridAnswer,
+  FormStarRatingSettings,
+  SubmitFormResponseRequest,
+} from '@cacic-fct/form-contracts';
+import { FORM_ELEMENT_TYPES, FORM_SCHEDULING_INVITEE_MODES } from '@cacic-fct/form-contracts';
 
 export const VOTING_ADMIN_PERMISSIONS = [
   'poll#read',
@@ -66,117 +88,33 @@ export const POLL_VOTER_ELIGIBILITY_SOURCES = [
   'enrollmentList',
 ] as const;
 
-export type PollElementType =
-  | 'section'
-  | 'statement'
-  | 'shortText'
-  | 'longText'
-  | 'singleChoice'
-  | 'multipleChoice'
-  | 'singleSelectionGrid'
-  | 'multipleSelectionGrid'
-  | 'selectionDropdown'
-  | 'linearScale'
-  | 'starRating'
-  | 'date'
-  | 'time'
-  | 'scheduling';
+export type PollElementType = FormElementType;
 
-export const POLL_ELEMENT_TYPES = [
-  'section',
-  'statement',
-  'shortText',
-  'longText',
-  'singleChoice',
-  'multipleChoice',
-  'singleSelectionGrid',
-  'multipleSelectionGrid',
-  'selectionDropdown',
-  'linearScale',
-  'starRating',
-  'date',
-  'time',
-  'scheduling',
-] as const;
+export const POLL_ELEMENT_TYPES = FORM_ELEMENT_TYPES;
 
-export type PollChoiceOption = {
-  id: string;
-  label: string;
-  description?: string;
-};
+export type PollChoiceOption = FormChoiceOption;
 
-export type PollGridSettings = {
-  rows: PollChoiceOption[];
-  columns: PollChoiceOption[];
-};
+export type PollGridSettings = FormGridSettings;
 
-export type PollLinearScaleSettings = {
-  min: 0 | 1;
-  max: number;
-  minLabel?: string;
-  maxLabel?: string;
-};
+export type PollLinearScaleSettings = FormLinearScaleSettings;
 
-export type PollStarRatingSettings = {
-  max: number;
-};
+export type PollStarRatingSettings = FormStarRatingSettings;
 
-export type PollSchedulingInviteeMode = 'none' | 'optional' | 'required';
+export type PollSchedulingInviteeMode = FormSchedulingInviteeMode;
 
-export const POLL_SCHEDULING_INVITEE_MODES = ['none', 'optional', 'required'] as const;
+export const POLL_SCHEDULING_INVITEE_MODES = FORM_SCHEDULING_INVITEE_MODES;
 
-export type PollSchedulingAvailabilityWindow = {
-  id: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-};
+export type PollSchedulingAvailabilityWindow = FormSchedulingAvailabilityWindow;
 
-export type PollSchedulingSettings = {
-  hostName?: string;
-  location?: string;
-  timezone: string;
-  durationMinutes: number;
-  slotIntervalMinutes: number;
-  bufferBeforeMinutes: number;
-  bufferAfterMinutes: number;
-  inviteeMode: PollSchedulingInviteeMode;
-  maxInvitees: number;
-  availability: PollSchedulingAvailabilityWindow[];
-};
+export type PollSchedulingSettings = FormSchedulingSettings;
 
-export type PollElementSettings = {
-  grid?: PollGridSettings;
-  linearScale?: PollLinearScaleSettings;
-  starRating?: PollStarRatingSettings;
-  scheduling?: PollSchedulingSettings;
-};
+export type PollElementSettings = FormElementSettings;
 
-export type PollImage = {
-  id: string;
-  url: string;
-  width: number;
-  height: number;
-  altText?: string;
-  caption?: string;
-};
+export type PollImage = FormImage;
 
-export type PollImageReference = {
-  id: string;
-  altText?: string;
-  caption?: string;
-};
+export type PollImageReference = FormImageReference;
 
-export type PollElement = {
-  id: string;
-  type: PollElementType;
-  title: string;
-  description?: string;
-  descriptionImages?: PollImage[];
-  required: boolean;
-  options: PollChoiceOption[];
-  settings?: PollElementSettings;
-};
+export type PollElement = FormElement;
 
 export type EventManagerEvent = EventManagerVotingEvent;
 
@@ -246,37 +184,19 @@ export type SavePollRequest = {
   })[];
 };
 
-export type PollSingleSelectionGridAnswer = Record<string, string>;
+export type PollSingleSelectionGridAnswer = FormSingleSelectionGridAnswer;
 
-export type PollMultipleSelectionGridAnswer = Record<string, string[]>;
+export type PollMultipleSelectionGridAnswer = FormMultipleSelectionGridAnswer;
 
-export type PollSchedulingInvitee = {
-  name: string;
-  email?: string;
-};
+export type PollSchedulingInvitee = FormSchedulingInvitee;
 
-export type PollSchedulingAnswer = {
-  slotId: string;
-  invitees: PollSchedulingInvitee[];
-};
+export type PollSchedulingAnswer = FormSchedulingAnswer;
 
-export type PollAnswerValue =
-  | string
-  | number
-  | string[]
-  | PollSingleSelectionGridAnswer
-  | PollMultipleSelectionGridAnswer
-  | PollSchedulingAnswer
-  | null;
+export type PollAnswerValue = FormAnswerValue;
 
-export type PollResponseAnswer = {
-  elementId: string;
-  value: PollAnswerValue;
-};
+export type PollResponseAnswer = FormResponseAnswer;
 
-export type SubmitPollResponseRequest = {
-  answers: PollResponseAnswer[];
-};
+export type SubmitPollResponseRequest = SubmitFormResponseRequest;
 
 export type PollResponse = {
   id: string;

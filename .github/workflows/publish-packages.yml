@@ -1,0 +1,140 @@
+name: Publish packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - form-contracts
+
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - bun.lock
+      - nx.json
+      - tsconfig.base.json
+      - .github/workflows/publish-packages.yml
+      - libs/shared/form-contracts/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name != 'pull_request' &&
+      github.event_name != 'pull_request_target' &&
+      github.repository_owner == 'cacic-fct' &&
+      github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Detect changed packages
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          form_contracts=false
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.package }}" in
+              all|form-contracts)
+                form_contracts=true
+                ;;
+            esac
+          else
+            base="${{ github.event.before }}"
+
+            if ! git rev-parse --verify "${base}^{commit}" >/dev/null 2>&1; then
+              base="$(git rev-list --max-parents=0 HEAD)"
+            fi
+
+            changed_files="$(git diff --name-only "${base}" "${{ github.sha }}")"
+
+            if grep -qE '^(package\.json|bun\.lock|nx\.json|tsconfig\.base\.json|\.github/workflows/publish-packages\.yml|libs/shared/form-contracts/)' <<< "${changed_files}"; then
+              form_contracts=true
+            fi
+          fi
+
+          any_changed=false
+          if [[ "${form_contracts}" == "true" ]]; then
+            any_changed=true
+          fi
+
+          {
+            echo "form_contracts=${form_contracts}"
+            echo "any_changed=${any_changed}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build form contracts
+        if: steps.changes.outputs.form_contracts == 'true'
+        run: bunx nx build form-contracts
+
+      - name: Verify form contracts package
+        if: steps.changes.outputs.form_contracts == 'true'
+        working-directory: dist/libs/shared/form-contracts
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+
+          if (pkg.name !== '@cacic-fct/form-contracts') {
+            throw new Error(`Unexpected package name: ${pkg.name}`);
+          }
+
+          if (pkg.private) {
+            throw new Error('Package must not be private.');
+          }
+
+          if (pkg.publishConfig?.registry !== 'https://registry.npmjs.org') {
+            throw new Error(`Package must publish to npm. Found: ${pkg.publishConfig?.registry}`);
+          }
+
+          if (pkg.publishConfig?.access !== 'public') {
+            throw new Error(`Package must publish publicly. Found: ${pkg.publishConfig?.access}`);
+          }
+          NODE
+
+      - name: Publish form contracts
+        if: steps.changes.outputs.form_contracts == 'true'
+        working-directory: dist/libs/shared/form-contracts
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bun publish --access public --registry https://registry.npmjs.org

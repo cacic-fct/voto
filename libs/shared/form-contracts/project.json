@@ -1,0 +1,26 @@
+{
+  "name": "form-contracts",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/form-contracts/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:data", "publishable"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/form-contracts",
+        "tsConfig": "libs/shared/form-contracts/tsconfig.lib.json",
+        "main": "libs/shared/form-contracts/src/index.ts",
+        "assets": [
+          "libs/shared/form-contracts/README.md",
+          {
+            "input": "libs/shared/form-contracts",
+            "glob": "package.json",
+            "output": "."
+          }
+        ]
+      }
+    }
+  }
+}

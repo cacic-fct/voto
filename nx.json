@@ -50,7 +50,7 @@
     }
   },
   "release": {
-    "projects": [],
+    "projects": ["form-contracts"],
     "projectsRelationship": "independent",
     "docker": {
       "skipVersionActions": true

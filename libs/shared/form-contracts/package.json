@@ -1,0 +1,17 @@
+{
+  "name": "@cacic-fct/form-contracts",
+  "version": "0.1.0",
+  "description": "Framework-agnostic CACiC FCT form contracts, answer value shapes, and normalization helpers.",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}
