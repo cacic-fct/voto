@@ -6,20 +6,19 @@
   "tags": ["scope:shared", "type:data", "publishable"],
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/libs/shared/form-contracts"],
       "options": {
-        "outputPath": "dist/libs/shared/form-contracts",
-        "tsConfig": "libs/shared/form-contracts/tsconfig.lib.json",
-        "main": "libs/shared/form-contracts/src/index.ts",
-        "assets": [
-          "libs/shared/form-contracts/README.md",
-          {
-            "input": "libs/shared/form-contracts",
-            "glob": "package.json",
-            "output": "."
-          }
-        ]
+        "cwd": "libs/shared/form-contracts",
+        "command": "rm -rf ../../../dist/libs/shared/form-contracts && bun run tsc -p tsconfig.lib.json && cp package.json README.md ../../../dist/libs/shared/form-contracts/"
+      }
+    },
+    "publish": {
+      "dependsOn": ["build"],
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "dist/libs/shared/form-contracts",
+        "command": "bun publish --access public --registry https://registry.npmjs.org"
       }
     }
   }

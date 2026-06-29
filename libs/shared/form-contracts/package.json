@@ -1,14 +1,22 @@
 {
   "name": "@cacic-fct/form-contracts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic CACiC FCT form contracts, answer value shapes, and normalization helpers.",
   "license": "MIT",
+  "type": "commonjs",
+  "main": "./index.js",
+  "types": "./index.d.ts",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./index.d.ts",
+      "default": "./index.js"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cacic-fct/cacic-voto.git",
+    "directory": "libs/shared/form-contracts"
   },
   "publishConfig": {
     "access": "public",
