@@ -1,0 +1,501 @@
+    <section class="surface field-group" aria-labelledby="elements-title">
+      <div class="surface-heading">
+        <div>
+          <h3 id="elements-title">Itens da votação</h3>
+          <p>Monte perguntas, textos e seções na ordem em que o eleitor verá.</p>
+        </div>
+
+        <button mat-stroked-button type="button" [matMenuTriggerFor]="elementMenu">
+          <mat-icon>add_circle</mat-icon>
+          Adicionar item
+        </button>
+        <mat-menu #elementMenu="matMenu">
+          @for (option of builder().elementTypeOptions; track option.type) {
+            <button mat-menu-item type="button" (click)="builder().addElement(option.type)">
+              <mat-icon>{{ option.icon }}</mat-icon>
+              <span>{{ option.label }}</span>
+            </button>
+          }
+        </mat-menu>
+      </div>
+
+      <div cdkDropList class="element-list" (cdkDropListDropped)="builder().dropElement($event)">
+        @for (element of builder().draft().elements; track element.id; let index = $index) {
+          <mat-card appearance="outlined" class="item-card" cdkDrag>
+            <mat-card-header>
+              <button matIconButton cdkDragHandle type="button" matTooltip="Reordenar" aria-label="Reordenar item">
+                <mat-icon>drag_indicator</mat-icon>
+              </button>
+              <mat-card-title>{{ element.title || builder().elementTypeLabel(element.type) }}</mat-card-title>
+              <mat-card-subtitle>Item {{ index + 1 }} · {{ builder().elementTypeLabel(element.type) }}</mat-card-subtitle>
+              <button
+                matIconButton
+                type="button"
+                matTooltip="Remover"
+                aria-label="Remover item"
+                (click)="builder().removeElement(element.id)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </mat-card-header>
+
+            <mat-card-content>
+              <div class="element-fields">
+                <mat-form-field appearance="outline">
+                  <mat-label>Tipo</mat-label>
+                  <mat-select [value]="element.type" (selectionChange)="builder().updateElementType(element.id, $event)">
+                    <mat-select-trigger>
+                      <span class="type-option">
+                        <mat-icon>{{ builder().elementTypeOption(element.type).icon }}</mat-icon>
+                        <span>{{ builder().elementTypeOption(element.type).label }}</span>
+                      </span>
+                    </mat-select-trigger>
+                    @for (option of builder().elementTypeOptions; track option.type) {
+                      <mat-option [value]="option.type">
+                        <span class="type-option">
+                          <mat-icon>{{ option.icon }}</mat-icon>
+                          <span>{{ option.label }}</span>
+                        </span>
+                      </mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Título do item</mat-label>
+                  <input matInput [value]="element.title" (input)="builder().updateElementTitle(element.id, $event)" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="span-2">
+                  <mat-label>Descrição do item</mat-label>
+                  <textarea
+                    matInput
+                    rows="2"
+                    [value]="element.description || ''"
+                    (input)="builder().updateElementDescription(element.id, $event)"></textarea>
+                </mat-form-field>
+
+                <div class="description-media span-2">
+                  <div class="surface-heading compact-heading">
+                    <div>
+                      <h4>Imagens do item</h4>
+                      <p>Adicione imagens exibidas junto à descrição deste item.</p>
+                    </div>
+                    <input
+                      #elementImageInput
+                      hidden
+                      type="file"
+                      [accept]="imageAccept()"
+                      (change)="
+                        uploadElementDescriptionImage(element.id, $any($event.target).files?.[0] ?? null);
+                        elementImageInput.value = ''
+                      " />
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="saving() || isUploadingImage(element.id)"
+                      (click)="elementImageInput.click()">
+                      <mat-icon>add_photo_alternate</mat-icon>
+                      Imagem
+                    </button>
+                  </div>
+
+                  @if (isUploadingImage(element.id)) {
+                    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                  }
+
+                  @for (image of element.descriptionImages ?? []; track image.id) {
+                    <div class="image-editor-row">
+                      <app-poll-description-content [images]="[image]"></app-poll-description-content>
+                      <div class="image-editor-fields">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Texto alternativo</mat-label>
+                          <input
+                            matInput
+                            [value]="image.altText || ''"
+                            (input)="builder().updateElementDescriptionImageText(element.id, image.id, 'altText', $event)" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Legenda</mat-label>
+                          <input
+                            matInput
+                            [value]="image.caption || ''"
+                            (input)="builder().updateElementDescriptionImageText(element.id, image.id, 'caption', $event)" />
+                        </mat-form-field>
+                        <button
+                          matIconButton
+                          type="button"
+                          matTooltip="Remover imagem"
+                          aria-label="Remover imagem"
+                          [disabled]="isUploadingImage(element.id)"
+                          (click)="removeElementDescriptionImage(element.id, image)">
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                  } @empty {
+                    <p class="empty-note">Nenhuma imagem adicionada ao item.</p>
+                  }
+                </div>
+
+                @if (builder().isAnswerElement(element.type)) {
+                  <mat-checkbox [checked]="element.required" (change)="builder().updateElementRequired(element.id, $event)">
+                    Resposta obrigatória
+                  </mat-checkbox>
+                }
+              </div>
+
+              @if (element.type === 'linearScale') {
+                <mat-divider></mat-divider>
+                <div class="element-fields">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Início da escala</mat-label>
+                    <mat-select
+                      [value]="element.settings?.linearScale?.min ?? 1"
+                      (selectionChange)="builder().updateLinearScaleMin(element.id, $event)">
+                      @for (value of builder().scaleMinimumOptions; track value) {
+                        <mat-option [value]="value">{{ value }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Fim da escala</mat-label>
+                    <mat-select
+                      [value]="element.settings?.linearScale?.max ?? 5"
+                      (selectionChange)="builder().updateLinearScaleMax(element.id, $event)">
+                      @for (value of builder().scaleMaximumOptions; track value) {
+                        <mat-option [value]="value" [disabled]="value <= (element.settings?.linearScale?.min ?? 1)">
+                          {{ value }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Rótulo inicial</mat-label>
+                    <input
+                      matInput
+                      [value]="element.settings?.linearScale?.minLabel || ''"
+                      (input)="builder().updateLinearScaleLabel(element.id, 'minLabel', $event)" />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Rótulo final</mat-label>
+                    <input
+                      matInput
+                      [value]="element.settings?.linearScale?.maxLabel || ''"
+                      (input)="builder().updateLinearScaleLabel(element.id, 'maxLabel', $event)" />
+                  </mat-form-field>
+                </div>
+              }
+
+              @if (element.type === 'starRating') {
+                <mat-divider></mat-divider>
+                <div>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Quantidade de estrelas</mat-label>
+                    <mat-select
+                      [value]="element.settings?.starRating?.max ?? 5"
+                      (selectionChange)="builder().updateStarRatingMax(element.id, $event)">
+                      @for (value of builder().starRatingMaximumOptions; track value) {
+                        <mat-option [value]="value">{{ value }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+              }
+
+              @if (element.type === 'scheduling') {
+                @if (element.settings?.scheduling; as scheduling) {
+                  <mat-divider></mat-divider>
+                  <div class="scheduling-settings">
+                    <div class="surface-heading compact-heading">
+                      <div>
+                        <h4>Agendamento</h4>
+                        <p>Configure duração, convidados e disponibilidade do anfitrião.</p>
+                      </div>
+                    </div>
+
+                    <div class="element-fields">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Anfitrião</mat-label>
+                        <input
+                          matInput
+                          [value]="scheduling.hostName || ''"
+                          (input)="builder().updateSchedulingText(element.id, 'hostName', $event)" />
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Local ou link</mat-label>
+                        <input
+                          matInput
+                          [value]="scheduling.location || ''"
+                          (input)="builder().updateSchedulingText(element.id, 'location', $event)" />
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Fuso horário</mat-label>
+                        <mat-select
+                          [value]="scheduling.timezone"
+                          (selectionChange)="builder().updateSchedulingTimezone(element.id, $event)">
+                          @for (timezone of builder().schedulingTimezoneOptions; track timezone) {
+                            <mat-option [value]="timezone">{{ timezone }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Duração</mat-label>
+                        <mat-select
+                          [value]="scheduling.durationMinutes"
+                          (selectionChange)="builder().updateSchedulingNumber(element.id, 'durationMinutes', $event)">
+                          @for (value of builder().schedulingDurationOptions; track value) {
+                            <mat-option [value]="value">{{ value }} min</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Intervalo entre horários</mat-label>
+                        <mat-select
+                          [value]="scheduling.slotIntervalMinutes"
+                          (selectionChange)="builder().updateSchedulingNumber(element.id, 'slotIntervalMinutes', $event)">
+                          @for (value of builder().schedulingSlotIntervalOptions; track value) {
+                            <mat-option [value]="value">{{ value }} min</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Intervalo antes</mat-label>
+                        <mat-select
+                          [value]="scheduling.bufferBeforeMinutes"
+                          (selectionChange)="builder().updateSchedulingNumber(element.id, 'bufferBeforeMinutes', $event)">
+                          @for (value of builder().schedulingBufferOptions; track value) {
+                            <mat-option [value]="value">{{ value }} min</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Intervalo depois</mat-label>
+                        <mat-select
+                          [value]="scheduling.bufferAfterMinutes"
+                          (selectionChange)="builder().updateSchedulingNumber(element.id, 'bufferAfterMinutes', $event)">
+                          @for (value of builder().schedulingBufferOptions; track value) {
+                            <mat-option [value]="value">{{ value }} min</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Convidados</mat-label>
+                        <mat-select
+                          [value]="scheduling.inviteeMode"
+                          (selectionChange)="builder().updateSchedulingInviteeMode(element.id, $event)">
+                          @for (option of builder().schedulingInviteeModeOptions; track option.mode) {
+                            <mat-option [value]="option.mode">{{ option.label }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      @if (scheduling.inviteeMode !== 'none') {
+                        <mat-form-field appearance="outline">
+                          <mat-label>Limite de convidados</mat-label>
+                          <mat-select
+                            [value]="scheduling.maxInvitees"
+                            (selectionChange)="builder().updateSchedulingNumber(element.id, 'maxInvitees', $event)">
+                            @for (value of builder().schedulingInviteeLimitOptions; track value) {
+                              <mat-option [value]="value">{{ value }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                      }
+                    </div>
+
+                    <div class="availability-section">
+                      <div class="surface-heading compact-heading">
+                        <h4>Disponibilidade do anfitrião</h4>
+                        <button mat-stroked-button type="button" (click)="builder().addSchedulingAvailability(element.id)">
+                          <mat-icon>add</mat-icon>
+                          Horário
+                        </button>
+                      </div>
+
+                      @for (availability of scheduling.availability; track availability.id) {
+                        <div class="availability-row">
+                          <mat-form-field appearance="outline">
+                            <mat-label>Data</mat-label>
+                            <input
+                              matInput
+                              type="date"
+                              [value]="availability.date"
+                              (input)="builder().updateSchedulingAvailability(element.id, availability.id, 'date', $event)" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Início</mat-label>
+                            <input
+                              matInput
+                              type="time"
+                              [value]="availability.startTime"
+                              (input)="builder().updateSchedulingAvailability(element.id, availability.id, 'startTime', $event)" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Fim</mat-label>
+                            <input
+                              matInput
+                              type="time"
+                              [value]="availability.endTime"
+                              (input)="builder().updateSchedulingAvailability(element.id, availability.id, 'endTime', $event)" />
+                          </mat-form-field>
+                          <button
+                            matIconButton
+                            type="button"
+                            matTooltip="Remover horário"
+                            aria-label="Remover horário"
+                            (click)="builder().removeSchedulingAvailability(element.id, availability.id)">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+                      } @empty {
+                        <p class="empty-note">Adicione pelo menos um horário disponível.</p>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+
+              @if (builder().isGridElement(element.type)) {
+                @if (element.settings?.grid; as grid) {
+                  <mat-divider></mat-divider>
+                  <div class="grid-settings">
+                    <div class="grid-option-section">
+                      <div class="surface-heading compact-heading">
+                        <h4>Linhas</h4>
+                        <button mat-stroked-button type="button" (click)="builder().addGridOption(element.id, 'rows')">
+                          <mat-icon>add</mat-icon>
+                          Linha
+                        </button>
+                      </div>
+
+                      @for (row of grid.rows; track row.id) {
+                        <div class="option-row">
+                          <mat-form-field appearance="outline">
+                            <mat-label>Texto da linha</mat-label>
+                            <input
+                              matInput
+                              [value]="row.label"
+                              (input)="builder().updateGridOptionLabel(element.id, 'rows', row.id, $event)" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Descrição</mat-label>
+                            <input
+                              matInput
+                              [value]="row.description || ''"
+                              (input)="builder().updateGridOptionDescription(element.id, 'rows', row.id, $event)" />
+                          </mat-form-field>
+                          <button
+                            matIconButton
+                            type="button"
+                            matTooltip="Remover linha"
+                            aria-label="Remover linha"
+                            (click)="builder().removeGridOption(element.id, 'rows', row.id)">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+                      }
+                    </div>
+
+                    <div class="grid-option-section">
+                      <div class="surface-heading compact-heading">
+                        <h4>Colunas</h4>
+                        <button mat-stroked-button type="button" (click)="builder().addGridOption(element.id, 'columns')">
+                          <mat-icon>add</mat-icon>
+                          Coluna
+                        </button>
+                      </div>
+
+                      @for (column of grid.columns; track column.id) {
+                        <div class="option-row">
+                          <mat-form-field appearance="outline">
+                            <mat-label>Texto da coluna</mat-label>
+                            <input
+                              matInput
+                              [value]="column.label"
+                              (input)="builder().updateGridOptionLabel(element.id, 'columns', column.id, $event)" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline">
+                            <mat-label>Descrição</mat-label>
+                            <input
+                              matInput
+                              [value]="column.description || ''"
+                              (input)="builder().updateGridOptionDescription(element.id, 'columns', column.id, $event)" />
+                          </mat-form-field>
+                          <button
+                            matIconButton
+                            type="button"
+                            matTooltip="Remover coluna"
+                            aria-label="Remover coluna"
+                            (click)="builder().removeGridOption(element.id, 'columns', column.id)">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+
+              @if (builder().isOptionChoiceElement(element.type)) {
+                <mat-divider></mat-divider>
+                <div class="options">
+                  <div class="surface-heading compact-heading">
+                    <h4>Opções</h4>
+                    <button mat-stroked-button type="button" (click)="builder().addOption(element.id)">
+                      <mat-icon>add</mat-icon>
+                      Opção
+                    </button>
+                  </div>
+
+                  @for (option of element.options; track option.id) {
+                    <div class="option-row">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Texto da opção</mat-label>
+                        <input
+                          matInput
+                          [value]="option.label"
+                          (input)="builder().updateOptionLabel(element.id, option.id, $event)" />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Descrição</mat-label>
+                        <input
+                          matInput
+                          [value]="option.description || ''"
+                          (input)="builder().updateOptionDescription(element.id, option.id, $event)" />
+                      </mat-form-field>
+                      <button
+                        matIconButton
+                        type="button"
+                        matTooltip="Remover opção"
+                        aria-label="Remover opção"
+                        (click)="builder().removeOption(element.id, option.id)">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        } @empty {
+          <mat-card appearance="outlined" class="empty-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar>playlist_add</mat-icon>
+              <mat-card-title>Comece adicionando um item</mat-card-title>
+              <mat-card-subtitle>Use perguntas, textos e seções para montar a votação.</mat-card-subtitle>
+            </mat-card-header>
+          </mat-card>
+        }
+      </div>
+    </section>
+

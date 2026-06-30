@@ -5,7 +5,21 @@ import { EventManagerEvent, Poll, PollEligibilityEnrollment, PollElement, PollRe
 import { of, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from '../polls/poll-api.service';
+import {
+  answerValueLabel,
+  formatDateLabel,
+  readSchedulingAnswerOrNull,
+  schedulingSlots,
+} from '../polls/poll-result-formatting';
 import { AdminPollBuilderPageComponent } from './admin-poll-builder-page.component';
+import {
+  buildDemographicsCharts,
+  countBuckets,
+  enrollmentMetadata,
+  gridCharts,
+  numberRange,
+  schedulingChart,
+} from './admin-poll-results';
 import { PollBuilderDraftService } from './poll-builder-draft.service';
 
 describe('AdminPollBuilderPageComponent', () => {
@@ -330,7 +344,6 @@ describe('AdminPollBuilderPageComponent', () => {
       voterRows: () => { enrollmentYear: string; course: string; name: string }[];
       demographicsCharts: () => { title: string; buckets: { label: string; value: number }[] }[];
       questionSummaries: () => { answeredCount: number; charts: { buckets: { label: string; value: number }[] }[] }[];
-      answerValueLabel(element: PollElement, value: unknown): string;
       responseVoterLabel(response: PollResults['responses'][number]): string;
       peopleLabel(entry: PollEligibilityEnrollment): string;
       eventDateLabel(event: EventManagerEvent): string;
@@ -364,10 +377,10 @@ describe('AdminPollBuilderPageComponent', () => {
       ],
     });
 
-    expect(component.answerValueLabel(choiceElement, ['yes', 'missing'])).toBe('Sim, missing');
-    expect(component.answerValueLabel(gridElement, { row: 'col' })).toBe('Linha: Coluna');
-    expect(component.answerValueLabel(schedulingElement, { slotId: 'window:09:00' })).toContain('09:00 - 09:30');
-    expect(component.answerValueLabel(choiceElement, undefined)).toBe('Sem resposta');
+    expect(answerValueLabel(choiceElement, ['yes', 'missing'])).toBe('Sim, missing');
+    expect(answerValueLabel(gridElement, { row: 'col' })).toBe('Linha: Coluna');
+    expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00' })).toContain('09:00 - 09:30');
+    expect(answerValueLabel(choiceElement, undefined)).toBe('Sem resposta');
     expect(component.responseVoterLabel({ id: 'empty', submittedAt: '', answers: [] })).toBe('Identidade não disponível');
     expect(component.peopleLabel({ ...eligibilityEntry, people: [] })).toBe('Nenhuma pessoa encontrada');
     expect(component.peopleLabel(eligibilityEntry)).toBe('Ana Souza');
@@ -657,14 +670,6 @@ describe('AdminPollBuilderPageComponent', () => {
   it('should cover remaining result helper fallbacks', () => {
     const component = fixture.componentInstance as unknown as {
       results: { set(value: PollResults | null): void };
-      demographicsCharts: () => unknown[];
-      answerValueLabel(element: PollElement, value: unknown): string;
-      schedulingSlots(element: PollElement): { id: string; label: string }[];
-      gridCharts(element: PollElement, values: unknown[]): { buckets: { label: string; value: number }[] }[];
-      formatDateLabel(value: string): string;
-      numberRange(min: number, max: number): number[];
-      countBuckets(values: readonly string[]): { label: string; value: number }[];
-      enrollmentMetadata(enrollmentNumber?: string): { yearLabel: string; courseLabel: string } | null;
     };
     const emptyElement: PollElement = { id: 'empty', type: 'section', title: 'Seção', required: false, options: [] };
     const gridElement: PollElement = {
@@ -677,20 +682,20 @@ describe('AdminPollBuilderPageComponent', () => {
     };
 
     component.results.set(null);
-    expect(component.demographicsCharts()).toEqual([]);
-    expect(component.answerValueLabel(emptyElement, { x: 1 })).toBe('Sem resposta');
-    expect(component.answerValueLabel(gridElement, { row: ['a', 'b'] })).toBe('Linha: a, b');
-    expect(component.gridCharts(gridElement, [null])[0].buckets).toEqual([]);
-    expect(component.schedulingSlots(emptyElement)).toEqual([]);
-    expect(component.formatDateLabel('invalid')).toBe('invalid');
-    expect(component.numberRange(5, 3)).toEqual([]);
-    expect(component.countBuckets(['', 'B', 'A', 'B'])).toEqual([
+    expect(buildDemographicsCharts([], false)).toEqual([]);
+    expect(answerValueLabel(emptyElement, { x: 1 })).toBe('Sem resposta');
+    expect(answerValueLabel(gridElement, { row: ['a', 'b'] })).toBe('Linha: a, b');
+    expect(gridCharts(gridElement, [null])[0].buckets).toEqual([]);
+    expect(schedulingSlots(emptyElement)).toEqual([]);
+    expect(formatDateLabel('invalid')).toBe('invalid');
+    expect(numberRange(5, 3)).toEqual([]);
+    expect(countBuckets(['', 'B', 'A', 'B'])).toEqual([
       { label: 'B', value: 2 },
       { label: 'A', value: 1 },
       { label: 'Não informado', value: 1 },
     ]);
-    expect(component.enrollmentMetadata('123')).toBeNull();
-    expect(component.enrollmentMetadata('263400001')).toEqual({
+    expect(enrollmentMetadata('123')).toBeNull();
+    expect(enrollmentMetadata('263400001')).toEqual({
       yearLabel: '2026',
       courseLabel: 'Curso desconhecido (34)',
     });
@@ -720,10 +725,6 @@ describe('AdminPollBuilderPageComponent', () => {
       importEligibilityFile(file: File | null, mode: 'append' | 'replace'): Promise<void>;
       deleteEligibilityEnrollment(enrollmentNumber: string): Promise<void>;
       clearEligibilityEnrollments(): Promise<void>;
-      schedulingChart(element: PollElement, values: unknown[]): { buckets: { value: number }[] };
-      gridCharts(element: PollElement, values: unknown[]): unknown[];
-      schedulingAnswerLabel(element: PollElement, value: Record<string, unknown>): string;
-      readSchedulingAnswer(value: unknown): unknown;
       importResultLabel(createdCount: number, existingCount: number, mode?: 'append' | 'replace'): string;
     };
     const schedulingElement: PollElement = {
@@ -840,11 +841,11 @@ describe('AdminPollBuilderPageComponent', () => {
       duration: 3000,
     });
 
-    expect(component.schedulingChart(schedulingElement, [null]).buckets.every((bucket) => bucket.value === 0)).toBe(true);
-    expect(component.gridCharts({ ...schedulingElement, type: 'singleSelectionGrid', settings: undefined }, [])).toEqual([]);
-    expect(component.schedulingAnswerLabel(schedulingElement, {})).toBe('Sem resposta');
-    expect(component.readSchedulingAnswer(null)).toBeNull();
-    expect(component.readSchedulingAnswer({})).toBeNull();
+    expect(schedulingChart(schedulingElement, [null]).buckets.every((bucket) => bucket.value === 0)).toBe(true);
+    expect(gridCharts({ ...schedulingElement, type: 'singleSelectionGrid', settings: undefined }, [])).toEqual([]);
+    expect(answerValueLabel(schedulingElement, {})).toBe('Sem resposta');
+    expect(readSchedulingAnswerOrNull(null)).toBeNull();
+    expect(readSchedulingAnswerOrNull({})).toBeNull();
     expect(component.importResultLabel(2, 3)).toBe('2 matrículas adicionadas; 3 já estavam na lista.');
 
     confirm.mockRestore();

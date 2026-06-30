@@ -17,6 +17,13 @@ import { EventManagerIntegrationService } from '../event-manager/event-manager-i
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SavePollDto } from './dto/poll.dto';
+import {
+  buildSchedulingSlots,
+  ensureRequiredGridRows,
+  isEmptyAnswer,
+  normalizeAnswer,
+  validatePollResponse,
+} from './poll-response.validator';
 import { PollsService } from './polls.service';
 
 type PrismaMock = {
@@ -94,21 +101,6 @@ type PollsInternals = {
     claims: unknown;
   }): unknown;
   ensureVotingAllowed(poll: unknown, user: AuthenticatedPrincipal): Promise<void>;
-  validateResponse(poll: unknown, input: { answers: { elementId: string; value: unknown }[] }): unknown;
-  normalizeAnswer(element: unknown, rawValue: unknown): unknown;
-  ensureRequiredGridRows(
-    element: { required: boolean; title: string },
-    rows: readonly { id: string; label: string }[],
-    selected: Record<string, string | string[]>,
-  ): void;
-  isEmptyAnswer(value: unknown): boolean;
-  buildSchedulingSlots(settings: {
-    durationMinutes: number;
-    slotIntervalMinutes: number;
-    bufferBeforeMinutes: number;
-    bufferAfterMinutes: number;
-    availability: { id: string; date: string; startTime: string; endTime: string }[];
-  }): { id: string }[];
   subscribeToPollResults(
     pollId: string,
     listener: (event: { admin: unknown; public: unknown }) => void,
@@ -1619,30 +1611,30 @@ describe('PollsService', () => {
   });
 
   it('normalizes answers for every poll element type', () => {
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SECTION }), 'ignored')).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.STATEMENT }), 'ignored')).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SHORT_TEXT }), ' text ')).toBe('text');
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.LONG_TEXT }), 1)).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.SECTION }), 'ignored')).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.STATEMENT }), 'ignored')).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.SHORT_TEXT }), ' text ')).toBe('text');
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.LONG_TEXT }), 1)).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_CHOICE, options: [option('a'), option('b')] }), 'a'),
+      normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_CHOICE, options: [option('a'), option('b')] }), 'a'),
     ).toBe('a');
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.SELECTION_DROPDOWN, options: [option('a'), option('b')] }), ''),
+      normalizeAnswer(dbElement({ type: DbPollElementType.SELECTION_DROPDOWN, options: [option('a'), option('b')] }), ''),
     ).toBeNull();
     expect(() =>
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_CHOICE, options: [option('a')] }), 'x'),
+      normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_CHOICE, options: [option('a')] }), 'x'),
     ).toThrow(BadRequestException);
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a'), option('b')] }),
         ['a', 'a', '', 1, 'b'],
       ),
     ).toEqual(['a', 'b']);
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), 'a'),
+      normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), 'a'),
     ).toBeNull();
     expect(() =>
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), ['x']),
+      normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), ['x']),
     ).toThrow(BadRequestException);
 
     const gridSettings = {
@@ -1652,71 +1644,71 @@ describe('PollsService', () => {
       },
     };
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings, required: true }),
         { 'row-1': 'col-1', 'row-2': 'col-2' },
       ),
     ).toEqual({ 'row-1': 'col-1', 'row-2': 'col-2' });
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings, required: true }),
         { 'row-1': 'col-1' },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings }),
         { bad: 'col-1' },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings }),
         { 'row-1': 'bad' },
       ),
     ).toThrow(BadRequestException);
 
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }),
         { 'row-1': ['col-1', 'col-1', ''], 'row-2': 'ignored' },
       ),
     ).toEqual({ 'row-1': ['col-1'] });
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }),
         { 'row-1': ['bad'] },
       ),
     ).toThrow(BadRequestException);
 
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: { linearScale: { min: 1, max: 5 } } }),
         '5',
       ),
     ).toBe(5);
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: { linearScale: { min: 1, max: 5 } } }),
         6,
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: {} }), 'bad'),
+      normalizeAnswer(dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: {} }), 'bad'),
     ).toThrow(BadRequestException);
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), '')).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), '')).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), 5),
+      normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), 5),
     ).toBe(5);
     expect(() =>
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), 0),
+      normalizeAnswer(dbElement({ type: DbPollElementType.STAR_RATING, settings: { starRating: { max: 5 } } }), 0),
     ).toThrow(BadRequestException);
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), '2026-06-24')).toBe('2026-06-24');
-    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), '2026-02-31')).toThrow(
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), '2026-06-24')).toBe('2026-06-24');
+    expect(() => normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), '2026-02-31')).toThrow(
       BadRequestException,
     );
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), '09:30')).toBe('09:30');
-    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), '25:00')).toThrow(BadRequestException);
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), '09:30')).toBe('09:30');
+    expect(() => normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), '25:00')).toThrow(BadRequestException);
   });
 
   it('normalizes scheduling answers and invitees', () => {
@@ -1724,13 +1716,13 @@ describe('PollsService', () => {
       type: DbPollElementType.SCHEDULING,
       settings: { scheduling: schedulingSettings() },
     });
-    expect(internals.buildSchedulingSlots(schedulingSettings())).toEqual([
+    expect(buildSchedulingSlots(schedulingSettings())).toEqual([
       { id: 'window-1:09:05' },
       { id: 'window-1:09:35' },
       { id: 'window-1:10:05' },
     ]);
     expect(
-      internals.normalizeAnswer(element, {
+      normalizeAnswer(element, {
         slotId: ' window-1:09:05 ',
         invitees: [{ name: ' Grace ', email: ' grace@example.com ' }, {}, null],
       }),
@@ -1738,26 +1730,26 @@ describe('PollsService', () => {
       slotId: 'window-1:09:05',
       invitees: [{ name: 'Grace', email: 'grace@example.com' }],
     });
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: {} }), {})).toBeNull();
-    expect(internals.normalizeAnswer(element, { slotId: ' ' })).toBeNull();
-    expect(() => internals.normalizeAnswer(element, { slotId: 'bad-slot' })).toThrow(BadRequestException);
-    expect(() => internals.normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: 'invalid' })).toThrow(
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: {} }), {})).toBeNull();
+    expect(normalizeAnswer(element, { slotId: ' ' })).toBeNull();
+    expect(() => normalizeAnswer(element, { slotId: 'bad-slot' })).toThrow(BadRequestException);
+    expect(() => normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: 'invalid' })).toThrow(
       BadRequestException,
     );
     expect(() =>
-      internals.normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: [{ email: 'grace@example.com' }] }),
+      normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: [{ email: 'grace@example.com' }] }),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: [{ name: 'Grace', email: 'bad' }] }),
+      normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: [{ name: 'Grace', email: 'bad' }] }),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(element, {
+      normalizeAnswer(element, {
         slotId: 'window-1:09:05',
         invitees: [{ name: 'A' }, { name: 'B' }, { name: 'C' }],
       }),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({
           type: DbPollElementType.SCHEDULING,
           settings: { scheduling: schedulingSettings({ inviteeMode: 'required', maxInvitees: 1 }) },
@@ -1766,7 +1758,7 @@ describe('PollsService', () => {
       ),
     ).toThrow(BadRequestException);
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({
           type: DbPollElementType.SCHEDULING,
           settings: { scheduling: schedulingSettings({ inviteeMode: 'none', maxInvitees: 0 }) },
@@ -1785,17 +1777,17 @@ describe('PollsService', () => {
     });
 
     expect(
-      internals.validateResponse(poll, {
+      validatePollResponse(poll, {
         answers: [
           { elementId: 'required', value: ' answer ' },
           { elementId: 'optional', value: ' ' },
         ],
       }),
     ).toEqual([{ elementId: 'required', value: 'answer' }]);
-    expect(() => internals.validateResponse(poll, { answers: [{ elementId: 'unknown', value: 'x' }] })).toThrow(
+    expect(() => validatePollResponse(poll, { answers: [{ elementId: 'unknown', value: 'x' }] })).toThrow(
       BadRequestException,
     );
-    expect(() => internals.validateResponse(poll, { answers: [{ elementId: 'required', value: ' ' }] })).toThrow(
+    expect(() => validatePollResponse(poll, { answers: [{ elementId: 'required', value: ' ' }] })).toThrow(
       BadRequestException,
     );
   });
@@ -2569,36 +2561,36 @@ describe('PollsService', () => {
       },
     };
 
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: null }), {})).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: null }), {})).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings }), {
+      normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': '',
       }),
     ).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: null }), {})).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: null }), {})).toBeNull();
     expect(() =>
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
+      normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         bad: ['col-1'],
       }),
     ).toThrow(BadRequestException);
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: { linearScale: { min: 1, max: 5 } } }),
         null,
       ),
     ).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 1)).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), 1)).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 1)).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), 1)).toBeNull();
     expect(
-      internals.buildSchedulingSlots({
+      buildSchedulingSlots(schedulingSettings({
         durationMinutes: 30,
         slotIntervalMinutes: 30,
         bufferBeforeMinutes: 5,
         bufferAfterMinutes: 5,
         availability: [{ id: 'short', date: '2026-06-24', startTime: '09:00', endTime: '09:10' }],
-      }),
+      })),
     ).toEqual([]);
-    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 'not-date')).toThrow(
+    expect(() => normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 'not-date')).toThrow(
       BadRequestException,
     );
     expect(internals.parseStringList(' ')).toEqual([]);
@@ -2614,63 +2606,63 @@ describe('PollsService', () => {
     };
 
     expect(
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a'), option('b')] }),
         ['', 1],
       ),
     ).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
+      normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': [],
       }),
     ).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
+      normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': 'ignored',
       }),
     ).toBeNull();
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings, required: true }),
         { 'row-1': '', 'row-2': 'col-2' },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings, required: true }),
         { 'row-1': [], 'row-2': ['col-2'] },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.ensureRequiredGridRows(
+      ensureRequiredGridRows(
         { required: true, title: 'Grid' },
         [option('row-1', 'Row 1')],
         { 'row-1': [] },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.ensureRequiredGridRows(
+      ensureRequiredGridRows(
         { required: true, title: 'Grid' },
         [option('row-1', 'Row 1')],
         { 'row-1': '' },
       ),
     ).toThrow(BadRequestException);
     expect(() =>
-      internals.ensureRequiredGridRows(
+      ensureRequiredGridRows(
         { required: false, title: 'Grid' },
         [option('row-1', 'Row 1')],
         {},
       ),
     ).not.toThrow();
     expect(() =>
-      internals.normalizeAnswer(
+      normalizeAnswer(
         dbElement({ type: DbPollElementType.LINEAR_SCALE, settings: { linearScale: { min: 1, max: 5 } } }),
         ' ',
       ),
     ).toThrow(BadRequestException);
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), { slotId: 1 })).toBeNull();
+    expect(normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), { slotId: 1 })).toBeNull();
     expect(
-      internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), {
+      normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), {
         slotId: 'window-1:09:05',
       }),
     ).toEqual({ slotId: 'window-1:09:05', invitees: [] });
@@ -2678,7 +2670,7 @@ describe('PollsService', () => {
 
   it('treats missing optional answers and empty objects as empty responses', () => {
     expect(
-      internals.validateResponse(
+      validatePollResponse(
         pollRecord({
           elements: [
             dbElement({
@@ -2697,7 +2689,7 @@ describe('PollsService', () => {
       ),
     ).toEqual([]);
     expect(
-      internals.validateResponse(
+      validatePollResponse(
         pollRecord({
           elements: [
             dbElement({
@@ -2715,12 +2707,12 @@ describe('PollsService', () => {
         { answers: [{ elementId: 'grid', value: {} }] },
       ),
     ).toEqual([]);
-    expect(internals.isEmptyAnswer(null)).toBe(true);
-    expect(internals.isEmptyAnswer('')).toBe(true);
-    expect(internals.isEmptyAnswer([])).toBe(true);
-    expect(internals.isEmptyAnswer(['value'])).toBe(false);
-    expect(internals.isEmptyAnswer({})).toBe(true);
-    expect(internals.isEmptyAnswer({ value: true })).toBe(false);
+    expect(isEmptyAnswer(null)).toBe(true);
+    expect(isEmptyAnswer('')).toBe(true);
+    expect(isEmptyAnswer([])).toBe(true);
+    expect(isEmptyAnswer(['value'])).toBe(false);
+    expect(isEmptyAnswer({})).toBe(true);
+    expect(isEmptyAnswer({ value: true })).toBe(false);
   });
 
   it('maps option descriptions when converting records', () => {

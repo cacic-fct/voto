@@ -10,11 +10,8 @@ import {
   Poll,
   PollChoiceOption,
   PollElement,
-  PollElementSettings,
   PollElementType,
-  PollGridSettings,
   PollImage,
-  PollImageReference,
   PollSchedulingInviteeMode,
   PollSchedulingSettings,
   PollStatus,
@@ -28,51 +25,51 @@ import {
   voterEligibilityOptions,
   votingStyleOptions,
 } from '../polls/poll-metadata';
-
-export type ElementTypeOption = {
-  type: PollElementType;
-  label: string;
-  icon: string;
-};
-
-type GridAxis = keyof PollGridSettings;
-
-export const ELEMENT_TYPE_OPTIONS: ElementTypeOption[] = [
-  { type: 'section', label: 'Seção', icon: 'splitscreen' },
-  { type: 'statement', label: 'Texto informativo', icon: 'notes' },
-  { type: 'shortText', label: 'Resposta curta', icon: 'short_text' },
-  { type: 'longText', label: 'Resposta longa', icon: 'subject' },
-  { type: 'singleChoice', label: 'Escolha única', icon: 'radio_button_checked' },
-  { type: 'multipleChoice', label: 'Múltipla escolha', icon: 'check_box' },
-  { type: 'selectionDropdown', label: 'Lista suspensa', icon: 'arrow_drop_down_circle' },
-  { type: 'singleSelectionGrid', label: 'Grade de seleção única', icon: 'table_rows' },
-  { type: 'multipleSelectionGrid', label: 'Grade de seleção múltipla', icon: 'checklist' },
-  { type: 'linearScale', label: 'Escala linear', icon: 'linear_scale' },
-  { type: 'starRating', label: 'Avaliação por estrelas', icon: 'star' },
-  { type: 'date', label: 'Data', icon: 'calendar_today' },
-  { type: 'time', label: 'Hora', icon: 'schedule' },
-  { type: 'scheduling', label: 'Agendamento', icon: 'event_available' },
-];
+import {
+  ELEMENT_TYPE_OPTIONS,
+  ElementTypeOption,
+  GridAxis,
+  SCALE_MAXIMUM_OPTIONS,
+  SCALE_MINIMUM_OPTIONS,
+  SCHEDULING_BUFFER_OPTIONS,
+  SCHEDULING_DURATION_OPTIONS,
+  SCHEDULING_INVITEE_LIMIT_OPTIONS,
+  SCHEDULING_INVITEE_MODE_OPTIONS,
+  SCHEDULING_SLOT_INTERVAL_OPTIONS,
+  STAR_RATING_MAXIMUM_OPTIONS,
+  createBlankPoll,
+  createElement,
+  createOption,
+  createSchedulingAvailability,
+  createSchedulingTimezoneOptions,
+  createSettingsForType,
+  elementTypeLabel,
+  elementTypeOption,
+  ensureChoiceOptions,
+  ensureGridSettings,
+  ensureLinearScaleSettings,
+  ensureSchedulingSettings,
+  isAnswerElement,
+  isGridElement,
+  isOptionChoiceElement,
+  toImageReferences,
+} from './poll-builder-options';
 
 @Injectable()
 export class PollBuilderDraftService {
   readonly elementTypeOptions = ELEMENT_TYPE_OPTIONS;
-  readonly scaleMinimumOptions = [0, 1] as const;
-  readonly scaleMaximumOptions = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
-  readonly starRatingMaximumOptions = [3, 4, 5, 6, 7, 8, 9, 10] as const;
-  readonly schedulingDurationOptions = [15, 20, 30, 45, 60, 90, 120] as const;
-  readonly schedulingSlotIntervalOptions = [5, 10, 15, 20, 30, 45, 60] as const;
-  readonly schedulingBufferOptions = [0, 5, 10, 15, 30, 45, 60] as const;
-  readonly schedulingInviteeLimitOptions = [1, 2, 3, 4, 5, 10, 15, 20] as const;
-  readonly schedulingTimezoneOptions = this.createSchedulingTimezoneOptions();
-  readonly schedulingInviteeModeOptions: { mode: PollSchedulingInviteeMode; label: string }[] = [
-    { mode: 'none', label: 'Não coletar convidados' },
-    { mode: 'optional', label: 'Convidados opcionais' },
-    { mode: 'required', label: 'Exigir pelo menos um convidado' },
-  ];
+  readonly scaleMinimumOptions = SCALE_MINIMUM_OPTIONS;
+  readonly scaleMaximumOptions = SCALE_MAXIMUM_OPTIONS;
+  readonly starRatingMaximumOptions = STAR_RATING_MAXIMUM_OPTIONS;
+  readonly schedulingDurationOptions = SCHEDULING_DURATION_OPTIONS;
+  readonly schedulingSlotIntervalOptions = SCHEDULING_SLOT_INTERVAL_OPTIONS;
+  readonly schedulingBufferOptions = SCHEDULING_BUFFER_OPTIONS;
+  readonly schedulingInviteeLimitOptions = SCHEDULING_INVITEE_LIMIT_OPTIONS;
+  readonly schedulingTimezoneOptions = createSchedulingTimezoneOptions();
+  readonly schedulingInviteeModeOptions = SCHEDULING_INVITEE_MODE_OPTIONS;
   readonly votingStyleOptions = votingStyleOptions;
   readonly voterEligibilityOptions = voterEligibilityOptions;
-  readonly draft = signal<Poll>(this.createBlankPoll());
+  readonly draft = signal<Poll>(createBlankPoll());
   readonly canSave = computed(() => Boolean(this.draft().title.trim()));
 
   setDraft(poll: Poll): void {
@@ -80,13 +77,13 @@ export class PollBuilderDraftService {
   }
 
   newPoll(): void {
-    this.draft.set(this.createBlankPoll());
+    this.draft.set(createBlankPoll());
   }
 
   addElement(type: PollElementType): void {
     this.draft.update((poll) => ({
       ...poll,
-      elements: [...poll.elements, this.createElement(type)],
+      elements: [...poll.elements, createElement(type)],
     }));
   }
 
@@ -108,7 +105,7 @@ export class PollBuilderDraftService {
   addOption(elementId: string): void {
     this.updateElement(elementId, (element) => ({
       ...element,
-      options: [...element.options, this.createOption(element.options.length + 1)],
+      options: [...element.options, createOption(element.options.length + 1)],
     }));
   }
 
@@ -121,14 +118,14 @@ export class PollBuilderDraftService {
 
   addGridOption(elementId: string, axis: GridAxis): void {
     this.updateElement(elementId, (element) => {
-      const grid = this.ensureGridSettings(element.settings?.grid);
+      const grid = ensureGridSettings(element.settings?.grid);
       return {
         ...element,
         settings: {
           ...element.settings,
           grid: {
             ...grid,
-            [axis]: [...grid[axis], this.createOption(grid[axis].length + 1)],
+            [axis]: [...grid[axis], createOption(grid[axis].length + 1)],
           },
         },
       };
@@ -137,7 +134,7 @@ export class PollBuilderDraftService {
 
   removeGridOption(elementId: string, axis: GridAxis, optionId: string): void {
     this.updateElement(elementId, (element) => {
-      const grid = this.ensureGridSettings(element.settings?.grid);
+      const grid = ensureGridSettings(element.settings?.grid);
       return {
         ...element,
         settings: {
@@ -309,9 +306,9 @@ export class PollBuilderDraftService {
     this.updateElement(elementId, (element) => ({
       ...element,
       type: nextType,
-      required: this.isAnswerElement(nextType) ? element.required : false,
-      options: this.isOptionChoiceElement(nextType) ? this.ensureChoiceOptions(element.options) : [],
-      settings: this.createSettingsForType(nextType, element.settings),
+      required: isAnswerElement(nextType) ? element.required : false,
+      options: isOptionChoiceElement(nextType) ? ensureChoiceOptions(element.options) : [],
+      settings: createSettingsForType(nextType, element.settings),
     }));
   }
 
@@ -363,7 +360,7 @@ export class PollBuilderDraftService {
     }
 
     this.updateElement(elementId, (element) => {
-      const scale = this.ensureLinearScaleSettings(element.settings?.linearScale);
+      const scale = ensureLinearScaleSettings(element.settings?.linearScale);
       return {
         ...element,
         settings: {
@@ -385,7 +382,7 @@ export class PollBuilderDraftService {
     }
 
     this.updateElement(elementId, (element) => {
-      const scale = this.ensureLinearScaleSettings(element.settings?.linearScale);
+      const scale = ensureLinearScaleSettings(element.settings?.linearScale);
       return {
         ...element,
         settings: {
@@ -401,7 +398,7 @@ export class PollBuilderDraftService {
 
   updateLinearScaleLabel(elementId: string, label: 'minLabel' | 'maxLabel', event: Event): void {
     this.updateElement(elementId, (element) => {
-      const scale = this.ensureLinearScaleSettings(element.settings?.linearScale);
+      const scale = ensureLinearScaleSettings(element.settings?.linearScale);
       return {
         ...element,
         settings: {
@@ -494,7 +491,7 @@ export class PollBuilderDraftService {
       ...settings,
       availability: [
         ...settings.availability,
-        this.createSchedulingAvailability(
+        createSchedulingAvailability(
           settings.availability.length + 1,
           0,
           settings.availability[settings.availability.length - 1]?.date,
@@ -538,23 +535,23 @@ export class PollBuilderDraftService {
   }
 
   isOptionChoiceElement(type: PollElementType): boolean {
-    return type === 'singleChoice' || type === 'multipleChoice' || type === 'selectionDropdown';
+    return isOptionChoiceElement(type);
   }
 
   isGridElement(type: PollElementType): boolean {
-    return type === 'singleSelectionGrid' || type === 'multipleSelectionGrid';
+    return isGridElement(type);
   }
 
   isAnswerElement(type: PollElementType): boolean {
-    return type !== 'section' && type !== 'statement';
+    return isAnswerElement(type);
   }
 
   elementTypeLabel(type: PollElementType): string {
-    return this.elementTypeOption(type).label;
+    return elementTypeLabel(type);
   }
 
   elementTypeOption(type: PollElementType): ElementTypeOption {
-    return this.elementTypeOptions.find((option) => option.type === type) ?? { type, label: type, icon: 'help' };
+    return elementTypeOption(type);
   }
 
   statusLabel(status: PollStatus): string {
@@ -572,7 +569,7 @@ export class PollBuilderDraftService {
     return {
       title: poll.title,
       description: poll.description,
-      descriptionImages: this.toImageReferences(poll.descriptionImages),
+      descriptionImages: toImageReferences(poll.descriptionImages),
       status: poll.status,
       votingStyle: poll.votingStyle,
       voterEligibilitySource: poll.voterEligibilitySource,
@@ -585,21 +582,9 @@ export class PollBuilderDraftService {
       linkedEventId: poll.linkedEvent?.id,
       elements: poll.elements.map((element) => ({
         ...element,
-        descriptionImages: this.toImageReferences(element.descriptionImages),
+        descriptionImages: toImageReferences(element.descriptionImages),
       })),
     };
-  }
-
-  private toImageReferences(images: readonly PollImage[] | undefined): PollImageReference[] | undefined {
-    if (!images?.length) {
-      return undefined;
-    }
-
-    return images.map((image) => ({
-      id: image.id,
-      ...(image.altText?.trim() ? { altText: image.altText.trim() } : {}),
-      ...(image.caption?.trim() ? { caption: image.caption.trim() } : {}),
-    }));
   }
 
   private updateElement(elementId: string, update: (element: PollElement) => PollElement): void {
@@ -627,7 +612,7 @@ export class PollBuilderDraftService {
     update: (option: PollChoiceOption) => PollChoiceOption,
   ): void {
     this.updateElement(elementId, (element) => {
-      const grid = this.ensureGridSettings(element.settings?.grid);
+      const grid = ensureGridSettings(element.settings?.grid);
       return {
         ...element,
         settings: {
@@ -649,179 +634,9 @@ export class PollBuilderDraftService {
       ...element,
       settings: {
         ...element.settings,
-        scheduling: update(this.ensureSchedulingSettings(element.settings?.scheduling)),
+        scheduling: update(ensureSchedulingSettings(element.settings?.scheduling)),
       },
     }));
-  }
-
-  private ensureChoiceOptions(options: PollChoiceOption[]): PollChoiceOption[] {
-    return options.length >= 2 ? options : [this.createOption(1), this.createOption(2)];
-  }
-
-  private createSettingsForType(type: PollElementType, current?: PollElementSettings): PollElementSettings | undefined {
-    if (this.isGridElement(type)) {
-      return {
-        grid: this.ensureGridSettings(current?.grid),
-      };
-    }
-
-    if (type === 'linearScale') {
-      return {
-        linearScale: this.ensureLinearScaleSettings(current?.linearScale),
-      };
-    }
-
-    if (type === 'starRating') {
-      return {
-        starRating: this.ensureStarRatingSettings(current?.starRating),
-      };
-    }
-
-    if (type === 'scheduling') {
-      return {
-        scheduling: this.ensureSchedulingSettings(current?.scheduling),
-      };
-    }
-
-    return undefined;
-  }
-
-  private ensureGridSettings(grid?: PollGridSettings): PollGridSettings {
-    return {
-      rows: grid?.rows.length ? grid.rows : [this.createOption(1), this.createOption(2)],
-      columns: grid?.columns.length ? grid.columns : [this.createOption(1), this.createOption(2)],
-    };
-  }
-
-  private ensureLinearScaleSettings(settings?: PollElementSettings['linearScale']): NonNullable<PollElementSettings['linearScale']> {
-    const min = settings?.min === 0 ? 0 : 1;
-    const max = Math.min(Math.max(settings?.max ?? 5, min + 1), 10);
-    return {
-      min,
-      max,
-      minLabel: settings?.minLabel ?? '',
-      maxLabel: settings?.maxLabel ?? '',
-    };
-  }
-
-  private ensureStarRatingSettings(settings?: PollElementSettings['starRating']): NonNullable<PollElementSettings['starRating']> {
-    return {
-      max: Math.min(Math.max(settings?.max ?? 5, 3), 10),
-    };
-  }
-
-  private ensureSchedulingSettings(settings?: PollElementSettings['scheduling']): PollSchedulingSettings {
-    const inviteeMode = settings?.inviteeMode ?? 'optional';
-    return {
-      hostName: settings?.hostName ?? '',
-      location: settings?.location ?? '',
-      timezone: settings?.timezone ?? 'America/Sao_Paulo',
-      durationMinutes: this.clampSchedulingOption(settings?.durationMinutes, this.schedulingDurationOptions, 30),
-      slotIntervalMinutes: this.clampSchedulingOption(settings?.slotIntervalMinutes, this.schedulingSlotIntervalOptions, 30),
-      bufferBeforeMinutes: this.clampSchedulingOption(settings?.bufferBeforeMinutes, this.schedulingBufferOptions, 0),
-      bufferAfterMinutes: this.clampSchedulingOption(settings?.bufferAfterMinutes, this.schedulingBufferOptions, 0),
-      inviteeMode,
-      maxInvitees:
-        inviteeMode === 'none'
-          ? 0
-          : this.clampSchedulingOption(settings?.maxInvitees, this.schedulingInviteeLimitOptions, 3),
-      availability: settings?.availability.length
-        ? settings.availability
-        : [this.createSchedulingAvailability(1), this.createSchedulingAvailability(2, 1)],
-    };
-  }
-
-  private clampSchedulingOption<T extends number>(value: number | undefined, options: readonly T[], fallback: T): T {
-    return options.includes(value as T) ? (value as T) : fallback;
-  }
-
-  private createBlankPoll(): Poll {
-    return {
-      id: '',
-      title: '',
-      description: '',
-      descriptionImages: [],
-      status: 'draft',
-      votingStyle: 'secret',
-      voterEligibilitySource: 'authenticatedUsers',
-      requireVerifiedUnespRole: false,
-      directLinkEnabled: false,
-      resultsPublic: false,
-      resultsLive: false,
-      allowResponseEditing: false,
-      allowMultipleResponses: false,
-      elements: [],
-      createdAt: '',
-      updatedAt: '',
-    };
-  }
-
-  private createElement(type: PollElementType): PollElement {
-    return {
-      id: this.createId('element'),
-      type,
-      title: this.elementTypeLabel(type),
-      description: '',
-      descriptionImages: [],
-      required: this.isAnswerElement(type),
-      options: this.isOptionChoiceElement(type) ? [this.createOption(1), this.createOption(2)] : [],
-      settings: this.createSettingsForType(type),
-    };
-  }
-
-  private createOption(position: number): PollChoiceOption {
-    return {
-      id: this.createId('option'),
-      label: `Opção ${position}`,
-      description: '',
-    };
-  }
-
-  private createSchedulingAvailability(
-    position: number,
-    dayOffset = 0,
-    date = this.defaultAvailabilityDate(dayOffset),
-  ): PollSchedulingSettings['availability'][number] {
-    return {
-      id: this.createId('availability'),
-      date,
-      startTime: position % 2 === 0 ? '14:00' : '09:00',
-      endTime: position % 2 === 0 ? '17:00' : '12:00',
-    };
-  }
-
-  private createSchedulingTimezoneOptions(): string[] {
-    const fallbackOptions = [
-      'America/Sao_Paulo',
-      'UTC',
-      'America/Belem',
-      'America/Fortaleza',
-      'America/Manaus',
-      'America/Cuiaba',
-      'America/Rio_Branco',
-    ];
-    const intlWithTimezones = Intl as typeof Intl & {
-      supportedValuesOf?: (key: 'timeZone') => string[];
-    };
-    const supportedOptions = intlWithTimezones.supportedValuesOf?.('timeZone') ?? fallbackOptions;
-
-    return [...new Set(['America/Sao_Paulo', ...supportedOptions])].sort((left, right) =>
-      left === 'America/Sao_Paulo'
-        ? -1
-        : right === 'America/Sao_Paulo'
-          ? 1
-          : left.localeCompare(right),
-    );
-  }
-
-  private defaultAvailabilityDate(dayOffset: number): string {
-    const date = new Date();
-    date.setDate(date.getDate() + dayOffset + 1);
-    return [
-      date.getFullYear(),
-      String(date.getMonth() + 1).padStart(2, '0'),
-      String(date.getDate()).padStart(2, '0'),
-    ].join('-');
   }
 
   private readInputValue(event: Event): string {
@@ -833,8 +648,4 @@ export class PollBuilderDraftService {
     return typeof event.value === 'number' && Number.isInteger(event.value) ? event.value : null;
   }
 
-  private createId(prefix: string): string {
-    const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
-    return `${prefix}-${random}`;
-  }
 }

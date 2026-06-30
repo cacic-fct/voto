@@ -1,16 +1,11 @@
 import { isPlatformBrowser } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnDestroy, PLATFORM_ID, computed, inject, signal } from '@angular/core';
-import { DragDropModule } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectChange, MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -18,8 +13,6 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   EventManagerEvent,
-  PollAnswerValue,
-  PollElement,
   PollEligibilityEnrollment,
   PollEligibilityMutationMode,
   PollImage,
@@ -39,68 +32,39 @@ import {
 } from '../polls/poll-metadata';
 import { parseCsv } from './csv-parser';
 import { EligibilityCsvColumnDialogComponent } from './eligibility-csv-column-dialog.component';
-import {
-  AdminResultsChartComponent,
-  AdminResultsChartConfig,
-  AdminResultsChartType,
-} from './admin-results-chart.component';
+import { AdminPollElementsEditorComponent } from './admin-poll-elements-editor.component';
+import { AdminPollResultsPanelComponent } from './admin-poll-results-panel.component';
 import { PollBuilderDraftService } from './poll-builder-draft.service';
 import {
-  answerValueLabel,
-  asRecord,
-  collectAnswerEntriesForElementVersion,
-  collectResultElementVersions,
-  formatDateLabel,
   isAnswerElement,
-  isEmptyAnswerValue,
-  readSchedulingAnswerOrNull,
-  schedulingSlots,
 } from '../polls/poll-result-formatting';
-
-type ResultsVoterRow = {
-  response: PollResultsResponse;
-  name: string;
-  email: string;
-  unespRole: string;
-  enrollmentNumber: string;
-  enrollmentYear: string;
-  course: string;
-};
-
-type QuestionResultSummary = {
-  key: string;
-  element: PollElement;
-  answeredCount: number;
-  charts: AdminResultsChartConfig[];
-  textAnswers: string[];
-  individualAnswers: {
-    responseId: string;
-    voterLabel: string;
-    valueLabel: string;
-  }[];
-};
+import {
+  buildAnswerSummaryCharts,
+  buildDemographicsCharts,
+  buildQuestionSummaries,
+  buildTextQuestionSummaries,
+  responseVoterLabel,
+  selectedIndividualAnswers,
+  toVoterRows,
+} from './admin-poll-results';
 
 @Component({
   selector: 'app-admin-poll-builder-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DragDropModule,
     MatButtonModule,
-    MatCardModule,
     MatCheckboxModule,
-    MatChipsModule,
-    MatDividerModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatMenuModule,
     MatProgressBarModule,
     MatSelectModule,
     MatSnackBarModule,
     MatTabsModule,
     MatTooltipModule,
-    AdminResultsChartComponent,
+    AdminPollElementsEditorComponent,
+    AdminPollResultsPanelComponent,
     PollDescriptionContentComponent,
   ],
   providers: [PollBuilderDraftService],
@@ -164,9 +128,7 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     this.builder.draft().elements.filter((element) => isAnswerElement(element)),
   );
   protected readonly questionSummaries = computed(() =>
-    collectResultElementVersions(this.builder.draft().elements, this.results()?.responses ?? []).map((version) =>
-      this.buildQuestionSummary(version),
-    ),
+    buildQuestionSummaries(this.builder.draft().elements, this.results()?.responses ?? []),
   );
   protected readonly selectedQuestionSummary = computed(() => {
     const summaries = this.questionSummaries();
@@ -175,14 +137,16 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
   });
   protected readonly selectedQuestionElementId = computed(() => this.selectedQuestionSummary()?.key ?? null);
   protected readonly voterRows = computed(() =>
-    (this.results()?.responses ?? []).map((response) => this.toVoterRow(response)),
+    toVoterRows(this.results()?.responses ?? []),
   );
-  protected readonly demographicsCharts = computed(() => this.buildDemographicsCharts());
+  protected readonly demographicsCharts = computed(() =>
+    buildDemographicsCharts(this.voterRows(), this.individualResultsAvailable()),
+  );
   protected readonly answerSummaryCharts = computed(() =>
-    this.questionSummaries().flatMap((summary) => summary.charts.slice(0, summary.element.type.includes('Grid') ? 2 : 1)),
+    buildAnswerSummaryCharts(this.questionSummaries()),
   );
   protected readonly textQuestionSummaries = computed(() =>
-    this.questionSummaries().filter((summary) => summary.textAnswers.length > 0),
+    buildTextQuestionSummaries(this.questionSummaries()),
   );
   protected readonly individualResultsAvailable = computed(() =>
     (this.results()?.responses ?? []).some((response) => Boolean(response.voter)),
@@ -198,18 +162,7 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
       return [];
     }
 
-    const elementsById = new Map(this.answerElements().map((element) => [element.id, element]));
-    return response.answers
-      .map((answer) => {
-        const element = answer.element ?? elementsById.get(answer.elementId);
-        return element
-          ? {
-              element,
-              valueLabel: this.answerValueLabel(element, answer.value),
-            }
-          : null;
-      })
-      .filter((answer): answer is { element: PollElement; valueLabel: string } => answer !== null);
+    return selectedIndividualAnswers(response, this.answerElements());
   });
   protected readonly directLinkUrl = computed(() => {
     const draft = this.builder.draft();
@@ -556,12 +509,7 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
   }
 
   protected responseVoterLabel(response: PollResultsResponse): string {
-    const voter = response.voter;
-    return voter?.name || voter?.preferredUsername || voter?.email || 'Identidade não disponível';
-  }
-
-  protected answerValueLabel(element: PollElement, value: PollAnswerValue | undefined): string {
-    return answerValueLabel(element, value);
+    return responseVoterLabel(response);
   }
 
   private async loadResults(showLoading = true): Promise<void> {
@@ -669,325 +617,6 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     if (!this.selectedIndividualResponseId()) {
       this.selectedIndividualResponseId.set(delta.responses.find((response) => response.voter)?.id ?? null);
     }
-  }
-
-  private buildQuestionSummary(version: { key: string; element: PollElement }): QuestionResultSummary {
-    const element = version.element;
-    const responses = this.results()?.responses ?? [];
-    const answerEntries = collectAnswerEntriesForElementVersion(version.key, this.builder.draft().elements, responses)
-      .filter((entry) => !this.isEmptyAnswerValue(entry.value));
-
-    return {
-      key: version.key,
-      element,
-      answeredCount: answerEntries.length,
-      charts: this.buildQuestionCharts(element, answerEntries.map((entry) => entry.value)),
-      textAnswers: this.buildQuestionTextAnswers(element, answerEntries.map((entry) => entry.value)),
-      individualAnswers: answerEntries.map((entry) => ({
-        responseId: entry.response.id,
-        voterLabel: this.responseVoterLabel(entry.response),
-        valueLabel: this.answerValueLabel(element, entry.value),
-      })),
-    };
-  }
-
-  private buildQuestionCharts(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig[] {
-    switch (element.type) {
-      case 'singleChoice':
-      case 'selectionDropdown':
-        return [
-          this.optionChart(element, values, 'pie', 'radio_button_checked', 'Distribuição de escolhas únicas.'),
-        ];
-      case 'multipleChoice':
-        return [this.optionChart(element, values, 'horizontalBar', 'check_box', 'Total por opção marcada.')];
-      case 'linearScale':
-      case 'starRating':
-        return [this.scalarChart(element, values)];
-      case 'date':
-      case 'time':
-        return [this.rawValueChart(element, values, 'horizontalBar', 'event', 'Frequência por resposta.')];
-      case 'scheduling':
-        return [this.schedulingChart(element, values)];
-      case 'singleSelectionGrid':
-      case 'multipleSelectionGrid':
-        return this.gridCharts(element, values);
-      case 'shortText':
-      case 'longText':
-      case 'section':
-      case 'statement':
-        return [];
-    }
-  }
-
-  private buildQuestionTextAnswers(element: PollElement, values: (PollAnswerValue | undefined)[]): string[] {
-    if (element.type !== 'shortText' && element.type !== 'longText') {
-      return [];
-    }
-
-    return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
-  }
-
-  private optionChart(
-    element: PollElement,
-    values: (PollAnswerValue | undefined)[],
-    type: AdminResultsChartType,
-    icon: string,
-    subtitle: string,
-  ): AdminResultsChartConfig {
-    const counts = new Map(element.options.map((option) => [option.id, 0]));
-
-    for (const value of values) {
-      if (typeof value === 'string') {
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-        continue;
-      }
-
-      if (Array.isArray(value)) {
-        for (const optionId of value) {
-          counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
-        }
-      }
-    }
-
-    return {
-      title: element.title,
-      subtitle,
-      icon,
-      type,
-      buckets: element.options.map((option) => ({
-        label: option.label,
-        value: counts.get(option.id) ?? 0,
-      })),
-      emptyText: 'Nenhuma resposta registrada para esta pergunta.',
-    };
-  }
-
-  private scalarChart(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig {
-    const counts = new Map<string, number>();
-    const allowedValues =
-      element.type === 'linearScale' && element.settings?.linearScale
-        ? this.numberRange(element.settings.linearScale.min, element.settings.linearScale.max)
-        : element.type === 'starRating' && element.settings?.starRating
-          ? this.numberRange(1, element.settings.starRating.max)
-          : [];
-
-    for (const value of allowedValues) {
-      counts.set(String(value), 0);
-    }
-
-    for (const value of values) {
-      if (typeof value === 'number') {
-        const label = String(value);
-        counts.set(label, (counts.get(label) ?? 0) + 1);
-      }
-    }
-
-    return {
-      title: element.title,
-      subtitle: 'Frequência por valor selecionado.',
-      icon: element.type === 'starRating' ? 'star' : 'linear_scale',
-      type: 'verticalBar',
-      buckets: [...counts.entries()].map(([label, value]) => ({ label, value })),
-      emptyText: 'Nenhuma resposta registrada para esta pergunta.',
-    };
-  }
-
-  private rawValueChart(
-    element: PollElement,
-    values: (PollAnswerValue | undefined)[],
-    type: AdminResultsChartType,
-    icon: string,
-    subtitle: string,
-  ): AdminResultsChartConfig {
-    return {
-      title: element.title,
-      subtitle,
-      icon,
-      type,
-      buckets: this.countBuckets(
-        values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
-      ),
-      emptyText: 'Nenhuma resposta registrada para esta pergunta.',
-    };
-  }
-
-  private schedulingChart(
-    element: PollElement,
-    values: (PollAnswerValue | undefined)[],
-  ): AdminResultsChartConfig {
-    const slots = this.schedulingSlots(element);
-    const labels = new Map(slots.map((slot) => [slot.id, slot.label]));
-    const counts = new Map(slots.map((slot) => [slot.id, 0]));
-
-    for (const value of values) {
-      const answer = this.readSchedulingAnswer(value);
-      if (!answer) {
-        continue;
-      }
-
-      counts.set(answer.slotId, (counts.get(answer.slotId) ?? 0) + 1);
-      if (!labels.has(answer.slotId)) {
-        labels.set(answer.slotId, answer.slotId);
-      }
-    }
-
-    return {
-      title: element.title,
-      subtitle: 'Total de escolhas por horário disponível.',
-      icon: 'event_available',
-      type: 'horizontalBar',
-      buckets: [...labels.entries()].map(([slotId, label]) => ({
-        label,
-        value: counts.get(slotId) ?? 0,
-      })),
-      emptyText: 'Nenhum horário selecionado para este agendamento.',
-    };
-  }
-
-  private gridCharts(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig[] {
-    const grid = element.settings?.grid;
-    if (!grid) {
-      return [];
-    }
-
-    return grid.rows.map((row) => {
-      const counts = new Map(grid.columns.map((column) => [column.id, 0]));
-
-      for (const value of values) {
-        const recordValue = this.asRecord(value);
-        if (!recordValue) {
-          continue;
-        }
-
-        const rawRowValue = recordValue[row.id];
-        if (typeof rawRowValue === 'string') {
-          counts.set(rawRowValue, (counts.get(rawRowValue) ?? 0) + 1);
-          continue;
-        }
-
-        if (Array.isArray(rawRowValue)) {
-          for (const columnId of rawRowValue) {
-            if (typeof columnId === 'string') {
-              counts.set(columnId, (counts.get(columnId) ?? 0) + 1);
-            }
-          }
-        }
-      }
-
-      return {
-        title: `${element.title}: ${row.label}`,
-        subtitle: 'Distribuição por coluna da grade.',
-        icon: element.type === 'multipleSelectionGrid' ? 'checklist' : 'table_rows',
-        type: 'verticalBar',
-        buckets: grid.columns.map((column) => ({
-          label: column.label,
-          value: counts.get(column.id) ?? 0,
-        })),
-        emptyText: 'Nenhuma resposta registrada para esta linha.',
-      } satisfies AdminResultsChartConfig;
-    });
-  }
-
-  private buildDemographicsCharts(): AdminResultsChartConfig[] {
-    const rows = this.voterRows();
-    if (rows.length === 0 || !this.individualResultsAvailable()) {
-      return [];
-    }
-
-    return [
-      {
-        title: 'Vínculo Unesp',
-        subtitle: 'Distribuição por unespRole informado no login.',
-        icon: 'badge',
-        type: 'pie',
-        buckets: this.countBuckets(rows.map((row) => row.unespRole)),
-      },
-      {
-        title: 'Ano de ingresso',
-        subtitle: 'Calculado pelos dois primeiros dígitos da matrícula.',
-        icon: 'calendar_month',
-        type: 'verticalBar',
-        buckets: this.countBuckets(rows.map((row) => row.enrollmentYear)),
-      },
-      {
-        title: 'Curso',
-        subtitle: 'Código 12 é Ciência da Computação; demais códigos ficam identificados como desconhecidos.',
-        icon: 'school',
-        type: 'horizontalBar',
-        buckets: this.countBuckets(rows.map((row) => row.course)),
-      },
-    ];
-  }
-
-  private toVoterRow(response: PollResultsResponse): ResultsVoterRow {
-    const voter = response.voter;
-    const metadata = this.enrollmentMetadata(voter?.enrollmentNumber);
-
-    return {
-      response,
-      name: voter?.name || voter?.preferredUsername || 'Identidade não disponível',
-      email: voter?.email || 'Não informado',
-      unespRole: voter?.unespRole || 'Não informado',
-      enrollmentNumber: voter?.enrollmentNumber || 'Não informado',
-      enrollmentYear: metadata?.yearLabel ?? 'Não informado',
-      course: metadata?.courseLabel ?? 'Não informado',
-    };
-  }
-
-  private enrollmentMetadata(enrollmentNumber?: string): { yearLabel: string; courseLabel: string } | null {
-    const digits = enrollmentNumber?.replace(/\D/g, '') ?? '';
-    if (digits.length < 4) {
-      return null;
-    }
-
-    const enrollmentYear = 2000 + Number(digits.slice(0, 2));
-    const courseCode = digits.slice(2, 4);
-    const courseLabel = courseCode === '12' ? 'Ciência da Computação' : `Curso desconhecido (${courseCode})`;
-
-    return {
-      yearLabel: String(enrollmentYear),
-      courseLabel,
-    };
-  }
-
-  private schedulingAnswerLabel(element: PollElement, value: Record<string, unknown>): string {
-    return answerValueLabel(element, value as PollAnswerValue);
-  }
-
-  private readSchedulingAnswer(value: unknown): ReturnType<typeof readSchedulingAnswerOrNull> {
-    return readSchedulingAnswerOrNull(value);
-  }
-
-  private schedulingSlots(element: PollElement): { id: string; label: string }[] {
-    return schedulingSlots(element).map((slot) => ({ id: slot.id, label: slot.fullLabel }));
-  }
-
-  private formatDateLabel(value: string): string {
-    return formatDateLabel(value);
-  }
-
-  private countBuckets(values: readonly string[]): { label: string; value: number }[] {
-    const counts = new Map<string, number>();
-    for (const value of values) {
-      const label = value.trim() || 'Não informado';
-      counts.set(label, (counts.get(label) ?? 0) + 1);
-    }
-
-    return [...counts.entries()]
-      .map(([label, value]) => ({ label, value }))
-      .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label, 'pt-BR'));
-  }
-
-  private numberRange(min: number, max: number): number[] {
-    return Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => min + index);
-  }
-
-  private isEmptyAnswerValue(value: PollAnswerValue | undefined): boolean {
-    return isEmptyAnswerValue(value);
-  }
-
-  private asRecord(value: unknown): Record<string, unknown> | null {
-    return asRecord(value);
   }
 
   private async loadEligibilityEnrollments(showLoading = true): Promise<void> {

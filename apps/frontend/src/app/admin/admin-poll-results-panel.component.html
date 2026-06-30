@@ -1,0 +1,251 @@
+<div class="tab-content results-content">
+  @if (!builder().draft().id) {
+    <section class="surface field-group">
+      <div class="surface-heading">
+        <div>
+          <h3>Resultados</h3>
+          <p>Salve a votação para visualizar respostas.</p>
+        </div>
+      </div>
+    </section>
+  } @else {
+    @if (loadingResults()) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+
+    @if ((results()?.responseCount ?? 0) === 0) {
+      <section class="surface field-group">
+        <div class="surface-heading">
+          <div>
+            <h3>Resultados</h3>
+            <p>Nenhuma resposta registrada até o momento.</p>
+          </div>
+        </div>
+      </section>
+    } @else {
+      <mat-tab-group class="results-subtabs" animationDuration="0ms">
+        <mat-tab label="Resumo">
+          <div class="result-tab-content">
+            <section class="surface result-summary">
+              <div class="metric-grid">
+                <div class="metric-card">
+                  <span>Respostas</span>
+                  <strong>{{ results()?.responseCount ?? 0 }}</strong>
+                </div>
+                <div class="metric-card">
+                  <span>Pessoas identificadas</span>
+                  <strong>{{ individualResultsAvailable() ? voterRows().length : 0 }}</strong>
+                </div>
+                <div class="metric-card">
+                  <span>Tipo</span>
+                  <strong>{{ results()?.anonymous ? 'Anônima' : 'Identificada' }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="surface field-group">
+              <div class="surface-heading">
+                <div>
+                  <h3>Pessoas que votaram</h3>
+                  <p>Nomes, e-mails, vínculo Unesp e matrícula quando disponíveis.</p>
+                </div>
+              </div>
+
+              @if (!individualResultsAvailable()) {
+                <p class="empty-note">Esta votação é anônima ou não possui dados de identidade nas respostas.</p>
+              } @else {
+                <div class="result-table">
+                  <div class="result-table-header voter-table-grid">
+                    <span>Nome</span>
+                    <span>E-mail</span>
+                    <span>unespRole</span>
+                    <span>Matrícula</span>
+                  </div>
+                  @for (row of voterRows(); track row.response.id) {
+                    <div class="result-table-row voter-table-grid">
+                      <span>{{ row.name }}</span>
+                      <span>{{ row.email }}</span>
+                      <span>{{ row.unespRole }}</span>
+                      <span>{{ row.enrollmentNumber }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </section>
+
+            @if (demographicsCharts().length > 0) {
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Demografia</h3>
+                    <p>Dados do perfil e da matrícula XXYY00000.</p>
+                  </div>
+                </div>
+                <div class="chart-grid">
+                  @for (chart of demographicsCharts(); track chart.title) {
+                    <app-admin-results-chart [config]="chart" />
+                  }
+                </div>
+              </section>
+            }
+
+            @if (answerSummaryCharts().length > 0) {
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Respostas objetivas</h3>
+                    <p>Gráficos por pergunta com respostas agregadas.</p>
+                  </div>
+                </div>
+                <div class="chart-grid">
+                  @for (chart of answerSummaryCharts(); track chart.title) {
+                    <app-admin-results-chart [config]="chart" />
+                  }
+                </div>
+              </section>
+            }
+
+            @if (textQuestionSummaries().length > 0) {
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Respostas em texto</h3>
+                    <p>Respostas individuais de perguntas abertas.</p>
+                  </div>
+                </div>
+
+                <div class="text-answer-groups">
+                  @for (summary of textQuestionSummaries(); track summary.key) {
+                    <div class="text-answer-group">
+                      <h4>{{ summary.element.title }}</h4>
+                      <div class="text-answer-list">
+                        @for (answer of summary.textAnswers; track $index) {
+                          <blockquote>{{ answer }}</blockquote>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Pergunta">
+          <div class="result-tab-content">
+            @if (questionSummaries().length === 0) {
+              <section class="surface field-group">
+                <p class="empty-note">Nenhuma pergunta com resposta foi configurada.</p>
+              </section>
+            } @else {
+              <section class="surface field-group">
+                <mat-form-field appearance="outline">
+                  <mat-label>Pergunta</mat-label>
+                  <mat-select
+                    [value]="selectedQuestionElementId()"
+                    (selectionChange)="selectedResultsElementChange.emit($event)">
+                    @for (summary of questionSummaries(); track summary.key) {
+                      <mat-option [value]="summary.key">{{ summary.element.title }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                @if (selectedQuestionSummary(); as summary) {
+                  <div class="surface-heading">
+                    <div>
+                      <h3>{{ summary.element.title }}</h3>
+                      <p>{{ summary.answeredCount }} respostas registradas.</p>
+                    </div>
+                  </div>
+
+                  @if (summary.charts.length > 0) {
+                    <div class="chart-grid">
+                      @for (chart of summary.charts; track chart.title) {
+                        <app-admin-results-chart [config]="chart" />
+                      }
+                    </div>
+                  }
+
+                  @if (summary.textAnswers.length > 0) {
+                    <div class="text-answer-list">
+                      @for (answer of summary.textAnswers; track $index) {
+                        <blockquote>{{ answer }}</blockquote>
+                      }
+                    </div>
+                  }
+
+                  <div class="result-table">
+                    <div class="result-table-header question-answer-grid">
+                      <span>Pessoa</span>
+                      <span>Resposta</span>
+                    </div>
+                    @for (answer of summary.individualAnswers; track answer.responseId) {
+                      <div class="result-table-row question-answer-grid">
+                        <span>{{ answer.voterLabel }}</span>
+                        <span>{{ answer.valueLabel }}</span>
+                      </div>
+                    } @empty {
+                      <p class="empty-note">Nenhuma resposta registrada para esta pergunta.</p>
+                    }
+                  </div>
+                }
+              </section>
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Individual">
+          <div class="result-tab-content">
+            @if (!individualResultsAvailable()) {
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Respostas individuais</h3>
+                    <p>Disponível apenas quando a votação não é anônima.</p>
+                  </div>
+                </div>
+              </section>
+            } @else {
+              <section class="surface field-group">
+                <mat-form-field appearance="outline">
+                  <mat-label>Pessoa</mat-label>
+                  <mat-select
+                    [value]="selectedIndividualResponse()?.id ?? null"
+                    (selectionChange)="selectedIndividualResponseChange.emit($event)">
+                    @for (response of results()?.responses ?? []; track response.id) {
+                      @if (response.voter) {
+                        <mat-option [value]="response.id">{{ responseVoterLabel(response) }}</mat-option>
+                      }
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                @if (selectedIndividualResponse(); as response) {
+                  <div class="individual-person">
+                    <div>
+                      <strong>{{ responseVoterLabel(response) }}</strong>
+                      <span>{{ response.voter?.email || 'E-mail não informado' }}</span>
+                    </div>
+                    <div>
+                      <span>{{ response.voter?.unespRole || 'unespRole não informado' }}</span>
+                      <span>{{ response.voter?.enrollmentNumber || 'Matrícula não informada' }}</span>
+                    </div>
+                  </div>
+
+                  <div class="individual-answer-list">
+                    @for (answer of selectedIndividualAnswers(); track answer.element.id) {
+                      <div class="individual-answer">
+                        <span>{{ answer.element.title }}</span>
+                        <strong>{{ answer.valueLabel }}</strong>
+                      </div>
+                    }
+                  </div>
+                }
+              </section>
+            }
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    }
+  }
+</div>

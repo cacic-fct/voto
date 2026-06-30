@@ -22,7 +22,6 @@ import {
   PollResponseAnswer,
   PollResults,
   PollResultsDelta,
-  PollResultsResponse,
   PollSchedulingAnswer,
   PollSchedulingInvitee,
   PollSchedulingSettings,
@@ -39,11 +38,12 @@ import {
 import { PollApiService } from './poll-api.service';
 import { PollDescriptionContentComponent } from './poll-description-content.component';
 import {
-  answerValueLabels,
-  collectAnswerEntriesForElementVersion,
-  collectResultElementVersions,
+  buildPublicQuestionSummaries,
+  PublicQuestionResultSummary,
+  PublicResultBucket,
+} from './poll-public-results';
+import {
   formatDateLabel,
-  isEmptyAnswerValue,
   schedulingSlots as buildSchedulingSlots,
 } from './poll-result-formatting';
 
@@ -63,19 +63,6 @@ type SchedulingSlotGroup = {
   date: string;
   label: string;
   slots: SchedulingSlotView[];
-};
-
-type PublicResultBucket = {
-  label: string;
-  count: number;
-};
-
-type PublicQuestionResultSummary = {
-  key: string;
-  element: PollElement;
-  answeredCount: number;
-  buckets: PublicResultBucket[];
-  textAnswers: string[];
 };
 
 type PublicPollAccess =
@@ -161,9 +148,7 @@ export class PollVotePageComponent implements OnDestroy {
       return [];
     }
 
-    return collectResultElementVersions(poll.elements, responses).map((version) =>
-      this.buildPublicQuestionSummary(version, poll.elements, responses),
-    );
+    return buildPublicQuestionSummaries(poll.elements, responses);
   });
   private resultsEvents?: EventSource;
 
@@ -604,63 +589,8 @@ export class PollVotePageComponent implements OnDestroy {
     return poll.resultsPublic && (poll.resultsLive || poll.status === 'closed');
   }
 
-  private buildPublicQuestionSummary(
-    version: { key: string; element: PollElement },
-    currentElements: readonly PollElement[],
-    responses: PollResultsResponse[],
-  ): PublicQuestionResultSummary {
-    const element = version.element;
-    const values = collectAnswerEntriesForElementVersion(version.key, currentElements, responses)
-      .map((entry) => entry.value)
-      .filter((value) => !this.isEmptyAnswerValue(value));
-
-    return {
-      key: version.key,
-      element,
-      answeredCount: values.length,
-      buckets: this.buildPublicResultBuckets(element, values),
-      textAnswers: this.buildPublicTextAnswers(element, values),
-    };
-  }
-
-  private buildPublicResultBuckets(
-    element: PollElement,
-    values: (PollAnswerValue | undefined)[],
-  ): PublicResultBucket[] {
-    if (element.type === 'shortText' || element.type === 'longText') {
-      return [];
-    }
-
-    const counts = new Map<string, number>();
-    for (const value of values) {
-      for (const label of answerValueLabels(element, value)) {
-        counts.set(label, (counts.get(label) ?? 0) + 1);
-      }
-    }
-
-    return [...counts.entries()]
-      .map(([label, count]) => ({ label, count }))
-      .sort((first, second) => second.count - first.count || first.label.localeCompare(second.label, 'pt-BR'));
-  }
-
-  private buildPublicTextAnswers(element: PollElement, values: (PollAnswerValue | undefined)[]): string[] {
-    if (element.type !== 'shortText' && element.type !== 'longText') {
-      return [];
-    }
-
-    return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
-  }
-
-  private answerValueLabels(element: PollElement, value: PollAnswerValue | undefined): string[] {
-    return answerValueLabels(element, value);
-  }
-
   protected resultBucketPercent(summary: PublicQuestionResultSummary, bucket: PublicResultBucket): number {
     return summary.answeredCount > 0 ? Math.round((bucket.count / summary.answeredCount) * 100) : 0;
-  }
-
-  private isEmptyAnswerValue(value: PollAnswerValue | undefined): boolean {
-    return isEmptyAnswerValue(value);
   }
 
   private voterEligibilityDeniedMessage(source: PollVoterEligibilitySource | undefined): string {

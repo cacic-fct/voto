@@ -7,6 +7,7 @@ import { of, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from './poll-api.service';
 import { PollVotePageComponent } from './poll-vote-page.component';
+import { answerValueLabels } from './poll-result-formatting';
 
 describe('PollVotePageComponent', () => {
   let fixture: ComponentFixture<PollVotePageComponent>;
@@ -637,7 +638,6 @@ describe('PollVotePageComponent', () => {
 
   it('should cover remaining answer and denial helper branches', () => {
     const component = fixture.componentInstance as unknown as {
-      answerValueLabels(element: PollElement, value: unknown): string[];
       readSingleGridAnswer(value: unknown): Record<string, string>;
       readMultipleGridAnswer(value: unknown): Record<string, string[]>;
       readSchedulingAnswer(value: unknown): { slotId: string; invitees: { name: string; email: string }[] };
@@ -665,11 +665,11 @@ describe('PollVotePageComponent', () => {
       },
     };
 
-    expect(component.answerValueLabels(element, 3)).toEqual(['3']);
-    expect(component.answerValueLabels(element, 'missing')).toEqual(['missing']);
-    expect(component.answerValueLabels(element, null)).toEqual([]);
-    expect(component.answerValueLabels({ ...element, type: 'date' }, { unexpected: true })).toEqual([]);
-    expect(component.answerValueLabels(gridElement, { row: 1 })).toEqual([]);
+    expect(answerValueLabels(element, 3)).toEqual(['3']);
+    expect(answerValueLabels(element, 'missing')).toEqual(['missing']);
+    expect(answerValueLabels(element, null)).toEqual([]);
+    expect(answerValueLabels({ ...element, type: 'date' }, { unexpected: true })).toEqual([]);
+    expect(answerValueLabels(gridElement, { row: 1 })).toEqual([]);
     expect(component.readSingleGridAnswer({ row: 'col', invalid: 1 })).toEqual({ row: 'col' });
     expect(component.readSingleGridAnswer('invalid')).toEqual({});
     expect(component.readMultipleGridAnswer({ row: ['col', 1] })).toEqual({ row: ['col'] });
