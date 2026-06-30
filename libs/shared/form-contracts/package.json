@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cacic-fct/cacic-voto.git",
+    "url": "git+https://github.com/cacic-fct/voto.git",
     "directory": "libs/shared/form-contracts"
   },
   "publishConfig": {
