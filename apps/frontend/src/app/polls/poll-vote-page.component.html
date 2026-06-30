@@ -374,7 +374,7 @@
           </mat-card>
         } @else {
           <div class="public-result-list">
-            @for (summary of publicQuestionSummaries(); track summary.element.id) {
+            @for (summary of publicQuestionSummaries(); track summary.key) {
               <mat-card appearance="outlined" class="public-result-card">
                 <mat-card-header>
                   <mat-icon mat-card-avatar>bar_chart</mat-icon>

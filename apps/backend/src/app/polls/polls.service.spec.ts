@@ -31,8 +31,15 @@ type PrismaMock = {
     findUniqueOrThrow: jest.Mock<Promise<unknown>, [unknown]>;
   };
   pollElement: {
+    findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+    delete: jest.Mock<Promise<unknown>, [unknown]>;
     create: jest.Mock<Promise<unknown>, [unknown]>;
+    update: jest.Mock<Promise<unknown>, [unknown]>;
+  };
+  pollElementOption: {
+    deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+    createMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
   };
   pollImage: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
@@ -59,6 +66,7 @@ type PrismaMock = {
   };
   pollAnswer: {
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+    updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
   };
 };
 
@@ -134,8 +142,15 @@ function createPrismaMock(): PrismaMock {
       findUniqueOrThrow: jest.fn(),
     },
     pollElement: {
+      findMany: jest.fn().mockResolvedValue([]),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      delete: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    pollElementOption: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     pollImage: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -162,6 +177,7 @@ function createPrismaMock(): PrismaMock {
     },
     pollAnswer: {
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   };
 
@@ -228,6 +244,7 @@ function dbElement(overrides: Record<string, unknown> = {}) {
     required: false,
     settings: null,
     position: 0,
+    retiredAt: null,
     options: [],
     ...overrides,
   };
@@ -269,7 +286,7 @@ function responseRecord(overrides: Record<string, unknown> = {}) {
     userId: 'user-1',
     submittedAt: new Date('2026-06-21T12:00:00.000Z'),
     createdAt: new Date('2026-06-21T12:00:00.000Z'),
-    answers: [{ elementId: 'question-1', value: 'answer' }],
+    answers: [{ elementId: 'question-1', value: 'answer', elementSnapshot: null, element: dbElement() }],
     user: {
       id: 'user-1',
       name: null,
@@ -477,7 +494,13 @@ describe('PollsService', () => {
             unespRole: 'aluno-graduacao',
             enrollmentNumber: '24123456',
           },
-          answers: [{ elementId: 'question-1', value: 'answer' }],
+          answers: [
+            {
+              elementId: 'question-1',
+              value: 'answer',
+              element: expect.objectContaining({ id: 'question-1', title: 'Question' }),
+            },
+          ],
         },
       ],
     });
@@ -491,7 +514,13 @@ describe('PollsService', () => {
           id: 'response-1',
           submittedAt: undefined,
           voter: undefined,
-          answers: [{ elementId: 'question-1', value: 'answer' }],
+          answers: [
+            {
+              elementId: 'question-1',
+              value: 'answer',
+              element: expect.objectContaining({ id: 'question-1', title: 'Question' }),
+            },
+          ],
         },
       ],
     });
@@ -647,7 +676,7 @@ describe('PollsService', () => {
         publishedAt: new Date('2026-06-21T12:00:00.000Z'),
       }),
     });
-    expect(prisma.pollElement.deleteMany).toHaveBeenCalledWith({ where: { pollId: 'poll-1' } });
+    expect(prisma.pollElement.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { pollId: 'poll-1' } }));
     expect(prisma.pollElement.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         title: 'Question',
@@ -753,6 +782,38 @@ describe('PollsService', () => {
 
     prisma.poll.findUnique.mockResolvedValueOnce(null);
     await expect(service.updatePoll('missing', savePoll(), createUser())).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('snapshots existing answers and retires removed answered elements when polls are edited', async () => {
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord());
+    prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ elements: [] }));
+    prisma.pollElement.findMany
+      .mockResolvedValueOnce([dbElement({ options: [option('yes', 'Sim')] })])
+      .mockResolvedValueOnce([
+        { ...dbElement({ id: 'question-1' }), _count: { answers: 1 } },
+        { ...dbElement({ id: 'draft-only' }), _count: { answers: 0 } },
+      ]);
+
+    await service.updatePoll('poll-1', savePoll({ elements: [] }), createUser());
+
+    expect(prisma.pollAnswer.updateMany).toHaveBeenCalledWith({
+      where: {
+        elementId: 'question-1',
+        elementSnapshot: { equals: expect.anything() },
+      },
+      data: {
+        elementSnapshot: expect.objectContaining({
+          id: 'question-1',
+          title: 'Question',
+          options: [{ id: 'yes', label: 'Sim', description: undefined }],
+        }),
+      },
+    });
+    expect(prisma.pollElement.update).toHaveBeenCalledWith({
+      where: { id: 'question-1' },
+      data: { retiredAt: new Date('2026-06-21T12:00:00.000Z') },
+    });
+    expect(prisma.pollElement.delete).toHaveBeenCalledWith({ where: { id: 'draft-only' } });
   });
 
   it('updates polls with default status and preserves existing publication or closure dates', async () => {
@@ -1000,9 +1061,29 @@ describe('PollsService', () => {
       id: 'response-1',
       pollId: 'poll-1',
       submittedAt: '2026-06-21T12:00:00.000Z',
-      answers: [{ elementId: 'question-1', value: 'answer' }],
+      answers: [
+        {
+          elementId: 'question-1',
+          value: 'answer',
+          element: expect.objectContaining({ id: 'question-1', title: 'Question' }),
+        },
+      ],
     });
     expect(prisma.pollVoter.create).toHaveBeenCalledWith({ data: { pollId: 'poll-1', userId: 'user-1' } });
+    expect(prisma.pollResponse.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        answers: {
+          create: [
+            expect.objectContaining({
+              elementId: 'question-1',
+              elementSnapshot: expect.objectContaining({ id: 'question-1', title: 'Question' }),
+              value: 'answer',
+            }),
+          ],
+        },
+      }),
+      include: expect.any(Object),
+    });
 
     prisma.poll.findFirst.mockResolvedValueOnce(pollRecord({ allowMultipleResponses: true }));
     await service.submitResponse('poll-1', { answers: [{ elementId: 'question-1', value: 'answer' }] }, createUser());

@@ -1050,7 +1050,7 @@
                         </div>
 
                         <div class="text-answer-groups">
-                          @for (summary of textQuestionSummaries(); track summary.element.id) {
+                          @for (summary of textQuestionSummaries(); track summary.key) {
                             <div class="text-answer-group">
                               <h4>{{ summary.element.title }}</h4>
                               <div class="text-answer-list">
@@ -1079,8 +1079,8 @@
                           <mat-select
                             [value]="selectedQuestionElementId()"
                             (selectionChange)="updateSelectedResultsElement($event)">
-                            @for (summary of questionSummaries(); track summary.element.id) {
-                              <mat-option [value]="summary.element.id">{{ summary.element.title }}</mat-option>
+                            @for (summary of questionSummaries(); track summary.key) {
+                              <mat-option [value]="summary.key">{{ summary.element.title }}</mat-option>
                             }
                           </mat-select>
                         </mat-form-field>

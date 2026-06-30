@@ -32,7 +32,6 @@ const voterUser: AuthenticatedUser = {
   permissions: [],
   scopes: [],
   oidcScopes: [],
-  claims: {},
 };
 
 const pollSummary: PollSummary = {

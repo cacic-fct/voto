@@ -157,6 +157,7 @@ model PollElement {
   required    Boolean            @default(false)
   settings    Json?
   position    Int
+  retiredAt   DateTime?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   poll        Poll               @relation(fields: [pollId], references: [id], onDelete: Cascade)
@@ -164,6 +165,7 @@ model PollElement {
   answers     PollAnswer[]
 
   @@index([pollId, position])
+  @@index([pollId, retiredAt, position])
 }
 
 model PollElementOption {
@@ -209,6 +211,7 @@ model PollAnswer {
   responseId String
   elementId  String
   value      Json
+  elementSnapshot Json?
   response   PollResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   element    PollElement  @relation(fields: [elementId], references: [id], onDelete: Cascade)
 

@@ -2,6 +2,7 @@ import { AuthenticatedUser } from '@org/voting-contracts';
 import { Request } from 'express';
 
 export type AuthenticatedPrincipal = AuthenticatedUser & {
+  claims: Record<string, unknown>;
   token: string;
   roleSet: Set<string>;
   permissionSet: Set<string>;

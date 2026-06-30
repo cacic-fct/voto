@@ -24,10 +24,10 @@ describe('parseCsv', () => {
     });
   });
 
-  it('ignores blank records and pads missing cells with empty strings', () => {
-    expect(parseCsv('nome,matricula\n\nAna\n')).toEqual({
+  it('ignores blank records', () => {
+    expect(parseCsv('nome,matricula\n\nAna,123\n')).toEqual({
       headers: ['nome', 'matricula'],
-      rows: [{ nome: 'Ana', matricula: '' }],
+      rows: [{ nome: 'Ana', matricula: '123' }],
     });
   });
 
@@ -38,5 +38,7 @@ describe('parseCsv', () => {
   it('throws localized errors for malformed or headerless CSV content', () => {
     expect(() => parseCsv('"sem fechamento')).toThrow('O CSV possui uma coluna com aspas sem fechamento.');
     expect(() => parseCsv('')).toThrow('O CSV precisa incluir uma linha de cabeçalho.');
+    expect(() => parseCsv('nome,nome\nAna,Maria')).toThrow('O CSV possui cabeçalhos duplicados: nome.');
+    expect(() => parseCsv('nome,matricula\nAna')).toThrow('A linha 2 possui 1 colunas; esperado: 2.');
   });
 });

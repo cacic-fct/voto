@@ -450,10 +450,11 @@ describe('AdminPollBuilderPageComponent', () => {
         },
       ],
     });
-    component.updateSelectedResultsElement({ value: 'text' });
+    const textQuestionKey = component.selectedQuestionElementId();
+    component.updateSelectedResultsElement({ value: textQuestionKey });
     component.updateSelectedIndividualResponse({ value: 'response-1' });
 
-    expect(component.selectedQuestionElementId()).toBe('text');
+    expect(component.selectedQuestionElementId()).toBe(textQuestionKey);
     expect(component.selectedIndividualResponse()?.id).toBe('response-1');
     expect(component.selectedIndividualAnswers()).toEqual([{ element: textElement, valueLabel: 'Ótimo' }]);
     expect(component.textQuestionSummaries()[0].textAnswers).toEqual(['Ótimo']);
@@ -461,7 +462,7 @@ describe('AdminPollBuilderPageComponent', () => {
 
     component.updateSelectedResultsElement({ value: 1 });
     component.updateSelectedIndividualResponse({ value: 1 });
-    expect(component.selectedQuestionElementId()).toBe('text');
+    expect(component.selectedQuestionElementId()).toBe(textQuestionKey);
 
     component.newPoll();
     expect(component.selectedQuestionElementId()).toBeNull();

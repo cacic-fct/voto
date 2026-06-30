@@ -248,7 +248,6 @@ export class AuthController {
       permissions: user.permissions,
       scopes: user.scopes,
       oidcScopes: user.oidcScopes,
-      claims: user.claims,
     };
   }
 

@@ -23,7 +23,6 @@ describe('AppShellComponent', () => {
     permissions: [],
     scopes: [],
     oidcScopes: [],
-    claims: {},
   };
 
   beforeEach(async () => {

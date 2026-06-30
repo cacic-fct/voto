@@ -262,7 +262,6 @@ describe('AuthController', () => {
       permissions: ['poll#read'],
       scopes: ['openid'],
       oidcScopes: ['openid'],
-      claims: { name: 'Ada' },
     });
     expect(controller.getMe({} as AuthenticatedRequest)).toBeNull();
   });

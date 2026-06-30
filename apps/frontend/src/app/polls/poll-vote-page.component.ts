@@ -24,7 +24,6 @@ import {
   PollResultsDelta,
   PollResultsResponse,
   PollSchedulingAnswer,
-  PollSchedulingAvailabilityWindow,
   PollSchedulingInvitee,
   PollSchedulingSettings,
   PollUserResponseState,
@@ -39,6 +38,14 @@ import {
 } from './poll-metadata';
 import { PollApiService } from './poll-api.service';
 import { PollDescriptionContentComponent } from './poll-description-content.component';
+import {
+  answerValueLabels,
+  collectAnswerEntriesForElementVersion,
+  collectResultElementVersions,
+  formatDateLabel,
+  isEmptyAnswerValue,
+  schedulingSlots as buildSchedulingSlots,
+} from './poll-result-formatting';
 
 type AnswerValue = Exclude<PollAnswerValue, null>;
 
@@ -64,6 +71,7 @@ type PublicResultBucket = {
 };
 
 type PublicQuestionResultSummary = {
+  key: string;
   element: PollElement;
   answeredCount: number;
   buckets: PublicResultBucket[];
@@ -153,9 +161,9 @@ export class PollVotePageComponent implements OnDestroy {
       return [];
     }
 
-    return poll.elements
-      .filter((element) => this.isAnswerElement(element))
-      .map((element) => this.buildPublicQuestionSummary(element, responses));
+    return collectResultElementVersions(poll.elements, responses).map((version) =>
+      this.buildPublicQuestionSummary(version, poll.elements, responses),
+    );
   });
   private resultsEvents?: EventSource;
 
@@ -273,37 +281,15 @@ export class PollVotePageComponent implements OnDestroy {
   }
 
   protected schedulingSlots(element: PollElement): SchedulingSlotView[] {
-    const settings = element.settings?.scheduling;
-    if (!settings) {
-      return [];
-    }
-
-    const slots: SchedulingSlotView[] = [];
-    for (const availability of settings.availability) {
-      const windowStart = this.timeToMinutes(availability.startTime);
-      const windowEnd = this.timeToMinutes(availability.endTime);
-      const firstStart = windowStart + settings.bufferBeforeMinutes;
-      const lastStart = windowEnd - settings.durationMinutes - settings.bufferAfterMinutes;
-
-      for (
-        let startMinutes = firstStart;
-        startMinutes <= lastStart;
-        startMinutes += settings.slotIntervalMinutes
-      ) {
-        const endMinutes = startMinutes + settings.durationMinutes;
-        slots.push({
-          id: this.schedulingSlotId(availability, startMinutes),
-          date: availability.date,
-          startTime: this.formatTimeMinutes(startMinutes),
-          endTime: this.formatTimeMinutes(endMinutes),
-          windowId: availability.id,
-          label: `${this.formatTimeMinutes(startMinutes)} - ${this.formatTimeMinutes(endMinutes)}`,
-          meta: `${settings.durationMinutes} min`,
-        });
-      }
-    }
-
-    return slots;
+    return buildSchedulingSlots(element).map((slot) => ({
+      id: slot.id,
+      date: slot.date,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      windowId: slot.windowId,
+      label: slot.label,
+      meta: `${slot.durationMinutes} min`,
+    }));
   }
 
   protected schedulingSlotGroups(element: PollElement): SchedulingSlotGroup[] {
@@ -619,14 +605,17 @@ export class PollVotePageComponent implements OnDestroy {
   }
 
   private buildPublicQuestionSummary(
-    element: PollElement,
+    version: { key: string; element: PollElement },
+    currentElements: readonly PollElement[],
     responses: PollResultsResponse[],
   ): PublicQuestionResultSummary {
-    const values = responses
-      .map((response) => this.findAnswerValue(response, element.id))
+    const element = version.element;
+    const values = collectAnswerEntriesForElementVersion(version.key, currentElements, responses)
+      .map((entry) => entry.value)
       .filter((value) => !this.isEmptyAnswerValue(value));
 
     return {
+      key: version.key,
       element,
       answeredCount: values.length,
       buckets: this.buildPublicResultBuckets(element, values),
@@ -644,7 +633,7 @@ export class PollVotePageComponent implements OnDestroy {
 
     const counts = new Map<string, number>();
     for (const value of values) {
-      for (const label of this.answerValueLabels(element, value)) {
+      for (const label of answerValueLabels(element, value)) {
         counts.set(label, (counts.get(label) ?? 0) + 1);
       }
     }
@@ -663,71 +652,15 @@ export class PollVotePageComponent implements OnDestroy {
   }
 
   private answerValueLabels(element: PollElement, value: PollAnswerValue | undefined): string[] {
-    if (typeof value === 'number') {
-      return [String(value)];
-    }
-
-    if (typeof value === 'string') {
-      return [this.optionLabel(element, value) ?? value];
-    }
-
-    if (Array.isArray(value)) {
-      return value.map((optionId) => this.optionLabel(element, optionId) ?? optionId);
-    }
-
-    const recordValue = this.asRecord(value);
-    if (!recordValue) {
-      return [];
-    }
-
-    if (element.settings?.grid) {
-      return element.settings.grid.rows.flatMap((row) => {
-        const rawValue = recordValue[row.id];
-        if (Array.isArray(rawValue)) {
-          return rawValue.map((columnId) => `${row.label}: ${this.gridColumnLabel(element, String(columnId))}`);
-        }
-
-        return typeof rawValue === 'string' ? [`${row.label}: ${this.gridColumnLabel(element, rawValue)}`] : [];
-      });
-    }
-
-    if (element.type === 'scheduling') {
-      const answer = this.readSchedulingAnswer(recordValue);
-      const slot = this.schedulingSlots(element).find((item) => item.id === answer.slotId);
-      return answer.slotId ? [slot?.label ?? answer.slotId] : [];
-    }
-
-    return [];
+    return answerValueLabels(element, value);
   }
 
   protected resultBucketPercent(summary: PublicQuestionResultSummary, bucket: PublicResultBucket): number {
     return summary.answeredCount > 0 ? Math.round((bucket.count / summary.answeredCount) * 100) : 0;
   }
 
-  private findAnswerValue(response: PollResultsResponse, elementId: string): PollAnswerValue | undefined {
-    return response.answers.find((answer) => answer.elementId === elementId)?.value;
-  }
-
-  private optionLabel(element: PollElement, optionId: string): string | undefined {
-    return element.options.find((option) => option.id === optionId)?.label;
-  }
-
-  private gridColumnLabel(element: PollElement, columnId: string): string {
-    return element.settings?.grid?.columns.find((column) => column.id === columnId)?.label ?? columnId;
-  }
-
-  private isAnswerElement(element: PollElement): boolean {
-    return element.type !== 'section' && element.type !== 'statement';
-  }
-
   private isEmptyAnswerValue(value: PollAnswerValue | undefined): boolean {
-    return (
-      value === undefined ||
-      value === null ||
-      value === '' ||
-      (Array.isArray(value) && value.length === 0) ||
-      (this.isRecord(value) && Object.keys(value).length === 0)
-    );
+    return isEmptyAnswerValue(value);
   }
 
   private voterEligibilityDeniedMessage(source: PollVoterEligibilitySource | undefined): string {
@@ -783,7 +716,7 @@ export class PollVotePageComponent implements OnDestroy {
   }
 
   private readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
-    const recordValue = this.asRecord(value);
+    const recordValue = this.isRecord(value) ? value : null;
     if (!recordValue) {
       return {
         slotId: '',
@@ -793,7 +726,7 @@ export class PollVotePageComponent implements OnDestroy {
 
     const invitees = Array.isArray(recordValue['invitees'])
       ? recordValue['invitees']
-          .map((invitee) => this.asRecord(invitee))
+          .map((invitee) => this.isRecord(invitee) ? invitee : null)
           .filter((invitee): invitee is Record<string, unknown> => invitee !== null)
       : [];
 
@@ -806,35 +739,8 @@ export class PollVotePageComponent implements OnDestroy {
     };
   }
 
-  private schedulingSlotId(availability: PollSchedulingAvailabilityWindow, startMinutes: number): string {
-    return `${availability.id}:${this.formatTimeMinutes(startMinutes)}`;
-  }
-
   private formatDateLabel(value: string): string {
-    const [year, month, day] = value.split('-').map(Number);
-    if (!year || !month || !day) {
-      return value;
-    }
-
-    const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(
-      new Date(Date.UTC(year, month - 1, day, 12)),
-    );
-    return `${weekday.replace('.', '')}, ${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
-  }
-
-  private timeToMinutes(value: string): number {
-    const [hours, minutes] = value.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  private formatTimeMinutes(value: number): string {
-    const hours = Math.floor(value / 60);
-    const minutes = value % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-  }
-
-  private asRecord(value: unknown): Record<string, unknown> | null {
-    return this.isRecord(value) ? value : null;
+    return formatDateLabel(value);
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

@@ -20,7 +20,6 @@ describe('AuthService', () => {
     permissions: ['polls:read'],
     scopes: ['openid'],
     oidcScopes: ['openid'],
-    claims: { name: 'Maria' },
   };
 
   function configure(platformId: 'browser' | 'server' = 'browser'): void {

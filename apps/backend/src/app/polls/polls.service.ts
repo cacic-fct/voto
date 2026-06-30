@@ -99,6 +99,7 @@ type ElementRecord = {
   required: boolean;
   settings: Prisma.JsonValue | null;
   position: number;
+  retiredAt?: Date | null;
   options: OptionRecord[];
 };
 
@@ -200,9 +201,16 @@ type PollContractOptions = {
 type PollResultResponseRecord = Prisma.PollResponseGetPayload<{
   include: {
     answers: {
-      select: {
-        elementId: true;
-        value: true;
+      include: {
+        element: {
+          include: {
+            options: {
+              orderBy: {
+                position: 'asc';
+              };
+            };
+          };
+        };
       };
     };
     user: {
@@ -224,6 +232,7 @@ type PollResultStreamEvent = {
 
 const pollInclude = {
   elements: {
+    where: { retiredAt: null },
     orderBy: { position: 'asc' },
     include: {
       options: {
@@ -309,7 +318,7 @@ export class PollsService {
       include: {
         _count: {
           select: {
-            elements: true,
+            elements: { where: { retiredAt: null } },
             responses: true,
           },
         },
@@ -350,7 +359,7 @@ export class PollsService {
       include: {
         _count: {
           select: {
-            elements: true,
+            elements: { where: { retiredAt: null } },
             responses: true,
           },
         },
@@ -611,9 +620,14 @@ export class PollsService {
       skip,
       include: {
         answers: {
-          select: {
-            elementId: true,
-            value: true,
+          include: {
+            element: {
+              include: {
+                options: {
+                  orderBy: { position: 'asc' },
+                },
+              },
+            },
           },
         },
         user: {
@@ -666,10 +680,7 @@ export class PollsService {
       id: response.id,
       submittedAt: audience === 'admin' ? response.submittedAt?.toISOString() : undefined,
       voter: audience === 'admin' && response.user ? this.toPollResultsVoter(response.user) : undefined,
-      answers: response.answers.map((answer) => ({
-        elementId: answer.elementId,
-        value: answer.value as PollResponseAnswer['value'],
-      })),
+      answers: response.answers.map((answer) => this.toContractResponseAnswer(answer)),
     };
   }
 
@@ -829,7 +840,7 @@ export class PollsService {
         },
       });
 
-      await this.replaceElements(tx, created.id, input.elements);
+      await this.syncElements(tx, created.id, input.elements);
       removedImageObjectKeys.push(...(await this.reconcilePollImages(tx, created.id, input)));
 
       return tx.poll.findUniqueOrThrow({
@@ -874,7 +885,8 @@ export class PollsService {
         },
       });
 
-      await this.replaceElements(tx, id, input.elements);
+      await this.backfillAnswerElementSnapshots(tx, id);
+      await this.syncElements(tx, id, input.elements);
       removedImageObjectKeys.push(...(await this.reconcilePollImages(tx, id, input)));
 
       return tx.poll.findUniqueOrThrow({
@@ -1133,6 +1145,7 @@ export class PollsService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const isAnonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
+        const answerElementSnapshots = this.buildAnswerElementSnapshots(poll.elements);
 
         if (poll.allowMultipleResponses) {
           await tx.pollVoter.upsert({
@@ -1149,7 +1162,7 @@ export class PollsService {
             },
           });
 
-          return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
+          return this.createResponse(tx, poll.id, userId, answers, isAnonymous, answerElementSnapshots);
         }
 
         const existingVoter = await tx.pollVoter.findUnique({
@@ -1197,10 +1210,7 @@ export class PollsService {
             data: {
               submittedAt: new Date(),
               answers: {
-                create: answers.map((answer) => ({
-                  elementId: answer.elementId,
-                  value: answer.value as Prisma.InputJsonValue,
-                })),
+                create: answers.map((answer) => this.toAnswerCreateData(answer, answerElementSnapshots)),
               },
             },
             include: this.responseInclude(),
@@ -1214,7 +1224,7 @@ export class PollsService {
           },
         });
 
-        return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
+        return this.createResponse(tx, poll.id, userId, answers, isAnonymous, answerElementSnapshots);
       });
     } catch (error) {
       if (error instanceof ConflictException) {
@@ -1235,6 +1245,7 @@ export class PollsService {
     userId: string,
     answers: PollResponseAnswer[],
     isAnonymous: boolean,
+    answerElementSnapshots: Map<string, Prisma.InputJsonValue>,
   ): Promise<PollResultResponseRecord> {
     return tx.pollResponse.create({
       data: {
@@ -1251,13 +1262,27 @@ export class PollsService {
         answers: {
           create: answers.map((answer) => ({
             ...(isAnonymous ? { id: randomUUID() } : {}),
-            elementId: answer.elementId,
-            value: answer.value as Prisma.InputJsonValue,
+            ...this.toAnswerCreateData(answer, answerElementSnapshots),
           })),
         },
       },
       include: this.responseInclude(),
     });
+  }
+
+  private buildAnswerElementSnapshots(elements: ElementRecord[]): Map<string, Prisma.InputJsonValue> {
+    return new Map(elements.map((element) => [element.id, this.toElementSnapshotJson(element)]));
+  }
+
+  private toAnswerCreateData(
+    answer: PollResponseAnswer,
+    answerElementSnapshots: Map<string, Prisma.InputJsonValue>,
+  ): Prisma.PollAnswerUncheckedCreateWithoutResponseInput {
+    return {
+      elementId: answer.elementId,
+      value: answer.value as Prisma.InputJsonValue,
+      elementSnapshot: answerElementSnapshots.get(answer.elementId) ?? Prisma.JsonNull,
+    };
   }
 
   private findLatestUserResponse(pollId: string, userId: string): Promise<PollResultResponseRecord | null> {
@@ -1271,12 +1296,17 @@ export class PollsService {
     });
   }
 
-  private responseInclude(): Prisma.PollResponseInclude {
+  private responseInclude() {
     return {
       answers: {
-        select: {
-          elementId: true,
-          value: true,
+        include: {
+          element: {
+            include: {
+              options: {
+                orderBy: { position: 'asc' },
+              },
+            },
+          },
         },
       },
       user: {
@@ -1288,7 +1318,7 @@ export class PollsService {
           claims: true,
         },
       },
-    };
+    } satisfies Prisma.PollResponseInclude;
   }
 
   private toContractResponse(response: PollResultResponseRecord): PollResponse {
@@ -1296,11 +1326,22 @@ export class PollsService {
       id: response.id,
       pollId: response.pollId,
       submittedAt: response.submittedAt?.toISOString(),
-      answers: response.answers.map((answer) => ({
-        elementId: answer.elementId,
-        value: answer.value as PollResponseAnswer['value'],
-      })),
+      answers: response.answers.map((answer) => this.toContractResponseAnswer(answer)),
     };
+  }
+
+  private toContractResponseAnswer(answer: PollResultResponseRecord['answers'][number]): PollResponseAnswer {
+    const element = this.readAnswerElementSnapshot(answer) ?? this.toContractElement(answer.element, [], {});
+
+    return {
+      elementId: answer.elementId,
+      value: answer.value as PollResponseAnswer['value'],
+      element,
+    };
+  }
+
+  private readAnswerElementSnapshot(answer: PollResultResponseRecord['answers'][number]): PollElement | null {
+    return this.isRecord(answer.elementSnapshot) ? (answer.elementSnapshot as PollElement) : null;
   }
 
   private async publishPollResultsForResponse(
@@ -1343,33 +1384,127 @@ export class PollsService {
     );
   }
 
-  private async replaceElements(
+  private async syncElements(
     tx: Prisma.TransactionClient,
     pollId: string,
     elements: SavePollDto['elements'],
   ): Promise<void> {
-    await tx.pollElement.deleteMany({ where: { pollId } });
+    const existingElements = await tx.pollElement.findMany({
+      where: { pollId },
+      include: {
+        options: {
+          orderBy: { position: 'asc' },
+        },
+        _count: {
+          select: {
+            answers: true,
+          },
+        },
+      },
+    });
+    const existingById = new Map(existingElements.map((element) => [element.id, element]));
+    const inputElementIds = new Set(elements.map((element) => element.id));
+    const now = new Date();
+
+    for (const element of existingElements) {
+      if (element.retiredAt || inputElementIds.has(element.id)) {
+        continue;
+      }
+
+      if (element._count.answers > 0) {
+        await tx.pollElement.update({
+          where: { id: element.id },
+          data: { retiredAt: now },
+        });
+        continue;
+      }
+
+      await tx.pollElement.delete({ where: { id: element.id } });
+    }
 
     for (const [elementIndex, element] of elements.entries()) {
+      const existing = existingById.get(element.id);
       const settings = this.normalizeElementSettings(element);
+      const data = {
+        pollId,
+        type: this.toDbElementType(element.type),
+        title: element.title.trim(),
+        description: this.cleanOptionalText(element.description),
+        required: element.required,
+        settings: settings ? (settings as Prisma.InputJsonValue) : Prisma.JsonNull,
+        position: elementIndex,
+        retiredAt: null,
+      };
+
+      if (existing) {
+        await tx.pollElement.update({
+          where: { id: element.id },
+          data,
+        });
+        await this.replaceElementOptions(tx, element.id, element.options);
+        continue;
+      }
+
       await tx.pollElement.create({
         data: {
           id: element.id,
-          pollId,
-          type: this.toDbElementType(element.type),
-          title: element.title.trim(),
-          description: this.cleanOptionalText(element.description),
-          required: element.required,
-          ...(settings ? { settings: settings as Prisma.InputJsonValue } : {}),
-          position: elementIndex,
+          ...data,
           options: {
-            create: element.options.map((option, optionIndex) => ({
-              id: option.id,
-              label: option.label.trim(),
-              description: this.cleanOptionalText(option.description),
-              position: optionIndex,
-            })),
+            create: element.options.map((option, optionIndex) => this.toElementOptionCreateData(option, optionIndex)),
           },
+        },
+      });
+    }
+  }
+
+  private async replaceElementOptions(
+    tx: Prisma.TransactionClient,
+    elementId: string,
+    options: SavePollDto['elements'][number]['options'],
+  ): Promise<void> {
+    await tx.pollElementOption.deleteMany({ where: { elementId } });
+    if (options.length === 0) {
+      return;
+    }
+
+    await tx.pollElementOption.createMany({
+      data: options.map((option, optionIndex) => ({
+        ...this.toElementOptionCreateData(option, optionIndex),
+        elementId,
+      })),
+    });
+  }
+
+  private toElementOptionCreateData(
+    option: SavePollDto['elements'][number]['options'][number],
+    optionIndex: number,
+  ): Prisma.PollElementOptionCreateWithoutElementInput {
+    return {
+      id: option.id,
+      label: option.label.trim(),
+      description: this.cleanOptionalText(option.description),
+      position: optionIndex,
+    };
+  }
+
+  private async backfillAnswerElementSnapshots(tx: Prisma.TransactionClient, pollId: string): Promise<void> {
+    const elements = await tx.pollElement.findMany({
+      where: { pollId },
+      include: {
+        options: {
+          orderBy: { position: 'asc' },
+        },
+      },
+    });
+
+    for (const element of elements) {
+      await tx.pollAnswer.updateMany({
+        where: {
+          elementId: element.id,
+          elementSnapshot: { equals: Prisma.DbNull },
+        },
+        data: {
+          elementSnapshot: this.toElementSnapshotJson(element),
         },
       });
     }
@@ -2894,6 +3029,10 @@ export class PollsService {
       })),
       ...(settings ? { settings } : {}),
     };
+  }
+
+  private toElementSnapshotJson(element: ElementRecord): Prisma.InputJsonValue {
+    return this.toContractElement(element, [], {}) as unknown as Prisma.InputJsonValue;
   }
 
   private toContractImages(images: ImageRecord[], options: PollContractOptions = {}): PollImage[] {

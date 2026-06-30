@@ -40,7 +40,6 @@ export type AuthenticatedUser = {
   permissions: string[];
   scopes: string[];
   oidcScopes: string[];
-  claims: Record<string, unknown>;
 };
 
 export type AuthRefreshResult = {
@@ -194,7 +193,9 @@ export type PollSchedulingAnswer = FormSchedulingAnswer;
 
 export type PollAnswerValue = FormAnswerValue;
 
-export type PollResponseAnswer = FormResponseAnswer;
+export type PollResponseAnswer = FormResponseAnswer & {
+  element?: PollElement;
+};
 
 export type SubmitPollResponseRequest = SubmitFormResponseRequest;
 

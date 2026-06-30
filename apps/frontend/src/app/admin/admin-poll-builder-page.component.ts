@@ -26,9 +26,6 @@ import {
   PollResults,
   PollResultsDelta,
   PollResultsResponse,
-  PollSchedulingAnswer,
-  PollSchedulingAvailabilityWindow,
-  PollSchedulingSettings,
   PollStatus,
   PollSummary,
 } from '@org/voting-contracts';
@@ -48,6 +45,17 @@ import {
   AdminResultsChartType,
 } from './admin-results-chart.component';
 import { PollBuilderDraftService } from './poll-builder-draft.service';
+import {
+  answerValueLabel,
+  asRecord,
+  collectAnswerEntriesForElementVersion,
+  collectResultElementVersions,
+  formatDateLabel,
+  isAnswerElement,
+  isEmptyAnswerValue,
+  readSchedulingAnswerOrNull,
+  schedulingSlots,
+} from '../polls/poll-result-formatting';
 
 type ResultsVoterRow = {
   response: PollResultsResponse;
@@ -60,6 +68,7 @@ type ResultsVoterRow = {
 };
 
 type QuestionResultSummary = {
+  key: string;
   element: PollElement;
   answeredCount: number;
   charts: AdminResultsChartConfig[];
@@ -107,7 +116,6 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     dateStyle: 'short',
     timeStyle: 'short',
   });
-  private readonly numberFormatter = new Intl.NumberFormat('pt-BR');
   private resultsEvents?: EventSource;
 
   protected readonly builder = inject(PollBuilderDraftService);
@@ -153,17 +161,19 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
   protected readonly selectedResultsElementId = signal<string | null>(null);
   protected readonly selectedIndividualResponseId = signal<string | null>(null);
   protected readonly answerElements = computed(() =>
-    this.builder.draft().elements.filter((element) => this.builder.isAnswerElement(element.type)),
+    this.builder.draft().elements.filter((element) => isAnswerElement(element)),
   );
   protected readonly questionSummaries = computed(() =>
-    this.answerElements().map((element) => this.buildQuestionSummary(element)),
+    collectResultElementVersions(this.builder.draft().elements, this.results()?.responses ?? []).map((version) =>
+      this.buildQuestionSummary(version),
+    ),
   );
   protected readonly selectedQuestionSummary = computed(() => {
     const summaries = this.questionSummaries();
     const selectedId = this.selectedResultsElementId();
-    return summaries.find((summary) => summary.element.id === selectedId) ?? summaries[0] ?? null;
+    return summaries.find((summary) => summary.key === selectedId) ?? summaries[0] ?? null;
   });
-  protected readonly selectedQuestionElementId = computed(() => this.selectedQuestionSummary()?.element.id ?? null);
+  protected readonly selectedQuestionElementId = computed(() => this.selectedQuestionSummary()?.key ?? null);
   protected readonly voterRows = computed(() =>
     (this.results()?.responses ?? []).map((response) => this.toVoterRow(response)),
   );
@@ -188,10 +198,18 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
       return [];
     }
 
-    return this.answerElements().map((element) => ({
-      element,
-      valueLabel: this.answerValueLabel(element, this.findAnswerValue(response, element.id)),
-    }));
+    const elementsById = new Map(this.answerElements().map((element) => [element.id, element]));
+    return response.answers
+      .map((answer) => {
+        const element = answer.element ?? elementsById.get(answer.elementId);
+        return element
+          ? {
+              element,
+              valueLabel: this.answerValueLabel(element, answer.value),
+            }
+          : null;
+      })
+      .filter((answer): answer is { element: PollElement; valueLabel: string } => answer !== null);
   });
   protected readonly directLinkUrl = computed(() => {
     const draft = this.builder.draft();
@@ -543,43 +561,7 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
   }
 
   protected answerValueLabel(element: PollElement, value: PollAnswerValue | undefined): string {
-    if (this.isEmptyAnswerValue(value)) {
-      return 'Sem resposta';
-    }
-
-    if (typeof value === 'number') {
-      return this.numberFormatter.format(value);
-    }
-
-    if (typeof value === 'string') {
-      return this.optionLabel(element, value) ?? value;
-    }
-
-    if (Array.isArray(value)) {
-      return value.map((optionId) => this.optionLabel(element, optionId) ?? optionId).join(', ');
-    }
-
-    const recordValue = this.asRecord(value);
-    if (recordValue && element.settings?.grid) {
-      return element.settings.grid.rows
-        .map((row) => {
-          const rawValue = recordValue[row.id];
-          const rowValue = Array.isArray(rawValue)
-            ? rawValue.map((columnId) => this.gridColumnLabel(element, String(columnId))).join(', ')
-            : typeof rawValue === 'string'
-              ? this.gridColumnLabel(element, rawValue)
-              : '';
-          return rowValue ? `${row.label}: ${rowValue}` : '';
-        })
-        .filter(Boolean)
-        .join('; ');
-    }
-
-    if (recordValue && element.type === 'scheduling') {
-      return this.schedulingAnswerLabel(element, recordValue);
-    }
-
-    return 'Sem resposta';
+    return answerValueLabel(element, value);
   }
 
   private async loadResults(showLoading = true): Promise<void> {
@@ -596,7 +578,7 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     try {
       const results = await firstValueFrom(this.api.getAdminPollResults(pollId));
       this.results.set(results);
-      this.selectedResultsElementId.set(this.answerElements()[0]?.id ?? null);
+      this.selectedResultsElementId.set(this.questionSummaries()[0]?.key ?? null);
       this.selectedIndividualResponseId.set(results.responses.find((response) => response.voter)?.id ?? null);
       this.openAdminResultsEvents(pollId);
     } catch {
@@ -689,16 +671,14 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     }
   }
 
-  private buildQuestionSummary(element: PollElement): QuestionResultSummary {
+  private buildQuestionSummary(version: { key: string; element: PollElement }): QuestionResultSummary {
+    const element = version.element;
     const responses = this.results()?.responses ?? [];
-    const answerEntries = responses
-      .map((response) => ({
-        response,
-        value: this.findAnswerValue(response, element.id),
-      }))
+    const answerEntries = collectAnswerEntriesForElementVersion(version.key, this.builder.draft().elements, responses)
       .filter((entry) => !this.isEmptyAnswerValue(entry.value));
 
     return {
+      key: version.key,
       element,
       answeredCount: answerEntries.length,
       charts: this.buildQuestionCharts(element, answerEntries.map((entry) => entry.value)),
@@ -970,120 +950,20 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
     };
   }
 
-  private findAnswerValue(response: PollResultsResponse, elementId: string): PollAnswerValue | undefined {
-    return response.answers.find((answer) => answer.elementId === elementId)?.value;
-  }
-
-  private optionLabel(element: PollElement, optionId: string): string | undefined {
-    return element.options.find((option) => option.id === optionId)?.label;
-  }
-
-  private gridColumnLabel(element: PollElement, columnId: string): string {
-    return element.settings?.grid?.columns.find((column) => column.id === columnId)?.label ?? columnId;
-  }
-
   private schedulingAnswerLabel(element: PollElement, value: Record<string, unknown>): string {
-    const answer = this.readSchedulingAnswer(value);
-    if (!answer) {
-      return 'Sem resposta';
-    }
-
-    const slot = this.schedulingSlots(element).find((item) => item.id === answer.slotId);
-    const inviteeLabel =
-      answer.invitees.length > 0
-        ? ` · Convidados: ${answer.invitees.map((invitee) => invitee.email ? `${invitee.name} (${invitee.email})` : invitee.name).join(', ')}`
-        : '';
-
-    return `${slot?.label ?? answer.slotId}${inviteeLabel}`;
+    return answerValueLabel(element, value as PollAnswerValue);
   }
 
-  private readSchedulingAnswer(value: unknown): PollSchedulingAnswer | null {
-    const recordValue = this.asRecord(value);
-    if (!recordValue) {
-      return null;
-    }
-
-    const slotId = typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '';
-    if (!slotId) {
-      return null;
-    }
-
-    const invitees = Array.isArray(recordValue['invitees'])
-      ? recordValue['invitees']
-          .map((invitee) => this.asRecord(invitee))
-          .filter((invitee): invitee is Record<string, unknown> => invitee !== null)
-          .map((invitee) => ({
-            name: typeof invitee['name'] === 'string' ? invitee['name'] : '',
-            email: typeof invitee['email'] === 'string' ? invitee['email'] : undefined,
-          }))
-          .filter((invitee) => invitee.name.trim().length > 0)
-      : [];
-
-    return {
-      slotId,
-      invitees,
-    };
+  private readSchedulingAnswer(value: unknown): ReturnType<typeof readSchedulingAnswerOrNull> {
+    return readSchedulingAnswerOrNull(value);
   }
 
   private schedulingSlots(element: PollElement): { id: string; label: string }[] {
-    const settings = element.settings?.scheduling;
-    if (!settings) {
-      return [];
-    }
-
-    return settings.availability.flatMap((availability) => this.schedulingSlotsForAvailability(settings, availability));
-  }
-
-  private schedulingSlotsForAvailability(
-    settings: PollSchedulingSettings,
-    availability: PollSchedulingAvailabilityWindow,
-  ): { id: string; label: string }[] {
-    const slots: { id: string; label: string }[] = [];
-    const windowStart = this.timeToMinutes(availability.startTime);
-    const windowEnd = this.timeToMinutes(availability.endTime);
-    const firstStart = windowStart + settings.bufferBeforeMinutes;
-    const lastStart = windowEnd - settings.durationMinutes - settings.bufferAfterMinutes;
-
-    for (
-      let startMinutes = firstStart;
-      startMinutes <= lastStart;
-      startMinutes += settings.slotIntervalMinutes
-    ) {
-      const endMinutes = startMinutes + settings.durationMinutes;
-      slots.push({
-        id: this.schedulingSlotId(availability, startMinutes),
-        label: `${this.formatDateLabel(availability.date)} · ${this.formatTimeMinutes(startMinutes)} - ${this.formatTimeMinutes(endMinutes)}`,
-      });
-    }
-
-    return slots;
-  }
-
-  private schedulingSlotId(availability: PollSchedulingAvailabilityWindow, startMinutes: number): string {
-    return `${availability.id}:${this.formatTimeMinutes(startMinutes)}`;
+    return schedulingSlots(element).map((slot) => ({ id: slot.id, label: slot.fullLabel }));
   }
 
   private formatDateLabel(value: string): string {
-    const [year, month, day] = value.split('-').map(Number);
-    if (!year || !month || !day) {
-      return value;
-    }
-
-    const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(
-      new Date(Date.UTC(year, month - 1, day, 12)),
-    );
-    return `${weekday.replace('.', '')}, ${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
-  }
-
-  private timeToMinutes(value: string): number {
-    const [hours, minutes] = value.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  private formatTimeMinutes(value: number): string {
-    const hours = Math.floor(value / 60);
-    const minutes = value % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return formatDateLabel(value);
   }
 
   private countBuckets(values: readonly string[]): { label: string; value: number }[] {
@@ -1103,21 +983,11 @@ export class AdminPollBuilderPageComponent implements OnDestroy {
   }
 
   private isEmptyAnswerValue(value: PollAnswerValue | undefined): boolean {
-    return (
-      value === undefined ||
-      value === null ||
-      value === '' ||
-      (Array.isArray(value) && value.length === 0) ||
-      (this.isRecord(value) && Object.keys(value).length === 0)
-    );
+    return isEmptyAnswerValue(value);
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {
-    return this.isRecord(value) ? value : null;
-  }
-
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
+    return asRecord(value);
   }
 
   private async loadEligibilityEnrollments(showLoading = true): Promise<void> {

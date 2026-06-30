@@ -61,14 +61,30 @@ export function parseCsv(csvContent: string): CsvParseResult {
     throw new Error('O CSV precisa incluir uma linha de cabeçalho.');
   }
 
+  const duplicateHeaders = new Set<string>();
+  const seenHeaders = new Set<string>();
+  for (const header of headers) {
+    if (seenHeaders.has(header)) {
+      duplicateHeaders.add(header);
+    }
+    seenHeaders.add(header);
+  }
+  if (duplicateHeaders.size > 0) {
+    throw new Error(`O CSV possui cabeçalhos duplicados: ${[...duplicateHeaders].join(', ')}.`);
+  }
+
   return {
     headers,
-    rows: dataRecords.map((record) =>
-      headers.reduce<Record<string, string>>((row, header, index) => {
+    rows: dataRecords.map((record, recordIndex) => {
+      if (record.length !== headers.length) {
+        throw new Error(`A linha ${recordIndex + 2} possui ${record.length} colunas; esperado: ${headers.length}.`);
+      }
+
+      return headers.reduce<Record<string, string>>((row, header, index) => {
         row[header] = record[index]?.trim() ?? '';
         return row;
-      }, {}),
-    ),
+      }, {});
+    }),
   };
 }
 

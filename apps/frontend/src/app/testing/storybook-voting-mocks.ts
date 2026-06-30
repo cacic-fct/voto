@@ -128,9 +128,6 @@ export function createStoryUser(email: string, isAdmin: boolean): AuthenticatedU
     permissions: isAdmin ? [...VOTING_ADMIN_PERMISSIONS] : [],
     scopes: ['openid', 'profile', 'email'],
     oidcScopes: ['openid', 'profile', 'email'],
-    claims: {
-      name: email,
-    },
   };
 }
 
