@@ -81,6 +81,33 @@ export class PollElementMutationsService {
     }
   }
 
+  async replaceElements(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+    elements: SavePollDto['elements'],
+  ): Promise<void> {
+    await tx.pollElement.deleteMany({ where: { pollId } });
+
+    for (const [elementIndex, element] of elements.entries()) {
+      const settings = this.options.normalizeElementSettings(element);
+      await tx.pollElement.create({
+        data: {
+          id: element.id,
+          pollId,
+          type: toDbElementType(element.type),
+          title: element.title.trim(),
+          description: cleanOptionalText(element.description),
+          required: element.required,
+          settings: settings ? (settings as Prisma.InputJsonValue) : Prisma.JsonNull,
+          position: elementIndex,
+          options: {
+            create: element.options.map((option, optionIndex) => this.toElementOptionCreateData(option, optionIndex)),
+          },
+        },
+      });
+    }
+  }
+
   async backfillAnswerElementSnapshots(tx: Prisma.TransactionClient, pollId: string): Promise<void> {
     const elements = await tx.pollElement.findMany({
       where: { pollId },

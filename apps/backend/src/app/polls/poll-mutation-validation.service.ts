@@ -9,7 +9,7 @@ import {
 import { PollImagePlacement as DbPollImagePlacement } from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
 import { cleanOptionalText, isGridElement, isOptionChoiceElement } from './poll-contract.mapper';
-import { PollImageReferenceData } from './poll-records';
+import { PollImageReferenceData, PollPublicationScheduleData } from './poll-records';
 import { parseDateAnswerValue, parseTimeAnswerValue } from './poll-response.validator';
 
 const MAX_ELEMENT_OPTIONS = 80;
@@ -90,6 +90,16 @@ export class PollMutationValidationService {
       if (reference.elementId && !elementIds.has(reference.elementId)) {
         throw new BadRequestException('Poll image references an unknown element.');
       }
+    }
+  }
+
+  validatePollPublicationSchedule(schedule: PollPublicationScheduleData): void {
+    if (schedule.visibleFrom && schedule.votingEndsAt && schedule.votingEndsAt <= schedule.visibleFrom) {
+      throw new BadRequestException('Poll voting end date must be after the visibility start date.');
+    }
+
+    if (schedule.votingStartsAt && schedule.votingEndsAt && schedule.votingEndsAt <= schedule.votingStartsAt) {
+      throw new BadRequestException('Poll voting end date must be after the voting start date.');
     }
   }
 

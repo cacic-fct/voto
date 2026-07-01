@@ -14,14 +14,15 @@ import {
   PollUserResponseStateRecord,
   pollInclude,
 } from './poll-records';
-import {
-  buildAnswerElementSnapshots,
-  pollResponseInclude,
-  toAnswerCreateData,
-  toContractPollResponse,
-} from './poll-response.mapper';
+import { pollResponseInclude, toContractPollResponse } from './poll-response.mapper';
 import { PollResultsService } from './poll-results.service';
 import { validatePollResponse } from './poll-response.validator';
+import {
+  assertPollAcceptsVoteResponses,
+  isPollVotingOpen,
+  pollVotingOpenWhere,
+  publicReadablePollWhere,
+} from './poll-visibility';
 
 @Injectable()
 export class PollResponsesService {
@@ -36,10 +37,12 @@ export class PollResponsesService {
     input: SubmitPollResponseDto,
     user?: AuthenticatedPrincipal,
   ): Promise<PollResponse> {
+    const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
         id,
         status: DbPollStatus.PUBLISHED,
+        ...pollVotingOpenWhere(now),
       },
       include: pollInclude,
     });
@@ -48,12 +51,13 @@ export class PollResponsesService {
       throw new NotFoundException('Poll not found.');
     }
 
+    assertPollAcceptsVoteResponses(poll);
     const voter = requireAuthenticatedVoter(user);
     await this.eligibility.ensureVotingAllowed(poll, voter);
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter.sub, answers);
-    await this.results.publishPollResultsForResponse(poll.id, response);
+    await this.results.publishPollResultsForResponse(poll.id);
 
     return toContractPollResponse(response);
   }
@@ -64,11 +68,13 @@ export class PollResponsesService {
     user?: AuthenticatedPrincipal,
   ): Promise<PollResponse> {
     const normalizedToken = normalizeDirectLinkToken(directLinkToken);
+    const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
         directLinkEnabled: true,
         directLinkToken: normalizedToken,
         status: DbPollStatus.PUBLISHED,
+        ...pollVotingOpenWhere(now),
       },
       include: pollInclude,
     });
@@ -77,30 +83,34 @@ export class PollResponsesService {
       throw new NotFoundException('Poll not found.');
     }
 
+    assertPollAcceptsVoteResponses(poll);
     const voter = requireAuthenticatedVoter(user);
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter.sub, answers);
-    await this.results.publishPollResultsForResponse(poll.id, response);
+    await this.results.publishPollResultsForResponse(poll.id);
 
     return toContractPollResponse(response);
   }
 
   async getUserResponseState(id: string, user?: AuthenticatedPrincipal): Promise<PollUserResponseState> {
+    const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
         id,
-        OR: [
-          { status: DbPollStatus.PUBLISHED },
-          { status: DbPollStatus.CLOSED, resultsPublic: true },
-        ],
+        ...publicReadablePollWhere(now),
       },
       select: {
         id: true,
         status: true,
+        mode: true,
+        cacicElectionPhase: true,
         votingStyle: true,
         allowResponseEditing: true,
         allowMultipleResponses: true,
+        visibleFrom: true,
+        votingStartsAt: true,
+        votingEndsAt: true,
         voterEligibilitySource: true,
         requireVerifiedUnespRole: true,
         linkedEventId: true,
@@ -121,21 +131,24 @@ export class PollResponsesService {
     user?: AuthenticatedPrincipal,
   ): Promise<PollUserResponseState> {
     const normalizedToken = normalizeDirectLinkToken(directLinkToken);
+    const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
         directLinkEnabled: true,
         directLinkToken: normalizedToken,
-        OR: [
-          { status: DbPollStatus.PUBLISHED },
-          { status: DbPollStatus.CLOSED, resultsPublic: true },
-        ],
+        ...publicReadablePollWhere(now),
       },
       select: {
         id: true,
         status: true,
+        mode: true,
+        cacicElectionPhase: true,
         votingStyle: true,
         allowResponseEditing: true,
         allowMultipleResponses: true,
+        visibleFrom: true,
+        votingStartsAt: true,
+        votingEndsAt: true,
       },
     });
 
@@ -166,9 +179,10 @@ export class PollResponsesService {
         ? null
         : await this.findLatestUserResponse(poll.id, voter.sub);
     const hasSubmitted = Boolean(voterRecord ?? response);
-    const canSubmitAnother = poll.status === DbPollStatus.PUBLISHED && poll.allowMultipleResponses;
+    const acceptsResponses = isPollVotingOpen(poll, new Date());
+    const canSubmitAnother = acceptsResponses && poll.allowMultipleResponses;
     const canEdit =
-      poll.status === DbPollStatus.PUBLISHED &&
+      acceptsResponses &&
       poll.votingStyle !== DbPollVotingStyle.ANONYMOUS &&
       poll.allowResponseEditing &&
       Boolean(response);
@@ -189,7 +203,6 @@ export class PollResponsesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const isAnonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
-        const answerElementSnapshots = buildAnswerElementSnapshots(poll.elements);
 
         if (poll.allowMultipleResponses) {
           await tx.pollVoter.upsert({
@@ -206,7 +219,7 @@ export class PollResponsesService {
             },
           });
 
-          return this.createResponse(tx, poll.id, userId, answers, isAnonymous, answerElementSnapshots);
+          return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
         }
 
         const existingVoter = await tx.pollVoter.findUnique({
@@ -254,7 +267,10 @@ export class PollResponsesService {
             data: {
               submittedAt: new Date(),
               answers: {
-                create: answers.map((answer) => toAnswerCreateData(answer, answerElementSnapshots)),
+                create: answers.map((answer) => ({
+                  elementId: answer.elementId,
+                  value: answer.value as Prisma.InputJsonValue,
+                })),
               },
             },
             include: pollResponseInclude,
@@ -268,7 +284,7 @@ export class PollResponsesService {
           },
         });
 
-        return this.createResponse(tx, poll.id, userId, answers, isAnonymous, answerElementSnapshots);
+        return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
       });
     } catch (error) {
       if (error instanceof ConflictException) {
@@ -289,7 +305,6 @@ export class PollResponsesService {
     userId: string,
     answers: PollResponseAnswer[],
     isAnonymous: boolean,
-    answerElementSnapshots: Map<string, Prisma.InputJsonValue>,
   ): Promise<PollResultResponseRecord> {
     return tx.pollResponse.create({
       data: {
@@ -306,7 +321,8 @@ export class PollResponsesService {
         answers: {
           create: answers.map((answer) => ({
             ...(isAnonymous ? { id: randomUUID() } : {}),
-            ...toAnswerCreateData(answer, answerElementSnapshots),
+            elementId: answer.elementId,
+            value: answer.value as Prisma.InputJsonValue,
           })),
         },
       },

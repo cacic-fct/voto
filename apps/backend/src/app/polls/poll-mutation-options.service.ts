@@ -5,7 +5,13 @@ import {
   PollElementSettings,
   PollSchedulingSettings,
 } from '@org/voting-contracts';
-import { PollVotingStyle as DbPollVotingStyle } from '@prisma/client';
+import {
+  CacicElectionPhase as DbCacicElectionPhase,
+  PollMode as DbPollMode,
+  PollVoterEligibilitySource as DbPollVoterEligibilitySource,
+  PollVotingStyle as DbPollVotingStyle,
+} from '@prisma/client';
+import { setMilliseconds, setSeconds } from 'date-fns';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { SavePollDto } from './dto/poll.dto';
 import {
@@ -14,6 +20,8 @@ import {
   isEventAttendanceEligibilitySource,
   isGridElement,
   parseEventDate,
+  toDbCacicElectionPhase,
+  toDbPollMode,
   toDbVoterEligibilitySource,
   toDbVotingStyle,
 } from './poll-contract.mapper';
@@ -21,6 +29,7 @@ import { createUuidV7 } from './poll-identifiers';
 import {
   PollDirectLinkData,
   PollMetadataData,
+  PollPublicationScheduleData,
   PollResponseOptionsData,
   PollResultVisibilityData,
 } from './poll-records';
@@ -30,6 +39,27 @@ export class PollMutationOptionsService {
   constructor(private readonly eventManager: EventManagerIntegrationService) {}
 
   async resolvePollMetadata(input: SavePollDto, existing?: PollMetadataData): Promise<PollMetadataData> {
+    const mode = toDbPollMode(input.mode ?? 'regular');
+    const cacicElectionPhase =
+      mode === DbPollMode.CACIC_ELECTION
+        ? toDbCacicElectionPhase(input.cacicElectionPhase ?? 'slateSubmission')
+        : null;
+
+    if (mode === DbPollMode.CACIC_ELECTION && cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
+      return {
+        mode,
+        cacicElectionPhase,
+        votingStyle: DbPollVotingStyle.ANONYMOUS,
+        voterEligibilitySource: DbPollVoterEligibilitySource.ENROLLMENT_LIST,
+        requireVerifiedUnespRole: false,
+        linkedEventId: null,
+        linkedEventName: null,
+        linkedEventStartDate: null,
+        linkedEventEndDate: null,
+        linkedEventLocationDescription: null,
+      };
+    }
+
     const votingStyle = toDbVotingStyle(input.votingStyle ?? 'secret');
     const voterEligibilitySource = toDbVoterEligibilitySource(input.voterEligibilitySource ?? 'authenticatedUsers');
     const requireVerifiedUnespRole =
@@ -42,6 +72,8 @@ export class PollMutationOptionsService {
       }
 
       return {
+        mode,
+        cacicElectionPhase,
         votingStyle,
         voterEligibilitySource,
         requireVerifiedUnespRole,
@@ -60,6 +92,8 @@ export class PollMutationOptionsService {
       existing.linkedEventEndDate
     ) {
       return {
+        mode,
+        cacicElectionPhase,
         votingStyle,
         voterEligibilitySource,
         requireVerifiedUnespRole,
@@ -76,10 +110,28 @@ export class PollMutationOptionsService {
       throw new BadRequestException('Linked event was not found or is not available for new poll links.');
     }
 
-    return this.toPollMetadataFromEvent(event, votingStyle, voterEligibilitySource, requireVerifiedUnespRole);
+    return this.toPollMetadataFromEvent(
+      event,
+      mode,
+      cacicElectionPhase,
+      votingStyle,
+      voterEligibilitySource,
+      requireVerifiedUnespRole,
+    );
   }
 
-  resolvePollResultVisibility(input: SavePollDto, existing?: PollResultVisibilityData): PollResultVisibilityData {
+  resolvePollResultVisibility(
+    input: SavePollDto,
+    existing?: PollResultVisibilityData,
+    metadata?: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase'>,
+  ): PollResultVisibilityData {
+    if (metadata?.mode === DbPollMode.CACIC_ELECTION) {
+      return {
+        resultsPublic: metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION,
+        resultsLive: false,
+      };
+    }
+
     const resultsPublic = input.resultsPublic ?? existing?.resultsPublic ?? false;
     return {
       resultsPublic,
@@ -87,14 +139,37 @@ export class PollMutationOptionsService {
     };
   }
 
+  resolvePollPublicationSchedule(
+    input: SavePollDto,
+    existing?: PollPublicationScheduleData,
+  ): PollPublicationScheduleData {
+    return {
+      visibleFrom:
+        input.visibleFrom === undefined ? existing?.visibleFrom ?? null : this.normalizeScheduleDate(input.visibleFrom),
+      votingStartsAt:
+        input.votingStartsAt === undefined
+          ? existing?.votingStartsAt ?? null
+          : this.normalizeScheduleDate(input.votingStartsAt),
+      votingEndsAt:
+        input.votingEndsAt === undefined ? existing?.votingEndsAt ?? null : this.normalizeScheduleDate(input.votingEndsAt),
+    };
+  }
+
   resolvePollResponseOptions(
     input: SavePollDto,
     existing: PollResponseOptionsData | undefined,
-    votingStyle: DbPollVotingStyle,
+    metadata: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase' | 'votingStyle'>,
   ): PollResponseOptionsData {
+    if (metadata.mode === DbPollMode.CACIC_ELECTION && metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
+      return {
+        allowResponseEditing: false,
+        allowMultipleResponses: false,
+      };
+    }
+
     const allowMultipleResponses = input.allowMultipleResponses ?? existing?.allowMultipleResponses ?? false;
     const allowResponseEditing =
-      votingStyle !== DbPollVotingStyle.ANONYMOUS &&
+      metadata.votingStyle !== DbPollVotingStyle.ANONYMOUS &&
       !allowMultipleResponses &&
       (input.allowResponseEditing ?? existing?.allowResponseEditing ?? false);
 
@@ -104,7 +179,18 @@ export class PollMutationOptionsService {
     };
   }
 
-  resolvePollDirectLink(input: SavePollDto, existing?: PollDirectLinkData): PollDirectLinkData {
+  resolvePollDirectLink(
+    input: SavePollDto,
+    existing?: PollDirectLinkData,
+    metadata?: Pick<PollMetadataData, 'mode'>,
+  ): PollDirectLinkData {
+    if (metadata?.mode === DbPollMode.CACIC_ELECTION) {
+      return {
+        directLinkEnabled: false,
+        directLinkToken: existing?.directLinkToken ?? null,
+      };
+    }
+
     const directLinkEnabled = input.directLinkEnabled ?? existing?.directLinkEnabled ?? false;
     const directLinkToken = directLinkEnabled
       ? existing?.directLinkToken ?? createUuidV7()
@@ -192,13 +278,31 @@ export class PollMutationOptionsService {
     });
   }
 
+  private normalizeScheduleDate(value: string | null | undefined): Date | null {
+    const normalizedValue = cleanOptionalText(value ?? undefined);
+    if (!normalizedValue) {
+      return null;
+    }
+
+    const date = new Date(normalizedValue);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid poll schedule date.');
+    }
+
+    return setMilliseconds(setSeconds(date, 0), 0);
+  }
+
   private toPollMetadataFromEvent(
     event: EventManagerEvent,
+    mode: DbPollMode,
+    cacicElectionPhase: DbCacicElectionPhase | null,
     votingStyle: DbPollVotingStyle,
     voterEligibilitySource: PollMetadataData['voterEligibilitySource'],
     requireVerifiedUnespRole: boolean,
   ): PollMetadataData {
     return {
+      mode,
+      cacicElectionPhase,
       votingStyle,
       voterEligibilitySource,
       requireVerifiedUnespRole,

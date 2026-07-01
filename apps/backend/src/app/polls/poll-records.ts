@@ -15,8 +15,8 @@ export type PollRecord = {
   title: string;
   description: string | null;
   status: DbPollStatus;
-  mode?: DbPollMode;
-  cacicElectionPhase?: DbCacicElectionPhase | null;
+  mode: DbPollMode;
+  cacicElectionPhase: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -34,12 +34,13 @@ export type PollRecord = {
   createdAt: Date;
   updatedAt: Date;
   publishedAt: Date | null;
-  visibleFrom?: Date | null;
-  votingStartsAt?: Date | null;
-  votingEndsAt?: Date | null;
+  visibleFrom: Date | null;
+  votingStartsAt: Date | null;
+  votingEndsAt: Date | null;
   elements: ElementRecord[];
   images?: ImageRecord[];
   _count?: {
+    elements?: number;
     responses: number;
   };
 };
@@ -88,8 +89,8 @@ export type ParsedEligibilityEnrollments = {
 };
 
 export type PollMetadataData = {
-  mode?: DbPollMode;
-  cacicElectionPhase?: DbCacicElectionPhase | null;
+  mode: DbPollMode;
+  cacicElectionPhase: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -115,6 +116,12 @@ export type PollDirectLinkData = {
   directLinkToken: string | null;
 };
 
+export type PollPublicationScheduleData = {
+  visibleFrom: Date | null;
+  votingStartsAt: Date | null;
+  votingEndsAt: Date | null;
+};
+
 export type PollImageReferenceData = {
   id: string;
   placement: 'POLL_DESCRIPTION' | 'ELEMENT_DESCRIPTION';
@@ -127,29 +134,35 @@ export type PollImageReferenceData = {
 export type PollResultsMetadata = {
   id: string;
   status: DbPollStatus;
-  mode?: DbPollMode;
-  cacicElectionPhase?: DbCacicElectionPhase | null;
+  mode: DbPollMode;
+  cacicElectionPhase: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
   linkedEventId: string | null;
   resultsPublic: boolean;
   resultsLive: boolean;
+  visibleFrom: Date | null;
+  votingStartsAt: Date | null;
+  votingEndsAt: Date | null;
 };
 
 export type PollEligibilityRecord = Pick<
   PollRecord,
-  'id' | 'voterEligibilitySource' | 'requireVerifiedUnespRole' | 'linkedEventId'
+  'id' | 'mode' | 'cacicElectionPhase' | 'voterEligibilitySource' | 'requireVerifiedUnespRole' | 'linkedEventId'
 >;
 
 export type PollUserResponseStateRecord = {
   id: string;
   status: DbPollStatus;
-  mode?: DbPollMode;
-  cacicElectionPhase?: DbCacicElectionPhase | null;
+  mode: DbPollMode;
+  cacicElectionPhase: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   allowResponseEditing: boolean;
   allowMultipleResponses: boolean;
+  visibleFrom: Date | null;
+  votingStartsAt: Date | null;
+  votingEndsAt: Date | null;
 };
 
 export type PollContractOptions = {
@@ -160,16 +173,9 @@ export type PollContractOptions = {
 export type PollResultResponseRecord = Prisma.PollResponseGetPayload<{
   include: {
     answers: {
-      include: {
-        element: {
-          include: {
-            options: {
-              orderBy: {
-                position: 'asc';
-              };
-            };
-          };
-        };
+      select: {
+        elementId: true;
+        value: true;
       };
     };
     user: {
@@ -191,7 +197,6 @@ export type PollResultStreamEvent = {
 
 export const pollInclude = {
   elements: {
-    where: { retiredAt: null },
     orderBy: { position: 'asc' },
     include: {
       options: {
