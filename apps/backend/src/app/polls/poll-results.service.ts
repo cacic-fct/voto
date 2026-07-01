@@ -36,7 +36,7 @@ export class PollResultsService {
 
   async getAdminPollResults(id: string): Promise<PollResults> {
     const poll = await this.getPollResultsMetadata(id);
-    const responses = this.areAnswersReleased(poll) ? await this.listPollResultResponses(id) : [];
+    const responses = this.areAnswersReleased(poll, 'admin') ? await this.listPollResultResponses(id) : [];
     const responseCount = await this.countPollResponses(id);
     const voters = await this.listPollResultVoters(id);
 
@@ -251,7 +251,7 @@ export class PollResultsService {
   ): Promise<PollResultsDelta> {
     const responseCount = await this.countPollResponses(poll.id);
     const normalizedAfter = Math.min(Math.max(0, after), responseCount);
-    const answersReleased = this.areAnswersReleased(poll);
+    const answersReleased = this.areAnswersReleased(poll, audience);
     const responses = answersReleased ? await this.listPollResultResponses(poll.id, normalizedAfter) : [];
     const voters = audience === 'admin' ? await this.listPollResultVoters(poll.id) : undefined;
 
@@ -273,7 +273,7 @@ export class PollResultsService {
       voters?: PollResultsVoter[];
     },
   ): PollResults {
-    const answersReleased = this.areAnswersReleased(poll);
+    const answersReleased = this.areAnswersReleased(poll, audience);
     return {
       pollId: poll.id,
       anonymous: poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
@@ -329,8 +329,19 @@ export class PollResultsService {
     throw new ForbiddenException('Poll results are not public yet.');
   }
 
-  areAnswersReleased(poll: Pick<PollResultsMetadata, 'mode' | 'cacicElectionPhase' | 'status'>): boolean {
-    return !isCacicElectionVotingPoll(poll) || poll.status === DbPollStatus.CLOSED;
+  areAnswersReleased(
+    poll: Pick<PollResultsMetadata, 'mode' | 'cacicElectionPhase' | 'status' | 'votingStyle'>,
+    audience: 'admin' | 'public' = 'public',
+  ): boolean {
+    if (isCacicElectionVotingPoll(poll)) {
+      return poll.status === DbPollStatus.CLOSED;
+    }
+
+    return (
+      audience !== 'admin' ||
+      poll.votingStyle !== DbPollVotingStyle.ANONYMOUS ||
+      poll.status === DbPollStatus.CLOSED
+    );
   }
 
   subscribeToPollResults(pollId: string, listener: (event: PollResultStreamEvent) => void): () => void {

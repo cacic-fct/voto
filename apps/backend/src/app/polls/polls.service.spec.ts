@@ -996,9 +996,53 @@ describe('PollsService', () => {
     expect(prisma.cacicElectionSlate.create).not.toHaveBeenCalled();
   });
 
-  it('returns admin and public poll results with audience-specific voter metadata', async () => {
+  it('keeps anonymous admin voter audits separate from live individual answers', async () => {
     prisma.poll.findUnique.mockResolvedValue(pollResultsMetadata({ votingStyle: DbPollVotingStyle.ANONYMOUS }));
     prisma.pollResponse.findMany.mockResolvedValue([responseRecord()]);
+    prisma.pollResponse.count.mockResolvedValue(1);
+    prisma.pollVoter.findMany.mockResolvedValue([pollVoterRecord()]);
+
+    await expect(service.getAdminPollResults('poll-1')).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: true,
+      answersReleased: false,
+      responseCount: 1,
+      voterCount: 1,
+      voters: [
+        {
+          userId: 'user-1',
+          name: 'Ada Lovelace',
+          preferredUsername: 'ada',
+          email: 'ada@unesp.br',
+          unespRole: 'aluno-graduacao',
+          enrollmentNumber: '24123456',
+        },
+      ],
+      responses: [],
+    });
+    expect(prisma.pollResponse.findMany).not.toHaveBeenCalled();
+
+    await expect(service.getPublicPollResults('poll-1', createUser())).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: true,
+      answersReleased: true,
+      responseCount: 1,
+      responses: [
+        {
+          id: 'response-1',
+          submittedAt: undefined,
+          voter: undefined,
+          answers: [{ elementId: 'question-1', value: 'answer' }],
+        },
+      ],
+    });
+  });
+
+  it('releases anonymous admin individual answers only after the poll is closed', async () => {
+    prisma.poll.findUnique.mockResolvedValue(
+      pollResultsMetadata({ status: DbPollStatus.CLOSED, votingStyle: DbPollVotingStyle.ANONYMOUS }),
+    );
+    prisma.pollResponse.findMany.mockResolvedValue([responseRecord({ userId: null, submittedAt: null, user: null })]);
     prisma.pollResponse.count.mockResolvedValue(1);
     prisma.pollVoter.findMany.mockResolvedValue([pollVoterRecord()]);
 
@@ -1021,34 +1065,39 @@ describe('PollsService', () => {
       responses: [
         {
           id: 'response-1',
-          submittedAt: '2026-06-21T12:00:00.000Z',
-          voter: {
-            userId: 'user-1',
-            name: 'Ada Lovelace',
-            preferredUsername: 'ada',
-            email: 'ada@unesp.br',
-            unespRole: 'aluno-graduacao',
-            enrollmentNumber: '24123456',
-          },
-          answers: [{ elementId: 'question-1', value: 'answer' }],
-        },
-      ],
-    });
-
-    await expect(service.getPublicPollResults('poll-1', createUser())).resolves.toEqual({
-      pollId: 'poll-1',
-      anonymous: true,
-      answersReleased: true,
-      responseCount: 1,
-      responses: [
-        {
-          id: 'response-1',
           submittedAt: undefined,
           voter: undefined,
           answers: [{ elementId: 'question-1', value: 'answer' }],
         },
       ],
     });
+  });
+
+  it('omits anonymous live admin result delta responses while retaining voter audits', async () => {
+    prisma.pollResponse.count.mockResolvedValue(2);
+    prisma.pollResponse.findMany.mockResolvedValue([responseRecord({ id: 'response-2' })]);
+    prisma.pollVoter.findMany.mockResolvedValue([pollVoterRecord()]);
+
+    await expect(
+      service.getPollResultsDelta(pollResultsMetadata({ votingStyle: DbPollVotingStyle.ANONYMOUS }), 1, 'admin'),
+    ).resolves.toEqual({
+      pollId: 'poll-1',
+      answersReleased: false,
+      responseCount: 2,
+      voterCount: 1,
+      voters: [
+        {
+          userId: 'user-1',
+          name: 'Ada Lovelace',
+          preferredUsername: 'ada',
+          email: 'ada@unesp.br',
+          unespRole: 'aluno-graduacao',
+          enrollmentNumber: '24123456',
+        },
+      ],
+      responses: [],
+    });
+    expect(prisma.pollResponse.findMany).not.toHaveBeenCalled();
   });
 
   it('returns direct-link public poll results without enrollment-list checks', async () => {

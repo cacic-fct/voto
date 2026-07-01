@@ -25,15 +25,17 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: publish-packages
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build-packages:
     runs-on: ubuntu-latest
+
+    outputs:
+      form_contracts: ${{ steps.changes.outputs.form_contracts }}
 
     if: >
       github.event_name != 'pull_request' &&
@@ -134,7 +136,45 @@ jobs:
           }
           NODE
 
-      - name: Publish form contracts
+      - name: Pack form contracts artifact
         if: steps.changes.outputs.form_contracts == 'true'
-        working-directory: dist/libs/shared/form-contracts
-        run: npm publish --access public
+        run: tar -czf form-contracts-package.tgz -C dist/libs/shared/form-contracts .
+
+      - name: Upload form contracts artifact
+        if: steps.changes.outputs.form_contracts == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: form-contracts-package
+          path: form-contracts-package.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: build-packages
+
+    if: >
+      github.event_name != 'pull_request' &&
+      github.event_name != 'pull_request_target' &&
+      github.repository_owner == 'cacic-fct' &&
+      github.ref == 'refs/heads/main' &&
+      needs.build-packages.outputs.form_contracts == 'true'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download form contracts artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: form-contracts-package
+
+      - name: Extract form contracts artifact
+        run: |
+          mkdir -p form-contracts-package
+          tar -xzf form-contracts-package.tgz -C form-contracts-package
+
+      - name: Publish form contracts
+        working-directory: form-contracts-package
+        run: npm publish --access public --registry https://registry.npmjs.org --ignore-scripts
