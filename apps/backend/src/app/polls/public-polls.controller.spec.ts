@@ -16,8 +16,11 @@ type PollsMock = jest.Mocked<
     | 'getDirectLinkPublicPollResults'
     | 'getUserResponseState'
     | 'getDirectLinkUserResponseState'
+    | 'getMyCacicElectionSlate'
+    | 'listPublicCacicElectionSlates'
     | 'streamPublicPollResults'
     | 'streamDirectLinkPublicPollResults'
+    | 'submitCacicElectionSlate'
     | 'submitResponse'
     | 'submitDirectLinkResponse'
   >
@@ -41,8 +44,11 @@ describe('PublicPollsController', () => {
       getDirectLinkPublicPollResults: jest.fn().mockResolvedValue({ pollId: 'poll-1' }),
       getUserResponseState: jest.fn().mockResolvedValue({ hasSubmitted: false }),
       getDirectLinkUserResponseState: jest.fn().mockResolvedValue({ hasSubmitted: false }),
+      getMyCacicElectionSlate: jest.fn().mockResolvedValue({ id: 'slate-1' }),
+      listPublicCacicElectionSlates: jest.fn().mockResolvedValue([{ id: 'slate-1' }]),
       streamPublicPollResults: jest.fn().mockReturnValue(of({ data: { pollId: 'poll-1' } })),
       streamDirectLinkPublicPollResults: jest.fn().mockReturnValue(of({ data: { pollId: 'poll-1' } })),
+      submitCacicElectionSlate: jest.fn().mockResolvedValue({ id: 'slate-1' }),
       submitResponse: jest.fn().mockResolvedValue({ id: 'response-1' }),
       submitDirectLinkResponse: jest.fn().mockResolvedValue({ id: 'response-1' }),
     };
@@ -65,8 +71,12 @@ describe('PublicPollsController', () => {
     await expect(controller.listPolls()).resolves.toEqual(['summary']);
     await expect(controller.getPoll('poll-1', request)).resolves.toEqual({ id: 'poll-1' });
     await expect(controller.getPollResults('poll-1', request)).resolves.toEqual({ pollId: 'poll-1' });
+    await expect(controller.listCacicElectionSlates('poll-1', request)).resolves.toEqual([{ id: 'slate-1' }]);
+    await expect(controller.getMyCacicElectionSlate('poll-1', request)).resolves.toEqual({ id: 'slate-1' });
     expect(polls.getPublishedPoll).toHaveBeenCalledWith('poll-1', request.user);
     expect(polls.getPublicPollResults).toHaveBeenCalledWith('poll-1', request.user);
+    expect(polls.listPublicCacicElectionSlates).toHaveBeenCalledWith('poll-1', request.user);
+    expect(polls.getMyCacicElectionSlate).toHaveBeenCalledWith('poll-1', request.user);
   });
 
   it('delegates response state, streaming, and submissions', async () => {
@@ -75,6 +85,9 @@ describe('PublicPollsController', () => {
 
     await expect(controller.getMyResponse('poll-1', request)).resolves.toEqual({ hasSubmitted: false });
     await expect(controller.submitResponse('poll-1', request, body)).resolves.toEqual({ id: 'response-1' });
+    await expect(controller.submitCacicElectionSlate('poll-1', request, { name: 'Chapa 1' } as never)).resolves.toEqual({
+      id: 'slate-1',
+    });
 
     const events = controller.streamPollResults('poll-1', request, '2');
     expect(polls.streamPublicPollResults).toHaveBeenCalledWith('poll-1', 2, request.user);
@@ -84,6 +97,7 @@ describe('PublicPollsController', () => {
     expect(polls.streamPublicPollResults).toHaveBeenLastCalledWith('poll-1', 0, request.user);
     expect(polls.getUserResponseState).toHaveBeenCalledWith('poll-1', request.user);
     expect(polls.submitResponse).toHaveBeenCalledWith('poll-1', body, request.user);
+    expect(polls.submitCacicElectionSlate).toHaveBeenCalledWith('poll-1', { name: 'Chapa 1' }, request.user);
   });
 
   it('delegates direct-link reads, response state, streaming, and submissions', async () => {
@@ -121,6 +135,24 @@ describe('PublicPollsController', () => {
     expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'image/avif');
   });
 
+  it('streams images without a content-length header when object size is unknown', async () => {
+    pollImages.getPollImage.mockResolvedValueOnce({
+      stream: { pipe: jest.fn() } as never,
+      contentType: 'image/avif',
+      contentLength: undefined,
+    });
+    const request = { user: { sub: 'user-1' } } as AuthenticatedRequest;
+    const response = {
+      setHeader: jest.fn(),
+    };
+
+    await controller.getPollImage('poll-1', 'image-1', request, response as never);
+
+    expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'image/avif');
+    expect(response.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, max-age=86400');
+    expect(response.setHeader).not.toHaveBeenCalledWith('Content-Length', expect.any(String));
+  });
+
   it('checks direct-link access before streaming direct-link poll images', async () => {
     const request = { user: { sub: 'user-1' } } as AuthenticatedRequest;
     const response = {
@@ -135,5 +167,20 @@ describe('PublicPollsController', () => {
       allowPublishedRead: true,
     });
     expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'image/avif');
+  });
+
+  it('fails image reads clearly when the image service is unavailable', async () => {
+    const controllerWithoutImages = new PublicPollsController(polls as unknown as PollsService);
+    const request = { user: { sub: 'user-1' } } as AuthenticatedRequest;
+    const response = {
+      setHeader: jest.fn(),
+    };
+
+    await expect(controllerWithoutImages.getPollImage('poll-1', 'image-1', request, response as never)).rejects.toThrow(
+      'Poll image service is not available.',
+    );
+    await expect(
+      controllerWithoutImages.getDirectLinkPollImage('token-1', 'image-1', request, response as never),
+    ).rejects.toThrow('Poll image service is not available.');
   });
 });

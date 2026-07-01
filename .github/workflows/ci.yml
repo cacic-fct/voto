@@ -99,6 +99,161 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  backend-e2e:
+    name: Backend E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cacic_voto_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cacic_voto_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    permissions:
+      contents: read
+      packages: read
+
+    if: >
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cacic_voto_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Remove package registry auth material
+        if: always()
+        run: |
+          rm -f ~/.npmrc
+          rm -f ~/.bunfig.toml
+
+      - name: Generate Prisma client
+        run: bunx prisma generate --schema apps/backend/prisma/schema.prisma
+
+      - name: Apply database migrations
+        run: bunx prisma migrate deploy --config apps/backend/prisma.config.ts
+
+      - name: Run backend auth e2e tests with fresh Keycloak
+        run: bun run e2e:backend:keycloak -- --coverage
+
+      - name: Collect backend e2e coverage reports
+        id: coverage
+        shell: bash
+        run: |
+          if [ ! -d coverage/backend-e2e ]; then
+            echo "has_reports=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mapfile -t reports < <(find coverage/backend-e2e -type f \( -name 'lcov.info' -o -name 'coverage-final.json' -o -name 'coverage.xml' -o -name 'clover.xml' \) | sort)
+
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "has_reports=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          reports_csv="$(IFS=,; echo "${reports[*]}")"
+          echo "has_reports=true" >> "$GITHUB_OUTPUT"
+          echo "files=$reports_csv" >> "$GITHUB_OUTPUT"
+
+      - name: Upload backend e2e coverage to Codecov
+        if: steps.coverage.outputs.has_reports == 'true'
+        uses: codecov/codecov-action@v6
+        with:
+          flags: e2e-backend
+          files: ${{ steps.coverage.outputs.files }}
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  frontend-e2e:
+    name: Frontend E2E
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
+    if: >
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.GH_PACKAGES_READ_TOKEN || github.token }}
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Remove package registry auth material
+        if: always()
+        run: |
+          rm -f ~/.npmrc
+          rm -f ~/.bunfig.toml
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run mocked browser e2e tests
+        run: bunx nx e2e frontend-e2e -- --project=chromium
+        env:
+          E2E_START_SERVERS: 'true'
+          E2E_WEB_SERVER_COMMAND: bunx nx run frontend:serve-static
+
   prepare-untrusted-pr:
     name: Prepare untrusted PR dependencies
     runs-on: ubuntu-latest
@@ -217,3 +372,120 @@ jobs:
 
       - name: Build deployable apps
         run: bunx nx run-many -t build -p frontend,backend --configuration=production --parallel=2
+
+  untrusted-pr-backend-e2e:
+    name: Untrusted PR backend E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cacic_voto_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cacic_voto_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    needs:
+      - prepare-untrusted-pr
+
+    permissions:
+      contents: read
+
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cacic_voto_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Download prepared dependencies
+        uses: actions/download-artifact@v6
+        with:
+          name: untrusted-pr-node-modules
+          path: .
+
+      - name: Generate Prisma client
+        run: bunx prisma generate --schema apps/backend/prisma/schema.prisma
+
+      - name: Apply database migrations
+        run: bunx prisma migrate deploy --config apps/backend/prisma.config.ts
+
+      - name: Run backend auth e2e tests with fresh Keycloak
+        run: bun run e2e:backend:keycloak
+
+  untrusted-pr-frontend-e2e:
+    name: Untrusted PR frontend E2E
+    runs-on: ubuntu-latest
+
+    needs:
+      - prepare-untrusted-pr
+
+    permissions:
+      contents: read
+
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Download prepared dependencies
+        uses: actions/download-artifact@v6
+        with:
+          name: untrusted-pr-node-modules
+          path: .
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run mocked browser e2e tests
+        run: bunx nx e2e frontend-e2e -- --project=chromium
+        env:
+          E2E_START_SERVERS: 'true'
+          E2E_WEB_SERVER_COMMAND: bunx nx run frontend:serve-static

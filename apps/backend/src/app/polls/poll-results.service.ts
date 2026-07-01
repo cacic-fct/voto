@@ -1,6 +1,11 @@
 import { ForbiddenException, Injectable, MessageEvent, NotFoundException } from '@nestjs/common';
 import { PollResults, PollResultsDelta, PollResultsResponse } from '@org/voting-contracts';
-import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle } from '@prisma/client';
+import {
+  CacicElectionPhase as DbCacicElectionPhase,
+  PollMode as DbPollMode,
+  PollStatus as DbPollStatus,
+  PollVotingStyle as DbPollVotingStyle,
+} from '@prisma/client';
 import { Observable, Subscriber } from 'rxjs';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -120,6 +125,8 @@ export class PollResultsService {
       select: {
         id: true,
         status: true,
+        mode: true,
+        cacicElectionPhase: true,
         votingStyle: true,
         voterEligibilitySource: true,
         requireVerifiedUnespRole: true,
@@ -150,6 +157,8 @@ export class PollResultsService {
       select: {
         id: true,
         status: true,
+        mode: true,
+        cacicElectionPhase: true,
         votingStyle: true,
         voterEligibilitySource: true,
         requireVerifiedUnespRole: true,
@@ -220,6 +229,7 @@ export class PollResultsService {
     return {
       pollId: poll.id,
       anonymous: poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
+      answersReleased: this.areAnswersReleased(poll, audience),
       responseCount: responses.length,
       responses: responses.map((response) => this.toPollResultsResponse(response, audience)),
     };
@@ -251,6 +261,18 @@ export class PollResultsService {
     }
 
     throw new ForbiddenException('Poll results are not public yet.');
+  }
+
+  private areAnswersReleased(poll: PollResultsMetadata, audience: 'admin' | 'public'): boolean {
+    if (audience === 'admin') {
+      return true;
+    }
+
+    if (poll.mode === DbPollMode.CACIC_ELECTION && poll.cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
+      return poll.status === DbPollStatus.CLOSED;
+    }
+
+    return true;
   }
 
   subscribeToPollResults(pollId: string, listener: (event: PollResultStreamEvent) => void): () => void {

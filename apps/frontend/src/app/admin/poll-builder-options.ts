@@ -1,4 +1,7 @@
 import {
+  CACIC_ELECTION_SLATE_FORM_ELEMENT_ID,
+  CACIC_ELECTION_VOTE_ELEMENT_ID,
+  CacicElectionPhase,
   Poll,
   PollChoiceOption,
   PollElement,
@@ -7,6 +10,7 @@ import {
   PollGridSettings,
   PollImage,
   PollImageReference,
+  PollMode,
   PollSchedulingInviteeMode,
   PollSchedulingSettings,
 } from '@org/voting-contracts';
@@ -48,6 +52,14 @@ export const SCHEDULING_INVITEE_MODE_OPTIONS: { mode: PollSchedulingInviteeMode;
   { mode: 'optional', label: 'Convidados opcionais' },
   { mode: 'required', label: 'Exigir pelo menos um convidado' },
 ];
+export const POLL_MODE_OPTIONS: { mode: PollMode; label: string }[] = [
+  { mode: 'regular', label: 'Votação regular' },
+  { mode: 'cacicElection', label: 'Eleições do CACiC' },
+];
+export const CACIC_ELECTION_PHASE_OPTIONS: { phase: CacicElectionPhase; label: string }[] = [
+  { phase: 'slateSubmission', label: 'Submissão de chapas' },
+  { phase: 'election', label: 'Eleição' },
+];
 
 export function isOptionChoiceElement(type: PollElementType): boolean {
   return type === 'singleChoice' || type === 'multipleChoice' || type === 'selectionDropdown';
@@ -76,6 +88,7 @@ export function createBlankPoll(): Poll {
     description: '',
     descriptionImages: [],
     status: 'draft',
+    mode: 'regular',
     votingStyle: 'secret',
     voterEligibilitySource: 'authenticatedUsers',
     requireVerifiedUnespRole: false,
@@ -84,10 +97,93 @@ export function createBlankPoll(): Poll {
     resultsLive: false,
     allowResponseEditing: false,
     allowMultipleResponses: false,
+    visibleFrom: undefined,
+    votingStartsAt: undefined,
+    votingEndsAt: undefined,
     elements: [],
     createdAt: '',
     updatedAt: '',
   };
+}
+
+export function isCacicElectionGeneratedElementId(elementId: string): boolean {
+  return elementId === CACIC_ELECTION_SLATE_FORM_ELEMENT_ID || elementId === CACIC_ELECTION_VOTE_ELEMENT_ID;
+}
+
+export function isCacicElectionGeneratedElement(element: PollElement): boolean {
+  return isCacicElectionGeneratedElementId(element.id);
+}
+
+export function generatedCacicElectionElementFields(element: PollElement): string[] {
+  if (element.id === CACIC_ELECTION_SLATE_FORM_ELEMENT_ID) {
+    return [
+      'Nome da chapa',
+      'Nome completo do integrante',
+      'Matrícula',
+      'Cargo',
+      'CPF, telefone ou e-mail',
+      'Representante da chapa',
+      'Compromissos obrigatórios',
+    ];
+  }
+
+  if (element.id === CACIC_ELECTION_VOTE_ELEMENT_ID) {
+    return [
+      'Chapas aprovadas e habilitadas',
+      'Integrantes com ano de ingresso',
+      'Opção Branco',
+      'Opção Nulo',
+    ];
+  }
+
+  return [];
+}
+
+export function createCacicElectionSlateFormPreviewElement(): PollElement {
+  return {
+    id: CACIC_ELECTION_SLATE_FORM_ELEMENT_ID,
+    type: 'statement',
+    title: 'Submissão de chapa',
+    description: 'Formulário gerado automaticamente para coletar dados da chapa e de seus integrantes.',
+    required: false,
+    options: [],
+  };
+}
+
+export function createCacicElectionVotePreviewElement(): PollElement {
+  return {
+    id: CACIC_ELECTION_VOTE_ELEMENT_ID,
+    type: 'singleChoice',
+    title: 'Voto para chapa',
+    description: 'As opções serão geradas automaticamente com as chapas aprovadas e habilitadas.',
+    required: true,
+    options: [
+      {
+        id: 'preview-approved-slates',
+        label: 'Chapas aprovadas',
+        description: 'Substituído pelas chapas habilitadas no momento da eleição.',
+      },
+      {
+        id: 'cacic-election-blank',
+        label: 'Branco',
+        description: 'Votar em branco.',
+      },
+      {
+        id: 'cacic-election-null',
+        label: 'Nulo',
+        description: 'Anular o voto.',
+      },
+    ],
+  };
+}
+
+export function ensureCacicElectionGeneratedElement(
+  elements: readonly PollElement[],
+  generatedElement: PollElement,
+): PollElement[] {
+  const generatedIds = new Set([CACIC_ELECTION_SLATE_FORM_ELEMENT_ID, CACIC_ELECTION_VOTE_ELEMENT_ID]);
+  const customElements = elements.filter((element) => !generatedIds.has(element.id));
+  return [generatedElement, ...customElements];
 }
 
 export function createElement(type: PollElementType): PollElement {

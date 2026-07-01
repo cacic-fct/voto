@@ -27,25 +27,29 @@
 
         <mat-card-content>
           <p>{{ poll.description || 'Sem descrição.' }}</p>
-          <mat-chip-set aria-label="Resumo da votação">
-            <mat-chip>{{ poll.elementCount }} itens</mat-chip>
-            <mat-chip>{{ poll.responseCount }} respostas</mat-chip>
+          <mat-chip-set aria-label="Sigilo da votação">
             <mat-chip>{{ votingStyleLabel(poll.votingStyle) }}</mat-chip>
-            <mat-chip>{{ voterEligibilityLabel(poll.voterEligibilitySource) }}</mat-chip>
-            @if (poll.allowResponseEditing) {
-              <mat-chip>Edição permitida</mat-chip>
-            }
-            @if (poll.allowMultipleResponses) {
-              <mat-chip>Múltiplas respostas</mat-chip>
-            }
           </mat-chip-set>
         </mat-card-content>
 
         <mat-card-actions align="end">
-          <a mat-flat-button [routerLink]="['/polls', poll.id]">
-            <mat-icon>{{ poll.status === 'closed' ? 'bar_chart' : 'how_to_vote' }}</mat-icon>
-            {{ poll.status === 'closed' ? 'Ver resultados' : 'Votar' }}
-          </a>
+          @if (canShowResults(poll)) {
+            <a mat-stroked-button [routerLink]="['/polls', poll.id, 'results']">
+              <mat-icon>bar_chart</mat-icon>
+              Ver resultados
+            </a>
+          }
+          @if (canVote(poll)) {
+            <a mat-flat-button [routerLink]="['/polls', poll.id]">
+              <mat-icon>how_to_vote</mat-icon>
+              Votar
+            </a>
+          } @else if (!canShowResults(poll)) {
+            <a mat-stroked-button [routerLink]="['/polls', poll.id]">
+              <mat-icon>visibility</mat-icon>
+              Ver votação
+            </a>
+          }
         </mat-card-actions>
       </mat-card>
     } @empty {

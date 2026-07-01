@@ -97,6 +97,22 @@ describe('PollImagesService', () => {
     });
   });
 
+  it('rejects uploads from anonymous users and missing polls', async () => {
+    await expect(
+      service.uploadPollImage('poll-1', validFile, {
+        permissions: [],
+        permissionSet: new Set(),
+        sub: '',
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.poll.findUnique).not.toHaveBeenCalled();
+
+    prisma.poll.findUnique.mockResolvedValue(null);
+
+    await expect(service.uploadPollImage('missing-poll', validFile, user)).rejects.toBeInstanceOf(NotFoundException);
+    expect(s3.uploadFile).not.toHaveBeenCalled();
+  });
+
   it('deletes the uploaded object when database persistence fails', async () => {
     prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
     s3.uploadFile.mockResolvedValue({ key: 'polls/poll-1/images/image-1.avif', size: 321 });
@@ -114,6 +130,7 @@ describe('PollImagesService', () => {
       poll: {
         status: DbPollStatus.PUBLISHED,
         resultsPublic: false,
+        visibleFrom: null,
       },
     });
     s3.downloadFile.mockResolvedValue({ stream, contentType: undefined, contentLength: 5 });
@@ -134,11 +151,52 @@ describe('PollImagesService', () => {
       poll: {
         status: DbPollStatus.DRAFT,
         resultsPublic: false,
+        visibleFrom: null,
       },
     });
     await expect(service.getPollImage('poll-1', 'image-1', { permissions: [], permissionSet: new Set() } as never)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('allows public reads for closed result-public images and blocks future visibility windows', async () => {
+    const stream = Readable.from(['image']);
+    prisma.pollImage.findFirst.mockResolvedValue({
+      objectKey: 'polls/poll-1/images/image-1.avif',
+      mimeType: 'image/avif',
+      poll: {
+        status: DbPollStatus.CLOSED,
+        resultsPublic: true,
+        visibleFrom: new Date(Date.now() - 1_000),
+      },
+    });
+    s3.downloadFile.mockResolvedValue({ stream, contentType: 'image/custom-avif', contentLength: undefined });
+
+    await expect(service.getPollImage('poll-1', 'image-1', undefined, { allowPublishedRead: true })).resolves.toEqual({
+      stream,
+      contentType: 'image/custom-avif',
+      contentLength: undefined,
+    });
+
+    prisma.pollImage.findFirst.mockResolvedValue({
+      objectKey: 'polls/poll-1/images/image-1.avif',
+      mimeType: 'image/avif',
+      poll: {
+        status: DbPollStatus.PUBLISHED,
+        resultsPublic: false,
+        visibleFrom: new Date(Date.now() + 60_000),
+      },
+    });
+
+    await expect(service.getPollImage('poll-1', 'image-1', undefined, { allowPublishedRead: true })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('rejects image reads when the database row is missing', async () => {
+    prisma.pollImage.findFirst.mockResolvedValue(null);
+
+    await expect(service.getPollImage('poll-1', 'missing-image', user)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('deletes image rows and storage objects', async () => {
@@ -151,5 +209,37 @@ describe('PollImagesService', () => {
 
     prisma.pollImage.findFirst.mockResolvedValue(null);
     await expect(service.deletePollImage('poll-1', 'missing')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('deduplicates best-effort object deletion and swallows storage failures', async () => {
+    s3.deleteFile.mockRejectedValueOnce(new Error('storage offline')).mockResolvedValue(undefined);
+
+    await expect(service.deleteObjectKeysBestEffort(['same-key', 'same-key', 'other-key'])).resolves.toBeUndefined();
+
+    expect(s3.deleteFile).toHaveBeenCalledTimes(2);
+    expect(s3.deleteFile).toHaveBeenNthCalledWith(1, 'same-key');
+    expect(s3.deleteFile).toHaveBeenNthCalledWith(2, 'other-key');
+  });
+
+  it('maps optional alt text and captions into public image contracts', () => {
+    expect(
+      service.toContractImage({
+        altText: 'Mesa de votação',
+        caption: 'Assembleia geral',
+        height: 240,
+        id: 'image/1',
+        mimeType: 'image/avif',
+        objectKey: 'polls/poll 1/images/image.avif',
+        pollId: 'poll 1',
+        width: 320,
+      }),
+    ).toEqual({
+      id: 'image/1',
+      url: '/api/polls/poll%201/images/image%2F1',
+      width: 320,
+      height: 240,
+      altText: 'Mesa de votação',
+      caption: 'Assembleia geral',
+    });
   });
 });

@@ -70,6 +70,10 @@
           </button>
         }
         @if (builder.draft().id) {
+          <button mat-stroked-button type="button" [disabled]="saving()" (click)="copyPollLink()">
+            <mat-icon>content_copy</mat-icon>
+            Copiar link
+          </button>
           <button mat-button type="button" color="warn" [disabled]="saving()" (click)="deletePoll()">
             <mat-icon>delete</mat-icon>
             Excluir
@@ -107,6 +111,83 @@
             [value]="builder.draft().description || ''"
             (input)="builder.updatePollDescription($event)"></textarea>
         </mat-form-field>
+
+        <section class="publication-schedule span-2" aria-labelledby="publication-schedule-title">
+          <div class="surface-heading compact-heading">
+            <div>
+              <h4 id="publication-schedule-title">Publicação</h4>
+              <p>Defina quando a votação aparece e quando aceita votos.</p>
+            </div>
+          </div>
+
+          <div class="field-grid schedule-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Visível a partir de</mat-label>
+              <input
+                matInput
+                type="datetime-local"
+                step="60"
+                [value]="builder.dateTimeInputValue(builder.draft().visibleFrom)"
+                (input)="builder.updateVisibleFrom($event)" />
+              <mat-hint>Antes deste horário, o link público não abre a votação.</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Aberta para votar a partir de</mat-label>
+              <input
+                matInput
+                type="datetime-local"
+                step="60"
+                [value]="builder.dateTimeInputValue(builder.draft().votingStartsAt)"
+                (input)="builder.updateVotingStartsAt($event)" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Aberta para votar até</mat-label>
+              <input
+                matInput
+                type="datetime-local"
+                step="60"
+                [value]="builder.dateTimeInputValue(builder.draft().votingEndsAt)"
+                (input)="builder.updateVotingEndsAt($event)" />
+            </mat-form-field>
+          </div>
+        </section>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Modo da votação</mat-label>
+          <mat-select [value]="builder.draft().mode" (selectionChange)="builder.updatePollMode($event)">
+            @for (option of builder.pollModeOptions; track option.mode) {
+              <mat-option [value]="option.mode">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        @if (builder.isCacicElection()) {
+          <mat-form-field appearance="outline">
+            <mat-label>Etapa</mat-label>
+            <mat-select
+              [value]="builder.draft().cacicElectionPhase ?? 'slateSubmission'"
+              (selectionChange)="builder.updateCacicElectionPhase($event)">
+              @for (option of builder.cacicElectionPhaseOptions; track option.phase) {
+                <mat-option [value]="option.phase">{{ option.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <div class="election-rule-panel span-2">
+            <mat-icon>how_to_vote</mat-icon>
+            <div>
+              @if (builder.isCacicElectionVoting()) {
+                <strong>Eleição anônima com lista de matrículas</strong>
+                <p>As opções vêm das chapas aprovadas e habilitadas. Resultados ficam privados até o encerramento.</p>
+              } @else {
+                <strong>Submissão pública de chapas</strong>
+                <p>Pessoas autenticadas podem submeter uma única chapa. Aprovação, rejeição e desclassificação ficam na aba Chapas.</p>
+              }
+            </div>
+          </div>
+        }
 
         <div class="description-media span-2">
           <div class="surface-heading compact-heading">
@@ -172,9 +253,9 @@
         </div>
 
         <mat-form-field appearance="outline">
-          <mat-label>Vincular votação à evento</mat-label>
+          <mat-label>Vincular votação a um evento</mat-label>
           <mat-select
-            [disabled]="loadingEvents()"
+            [disabled]="loadingEvents() || builder.isCacicElection()"
             [value]="builder.draft().linkedEvent?.id || ''"
             (selectionChange)="updateLinkedEvent($event)">
             <mat-select-trigger>
@@ -195,6 +276,7 @@
         <mat-form-field appearance="outline">
           <mat-label>Habilitados a votar</mat-label>
           <mat-select
+            [disabled]="builder.isCacicElectionVoting()"
             [value]="builder.draft().voterEligibilitySource"
             (selectionChange)="updateVoterEligibilitySource($event)">
             <mat-select-trigger>{{ selectedVoterEligibility().label }}</mat-select-trigger>
@@ -224,10 +306,15 @@
         <div class="verified-role-option">
           <mat-checkbox
             [checked]="builder.draft().directLinkEnabled"
+            [disabled]="builder.isCacicElection()"
             (change)="builder.updateDirectLinkEnabled($event)">
             Permitir voto por link direto
           </mat-checkbox>
-          <p>Pessoas autenticadas com este link também poderão votar nesta votação.</p>
+          @if (builder.isCacicElection()) {
+            <p>Indisponível para Eleições do CACiC.</p>
+          } @else {
+            <p>Pessoas autenticadas com este link também poderão votar nesta votação.</p>
+          }
           @if (builder.draft().directLinkEnabled) {
             @if (directLinkUrl()) {
               <div class="manual-enrollment-row">
@@ -252,7 +339,10 @@
 
         <mat-form-field appearance="outline">
           <mat-label>Estilo da votação</mat-label>
-          <mat-select [value]="builder.draft().votingStyle" (selectionChange)="builder.updateVotingStyle($event)">
+          <mat-select
+            [disabled]="builder.isCacicElectionVoting()"
+            [value]="builder.draft().votingStyle"
+            (selectionChange)="builder.updateVotingStyle($event)">
             <mat-select-trigger>{{ selectedVotingStyle().label }}</mat-select-trigger>
             @for (option of builder.votingStyleOptions; track option.style) {
               <mat-option [value]="option.style">
@@ -269,7 +359,7 @@
         <div class="verified-role-option">
           <mat-checkbox
             [checked]="builder.draft().allowResponseEditing"
-            [disabled]="builder.draft().votingStyle === 'anonymous' || builder.draft().allowMultipleResponses"
+            [disabled]="builder.isCacicElectionVoting() || builder.draft().votingStyle === 'anonymous' || builder.draft().allowMultipleResponses"
             (change)="builder.updateAllowResponseEditing($event)">
             Permitir edição de resposta
           </mat-checkbox>
@@ -285,7 +375,7 @@
         <div class="verified-role-option">
           <mat-checkbox
             [checked]="builder.draft().allowMultipleResponses"
-            [disabled]="builder.draft().allowResponseEditing"
+            [disabled]="builder.isCacicElectionVoting() || builder.draft().allowResponseEditing"
             (change)="builder.updateAllowMultipleResponses($event)">
             Permitir múltiplas respostas
           </mat-checkbox>
@@ -299,20 +389,25 @@
         <div class="verified-role-option">
           <mat-checkbox
             [checked]="builder.draft().resultsPublic"
+            [disabled]="builder.isCacicElection()"
             (change)="builder.updateResultsPublic($event)">
             Resultados públicos
           </mat-checkbox>
-          <p>Permite que pessoas usuárias vejam os resultados desta votação.</p>
+          <p>Permite que participantes vejam os resultados desta votação.</p>
         </div>
 
         <div class="verified-role-option">
           <mat-checkbox
             [checked]="builder.draft().resultsLive"
-            [disabled]="!builder.draft().resultsPublic"
+            [disabled]="builder.isCacicElection() || !builder.draft().resultsPublic"
             (change)="builder.updateResultsLive($event)">
             Resultados ao vivo
           </mat-checkbox>
-          <p>Disponibiliza resultados em tempo real antes do encerramento da votação.</p>
+          @if (builder.draft().resultsPublic) {
+            <p>Disponibiliza resultados em tempo real antes do encerramento da votação.</p>
+          } @else {
+            <p>Ative resultados públicos antes de liberar atualizações em tempo real.</p>
+          }
         </div>
       </div>
     </section>
@@ -401,7 +496,7 @@
 
           <div class="event-manager-source">
             <mat-icon>badge</mat-icon>
-            <span>Dados de pessoas do CACiC Eventos</span>
+            <span>Dados de usuários do CACiC Contas</span>
           </div>
 
           <div class="eligibility-list">
@@ -439,7 +534,163 @@
         </div>
       </mat-tab>
 
+      @if (builder.isCacicElection()) {
+        <mat-tab label="Chapas">
+          <div class="tab-content slate-content">
+            @if (!builder.draft().id) {
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Chapas</h3>
+                    <p>Salve a eleição para revisar e cadastrar chapas.</p>
+                  </div>
+                </div>
+              </section>
+            } @else {
+              @if (loadingSlates() || savingSlate()) {
+                <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+              }
+
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>{{ editingSlate() ? 'Editar chapa' : 'Cadastrar chapa manualmente' }}</h3>
+                    <p>Cadastros manuais entram como chapas administrativas e podem ser usados na etapa de eleição.</p>
+                  </div>
+                  @if (editingSlate()) {
+                    <button mat-stroked-button type="button" (click)="cancelSlateEdit()">
+                      <mat-icon>close</mat-icon>
+                      Cancelar edição
+                    </button>
+                  }
+                </div>
+
+                <app-cacic-election-slate-form
+                  [slate]="editingSlate()"
+                  [busy]="savingSlate()"
+                  [showAgreements]="false"
+                  [submitLabel]="editingSlate() ? 'Salvar chapa' : 'Cadastrar chapa'"
+                  (submitted)="saveSlate($event)" />
+              </section>
+
+              <section class="surface field-group">
+                <div class="surface-heading">
+                  <div>
+                    <h3>Revisão de chapas</h3>
+                    <p>{{ slates().length }} submissões registradas.</p>
+                  </div>
+                </div>
+
+                <div class="slate-list">
+                  @for (slate of slates(); track slate.id) {
+                    <mat-card appearance="outlined" class="slate-card">
+                      <mat-card-header>
+                        <mat-icon mat-card-avatar>groups</mat-icon>
+                        <mat-card-title>{{ slate.name }}</mat-card-title>
+                        <mat-card-subtitle>
+                          {{ slateStatusLabel(slate.status) }} · {{ slate.submissionSource === 'public' ? 'Submissão pública' : 'Cadastro administrativo' }}
+                        </mat-card-subtitle>
+                      </mat-card-header>
+                      <mat-card-content>
+                        <div class="slate-meta-row">
+                          <mat-chip-set aria-label="Status da chapa">
+                            <mat-chip>{{ slateStatusLabel(slate.status) }}</mat-chip>
+                            <mat-chip>{{ slate.enabled ? 'Habilitada' : 'Desabilitada' }}</mat-chip>
+                            @if (slate.submittedBy) {
+                              <mat-chip>Representante: {{ slate.submittedBy.name || slate.submittedBy.email || slate.submittedBy.userId }}</mat-chip>
+                            }
+                          </mat-chip-set>
+                        </div>
+
+                        @if (slate.rejectionReason) {
+                          <p class="rejection-reason">{{ slate.rejectionReason }}</p>
+                        }
+
+                        <div class="slate-member-list">
+                          @for (member of slate.members; track member.id) {
+                            <div class="slate-member-row">
+                              <div>
+                                <strong>{{ member.fullName }}</strong>
+                                <span>{{ slateRoleLabel(member.role, member.customRole) }}</span>
+                              </div>
+                              <div>
+                                <span>{{ slateIdentifierLabel(member) }}</span>
+                                @if (member.isRepresentative) {
+                                  <span>Representante</span>
+                                }
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      </mat-card-content>
+                      <mat-card-actions align="end">
+                        <button mat-button type="button" [disabled]="savingSlate()" (click)="editSlate(slate)">
+                          <mat-icon>edit</mat-icon>
+                          Editar
+                        </button>
+                        @if (slate.status !== 'approved') {
+                          <button mat-button type="button" [disabled]="savingSlate()" (click)="approveSlate(slate)">
+                            <mat-icon>check_circle</mat-icon>
+                            Aprovar
+                          </button>
+                        }
+                        @if (slate.status !== 'rejected') {
+                          <button mat-button type="button" color="warn" [disabled]="savingSlate()" (click)="rejectSlate(slate)">
+                            <mat-icon>cancel</mat-icon>
+                            Rejeitar
+                          </button>
+                        }
+                        <button
+                          mat-button
+                          type="button"
+                          [disabled]="savingSlate() || slate.status !== 'approved'"
+                          (click)="updateSlateEnabled(slate, !slate.enabled)">
+                          <mat-icon>{{ slate.enabled ? 'block' : 'verified' }}</mat-icon>
+                          {{ slate.enabled ? 'Desabilitar' : 'Habilitar' }}
+                        </button>
+                        <button mat-button type="button" color="warn" [disabled]="savingSlate()" (click)="deleteSlate(slate)">
+                          <mat-icon>delete</mat-icon>
+                          Excluir
+                        </button>
+                      </mat-card-actions>
+                    </mat-card>
+                  } @empty {
+                    <mat-card appearance="outlined" class="empty-card">
+                      <mat-card-header>
+                        <mat-icon mat-card-avatar>inbox</mat-icon>
+                        <mat-card-title>Nenhuma chapa registrada</mat-card-title>
+                        <mat-card-subtitle>Submissões públicas aparecerão aqui para revisão.</mat-card-subtitle>
+                      </mat-card-header>
+                    </mat-card>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        </mat-tab>
+      }
+
       <mat-tab label="Resultados">
+        @if (canExportCacicElectionVoters()) {
+          <div class="tab-content">
+            <section class="surface field-group">
+              <div class="surface-heading">
+                <div>
+                  <h3>Pessoas que votaram</h3>
+                  <p>Baixe as matrículas disponíveis para participantes que registraram voto.</p>
+                </div>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="exportingCacicElectionVoters()"
+                  (click)="exportCacicElectionVoterEnrollments()">
+                  <mat-icon>download</mat-icon>
+                  Baixar matrículas
+                </button>
+              </div>
+            </section>
+          </div>
+        }
         <app-admin-poll-results-panel
           [builder]="builder"
           [loadingResults]="loadingResults()"

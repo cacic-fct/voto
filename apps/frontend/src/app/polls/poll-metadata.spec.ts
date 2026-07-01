@@ -14,6 +14,7 @@ import {
   voterEligibilityOptions,
   votingStyleLabel,
   votingStyleOptions,
+  votingStylePublicResultsDescription,
   votingStyleVoterDescription,
 } from './poll-metadata';
 
@@ -24,6 +25,7 @@ describe('poll metadata helpers', () => {
     for (const style of POLL_VOTING_STYLES) {
       expect(votingStyleLabel(style)).toBe(VOTING_STYLE_METADATA[style].label);
       expect(votingStyleVoterDescription(style)).toBe(VOTING_STYLE_METADATA[style].voterDescription);
+      expect(votingStylePublicResultsDescription(style)).toBeTruthy();
       expect(VOTING_STYLE_METADATA[style].icon).toBeTruthy();
     }
   });

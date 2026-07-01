@@ -31,6 +31,8 @@ class PublicPollsStoryHostComponent {
       setVotingStoryState({
         publicPollCount: this.quantidade(),
         publicPollsState: this.estado(),
+        resultsPublic: true,
+        resultsLive: true,
         seed: this.seed(),
       });
       this.remount();

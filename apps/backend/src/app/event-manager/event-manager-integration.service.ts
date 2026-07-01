@@ -1,19 +1,18 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import {
-  EVENT_MANAGER_M2M_API_PREFIX,
-  EVENT_MANAGER_M2M_VOTING_ROUTES,
-  type EventManagerVotingAttendanceCheckResponse,
-  type EventManagerVotingEvent,
-} from '@cacic-fct/event-manager-m2m-contracts';
-import { EventManagerPerson } from '@org/voting-contracts';
+import { EventManagerEvent } from '@org/voting-contracts';
 import axios from 'axios';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
 
-type EventManagerVotingRoutesWithPeopleLookup = typeof EVENT_MANAGER_M2M_VOTING_ROUTES & {
-  peopleLookup?: () => string;
+type EventManagerVotingAttendanceCheckResponse = {
+  attended: boolean;
 };
 
-const PEOPLE_LOOKUP_BATCH_SIZE = 500;
+const EVENT_MANAGER_M2M_API_PREFIX = '/api';
+const EVENT_MANAGER_M2M_VOTING_ROUTES = {
+  events: () => `${EVENT_MANAGER_M2M_API_PREFIX}/internal/voting/events`,
+  attendanceCheck: (eventId: string) =>
+    `${EVENT_MANAGER_M2M_API_PREFIX}/internal/voting/events/${encodeURIComponent(eventId)}/attendance-check`,
+};
 
 @Injectable()
 export class EventManagerIntegrationService {
@@ -26,7 +25,7 @@ export class EventManagerIntegrationService {
 
   constructor(private readonly m2mTokens: KeycloakM2mTokenService) {}
 
-  async listLinkableEvents(): Promise<EventManagerVotingEvent[]> {
+  async listLinkableEvents(): Promise<EventManagerEvent[]> {
     const accessToken = await this.getAccessToken();
 
     try {
@@ -75,23 +74,6 @@ export class EventManagerIntegrationService {
     }
   }
 
-  async lookupPeopleByEnrollmentNumbers(enrollmentNumbers: readonly string[]): Promise<EventManagerPerson[]> {
-    const uniqueEnrollmentNumbers = [...new Set(enrollmentNumbers.map((value) => value.trim()).filter(Boolean))];
-    if (uniqueEnrollmentNumbers.length === 0) {
-      return [];
-    }
-
-    const accessToken = await this.getAccessToken();
-    const people: EventManagerPerson[] = [];
-
-    for (let index = 0; index < uniqueEnrollmentNumbers.length; index += PEOPLE_LOOKUP_BATCH_SIZE) {
-      const batch = uniqueEnrollmentNumbers.slice(index, index + PEOPLE_LOOKUP_BATCH_SIZE);
-      people.push(...(await this.lookupPeopleBatch(batch, accessToken)));
-    }
-
-    return people;
-  }
-
   private getAccessToken(): Promise<string> {
     return this.m2mTokens.getClientCredentialsToken({
       audience: this.audience,
@@ -99,7 +81,7 @@ export class EventManagerIntegrationService {
     });
   }
 
-  private parseEvent(value: unknown): EventManagerVotingEvent {
+  private parseEvent(value: unknown): EventManagerEvent {
     if (!this.isRecord(value)) {
       throw new ServiceUnavailableException('Event Manager returned an invalid event item.');
     }
@@ -123,54 +105,6 @@ export class EventManagerIntegrationService {
     };
   }
 
-  private async lookupPeopleBatch(enrollmentNumbers: string[], accessToken: string): Promise<EventManagerPerson[]> {
-    try {
-      const { data } = await axios.post<unknown>(
-        this.eventManagerUrl(this.peopleLookupRoute()),
-        { enrollmentNumbers },
-        {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      return this.parsePeopleLookupResponse(data);
-    } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-
-      this.logAxiosWarning(error, 'Could not lookup Event Manager people.');
-      throw new ServiceUnavailableException('Could not lookup Event Manager people.');
-    }
-  }
-
-  private parsePeopleLookupResponse(value: unknown): EventManagerPerson[] {
-    if (!this.isRecord(value) || !Array.isArray(value['people'])) {
-      throw new ServiceUnavailableException('Event Manager returned an invalid people lookup response.');
-    }
-
-    return value['people'].map((item) => this.parsePerson(item));
-  }
-
-  private parsePerson(value: unknown): EventManagerPerson {
-    if (!this.isRecord(value)) {
-      throw new ServiceUnavailableException('Event Manager returned an invalid person item.');
-    }
-
-    const enrollmentNumber = this.readRequiredString(value, 'enrollmentNumber');
-    const name = this.readRequiredString(value, 'name');
-    const email =
-      typeof value['email'] === 'string' && value['email'].trim() ? value['email'].trim() : null;
-
-    return {
-      enrollmentNumber,
-      name,
-      email,
-    };
-  }
-
   private readRequiredString(value: Record<string, unknown>, key: string): string {
     const rawValue = value[key];
     if (typeof rawValue !== 'string' || !rawValue.trim()) {
@@ -186,11 +120,6 @@ export class EventManagerIntegrationService {
 
   private eventManagerUrl(path: string): string {
     return new URL(path, this.eventManagerOrigin).toString();
-  }
-
-  private peopleLookupRoute(): string {
-    const routes = EVENT_MANAGER_M2M_VOTING_ROUTES as EventManagerVotingRoutesWithPeopleLookup;
-    return routes.peopleLookup?.() ?? `${EVENT_MANAGER_M2M_API_PREFIX}/internal/voting/people/lookup`;
   }
 
   private resolveEventManagerOrigin(eventManagerApiUrl: string): string {

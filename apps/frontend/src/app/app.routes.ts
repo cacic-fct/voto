@@ -24,9 +24,23 @@ export const appRoutes: Route[] = [
           import('./polls/public-polls-page.component').then((component) => component.PublicPollsPageComponent),
       },
       {
+        path: 'polls/direct/:directLinkToken/results',
+        loadComponent: () =>
+          import('./polls/public-poll-results-page.component').then(
+            (component) => component.PublicPollResultsPageComponent,
+          ),
+      },
+      {
         path: 'polls/direct/:directLinkToken',
         loadComponent: () =>
           import('./polls/poll-vote-page.component').then((component) => component.PollVotePageComponent),
+      },
+      {
+        path: 'polls/:id/results',
+        loadComponent: () =>
+          import('./polls/public-poll-results-page.component').then(
+            (component) => component.PublicPollResultsPageComponent,
+          ),
       },
       {
         path: 'polls/:id',

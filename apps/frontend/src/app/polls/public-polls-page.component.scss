@@ -58,6 +58,9 @@ mat-card-content {
 }
 
 .poll-card mat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: auto;
 }
 
@@ -69,5 +72,13 @@ mat-card-content {
 @media (max-width: 600px) {
   h1 {
     font: var(--mat-sys-headline-small);
+  }
+
+  .poll-card mat-card-actions {
+    justify-content: stretch;
+  }
+
+  .poll-card mat-card-actions a {
+    flex: 1 1 100%;
   }
 }

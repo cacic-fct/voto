@@ -7,13 +7,14 @@ import {
   Optional,
 } from '@nestjs/common';
 import {
-  EventManagerPerson,
+  AccountManagerPerson,
   PollEligibilityEnrollmentImportResult,
   PollEligibilityEnrollmentList,
   PollEligibilityMutationMode,
 } from '@org/voting-contracts';
 import { PollVoterEligibilitySource as DbPollVoterEligibilitySource } from '@prisma/client';
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
+import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -42,6 +43,8 @@ export class PollEligibilityService {
     private readonly eventManager: EventManagerIntegrationService,
     @Optional()
     private readonly featureFlags?: FeatureFlagService,
+    @Optional()
+    private readonly accountManager?: AccountManagerIntegrationService,
   ) {}
 
   async listEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
@@ -353,14 +356,14 @@ export class PollEligibilityService {
     };
   }
 
-  private async lookupEventManagerPeople(enrollmentNumbers: string[]): Promise<Map<string, EventManagerPerson[]>> {
-    const peopleByEnrollmentNumber = new Map<string, EventManagerPerson[]>();
+  private async lookupEventManagerPeople(enrollmentNumbers: string[]): Promise<Map<string, AccountManagerPerson[]>> {
+    const peopleByEnrollmentNumber = new Map<string, AccountManagerPerson[]>();
     if (enrollmentNumbers.length === 0) {
       return peopleByEnrollmentNumber;
     }
 
     try {
-      const people = await this.eventManager.lookupPeopleByEnrollmentNumbers(enrollmentNumbers);
+      const people = await this.accountManager?.lookupPeopleByEnrollmentNumbers(enrollmentNumbers) ?? [];
       for (const person of people) {
         const normalizedEnrollmentNumber = normalizeEnrollmentNumber(person.enrollmentNumber);
         if (!normalizedEnrollmentNumber) {
@@ -371,7 +374,7 @@ export class PollEligibilityService {
         peopleByEnrollmentNumber.set(normalizedEnrollmentNumber, [...existingPeople, person]);
       }
     } catch {
-      this.logger.warn('Could not enrich eligibility enrollments with Event Manager people data.');
+      this.logger.warn('Could not enrich eligibility enrollments with Account Manager user data.');
     }
 
     return peopleByEnrollmentNumber;

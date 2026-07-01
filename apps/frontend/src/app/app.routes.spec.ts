@@ -11,9 +11,17 @@ describe('appRoutes', () => {
     expect(appRoutes[2]?.redirectTo).toBe('');
 
     const children = appRoutes[1]?.children ?? [];
-    expect(children.map((route) => route.path)).toEqual(['', 'polls', 'polls/direct/:directLinkToken', 'polls/:id', 'admin']);
+    expect(children.map((route) => route.path)).toEqual([
+      '',
+      'polls',
+      'polls/direct/:directLinkToken/results',
+      'polls/direct/:directLinkToken',
+      'polls/:id/results',
+      'polls/:id',
+      'admin',
+    ]);
     expect(children[0]).toMatchObject({ pathMatch: 'full', redirectTo: 'polls' });
-    expect(children[4]?.canActivate).toEqual([adminGuard]);
+    expect(children[6]?.canActivate).toEqual([adminGuard]);
   });
 
   it('lazy-loads route components', async () => {
@@ -25,5 +33,7 @@ describe('appRoutes', () => {
     await expect(children[2]?.loadComponent?.()).resolves.toBeTruthy();
     await expect(children[3]?.loadComponent?.()).resolves.toBeTruthy();
     await expect(children[4]?.loadComponent?.()).resolves.toBeTruthy();
+    await expect(children[5]?.loadComponent?.()).resolves.toBeTruthy();
+    await expect(children[6]?.loadComponent?.()).resolves.toBeTruthy();
   }, 15000);
 });

@@ -1,0 +1,140 @@
+{
+  "realm": "cacic-sso",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "access"
+      },
+      {
+        "name": "voting-admin"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "cacic-voto",
+      "name": "CACiC Voto",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "cacic-voto-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:3000/api/auth/callback",
+        "http://localhost:*/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:4200"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:4200/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ],
+      "protocolMappers": [
+        {
+          "name": "identity_document",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "identity_document",
+            "claim.name": "identity_document",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "enrollment_number",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "enrollment_number",
+            "claim.name": "enrollment_number",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "cacic-voto-m2m",
+      "name": "CACiC Voto M2M",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "cacic-voto-m2m-dev-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "voto-admin@unesp.br",
+      "email": "voto-admin@unesp.br",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Voto",
+      "lastName": "Admin",
+      "attributes": {
+        "identity_document": [
+          "11111111111"
+        ],
+        "enrollment_number": [
+          "24123456"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "1",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "access",
+        "voting-admin"
+      ]
+    }
+  ]
+}

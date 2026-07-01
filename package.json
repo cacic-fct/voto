@@ -2,7 +2,9 @@
   "name": "@org/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "e2e:backend:keycloak": "bunx nx run backend-e2e:e2e-keycloak"
+  },
   "private": true,
   "dependencies": {
     "@angular-devkit/build-angular": "22.0.2",

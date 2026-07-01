@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import { AuthModule } from '../auth/auth.module';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { FeatureFlagsModule } from '../feature-flags/feature-flags.module';
@@ -20,6 +21,7 @@ import { PublicPollsController } from './public-polls.controller';
   imports: [AuthModule, FeatureFlagsModule],
   controllers: [AdminPollsController, PublicPollsController],
   providers: [
+    AccountManagerIntegrationService,
     EventManagerIntegrationService,
     PollEligibilityService,
     PollElementMutationsService,

@@ -1,7 +1,9 @@
 import { PollResultsDelta } from '@org/voting-contracts';
 import {
+  CacicElectionPhase as DbCacicElectionPhase,
   PollElementType as DbPollElementType,
   PollImagePlacement as DbPollImagePlacement,
+  PollMode as DbPollMode,
   PollStatus as DbPollStatus,
   PollVoterEligibilitySource as DbPollVoterEligibilitySource,
   PollVotingStyle as DbPollVotingStyle,
@@ -13,6 +15,8 @@ export type PollRecord = {
   title: string;
   description: string | null;
   status: DbPollStatus;
+  mode?: DbPollMode;
+  cacicElectionPhase?: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -30,6 +34,9 @@ export type PollRecord = {
   createdAt: Date;
   updatedAt: Date;
   publishedAt: Date | null;
+  visibleFrom?: Date | null;
+  votingStartsAt?: Date | null;
+  votingEndsAt?: Date | null;
   elements: ElementRecord[];
   images?: ImageRecord[];
   _count?: {
@@ -81,6 +88,8 @@ export type ParsedEligibilityEnrollments = {
 };
 
 export type PollMetadataData = {
+  mode?: DbPollMode;
+  cacicElectionPhase?: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -118,6 +127,8 @@ export type PollImageReferenceData = {
 export type PollResultsMetadata = {
   id: string;
   status: DbPollStatus;
+  mode?: DbPollMode;
+  cacicElectionPhase?: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   voterEligibilitySource: DbPollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -134,6 +145,8 @@ export type PollEligibilityRecord = Pick<
 export type PollUserResponseStateRecord = {
   id: string;
   status: DbPollStatus;
+  mode?: DbPollMode;
+  cacicElectionPhase?: DbCacicElectionPhase | null;
   votingStyle: DbPollVotingStyle;
   allowResponseEditing: boolean;
   allowMultipleResponses: boolean;

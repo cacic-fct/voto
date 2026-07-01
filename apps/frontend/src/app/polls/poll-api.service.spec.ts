@@ -8,6 +8,7 @@ import {
   PollResultsDelta,
   SavePollRequest,
   SubmitPollResponseRequest,
+  UpdateCacicElectionSlateRequest,
 } from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +24,7 @@ describe('PollApiService', () => {
     title: 'Votação',
     description: '',
     status: 'draft',
+    mode: 'regular',
     votingStyle: 'secret',
     voterEligibilitySource: 'authenticatedUsers',
     requireVerifiedUnespRole: false,
@@ -99,8 +101,20 @@ describe('PollApiService', () => {
     await expect(stateResponse).resolves.toEqual({ hasSubmitted: false });
 
     const resultsResponse = firstValueFrom(service.getDirectLinkPollResults(token));
-    http.expectOne(`/api/polls/direct/${token}/results`).flush({ pollId: 'poll-1', responseCount: 0, responses: [] });
-    await expect(resultsResponse).resolves.toEqual({ pollId: 'poll-1', responseCount: 0, responses: [] });
+    http.expectOne(`/api/polls/direct/${token}/results`).flush({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
+    await expect(resultsResponse).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
   });
 
   it('loads and mutates admin poll data through the admin API', async () => {
@@ -222,16 +236,130 @@ describe('PollApiService', () => {
 
   it('loads results and parses live result deltas', async () => {
     const adminResults = firstValueFrom(service.getAdminPollResults('poll-1'));
-    http.expectOne('/api/admin/polls/poll-1/results').flush({ pollId: 'poll-1', responseCount: 0, responses: [] });
-    await expect(adminResults).resolves.toEqual({ pollId: 'poll-1', responseCount: 0, responses: [] });
+    http.expectOne('/api/admin/polls/poll-1/results').flush({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
+    await expect(adminResults).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
+
+    const exportResult = firstValueFrom(service.exportCacicElectionVoterEnrollments('poll-1'));
+    const exportRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/voter-enrollments.txt');
+    expect(exportRequest.request.method).toBe('GET');
+    expect(exportRequest.request.responseType).toBe('blob');
+    const exportBlob = new Blob(['24123456\n25123456'], { type: 'text/plain' });
+    exportRequest.flush(exportBlob);
+    await expect(exportResult).resolves.toBe(exportBlob);
 
     const publicResults = firstValueFrom(service.getPublicPollResults('poll-1'));
-    http.expectOne('/api/polls/poll-1/results').flush({ pollId: 'poll-1', responseCount: 0, responses: [] });
-    await expect(publicResults).resolves.toEqual({ pollId: 'poll-1', responseCount: 0, responses: [] });
+    http.expectOne('/api/polls/poll-1/results').flush({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
+    await expect(publicResults).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
 
     const delta: PollResultsDelta = { pollId: 'poll-1', responseCount: 1, responses: [] };
     expect(service.parseResultsDelta({ data: JSON.stringify(delta) } as MessageEvent<string>)).toEqual(delta);
     expect(service.parseResultsDelta({ data: '{' } as MessageEvent<string>)).toBeNull();
+  });
+
+  it('manages CACiC election slate endpoints', async () => {
+    const slateRequest: UpdateCacicElectionSlateRequest = {
+      name: 'Chapa Aurora',
+      members: [
+        {
+          fullName: 'Ada Lovelace',
+          role: 'president',
+          isRepresentative: true,
+          identifierType: 'email',
+          identifierValue: 'ada@example.com',
+        },
+      ],
+    };
+    const slateResponse = {
+      id: 'slate-1',
+      pollId: 'poll-1',
+      name: 'Chapa Aurora',
+      status: 'pending',
+      enabled: true,
+      submissionSource: 'public',
+      submittedAt: '2026-06-16T10:00:00.000Z',
+      members: [{ id: 'member-1', fullName: 'Ada Lovelace', role: 'president', isRepresentative: true }],
+    };
+    const adminSlateResponse = {
+      ...slateResponse,
+      members: [{ ...slateResponse.members[0], identifierType: 'email', identifierValue: 'ada@example.com' }],
+    };
+
+    const publicList = firstValueFrom(service.listPublicCacicElectionSlates('poll-1'));
+    http.expectOne('/api/polls/poll-1/cacic-election/slates').flush([slateResponse]);
+    await expect(publicList).resolves.toEqual([slateResponse]);
+
+    const mySlate = firstValueFrom(service.getMyCacicElectionSlate('poll-1'));
+    http.expectOne('/api/polls/poll-1/cacic-election/slates/me').flush(adminSlateResponse);
+    await expect(mySlate).resolves.toEqual(adminSlateResponse);
+
+    const submit = firstValueFrom(service.submitCacicElectionSlate('poll-1', slateRequest));
+    const submitRequest = http.expectOne('/api/polls/poll-1/cacic-election/slates/me');
+    expect(submitRequest.request.method).toBe('PUT');
+    expect(submitRequest.request.body).toEqual(slateRequest);
+    submitRequest.flush(slateResponse);
+    await expect(submit).resolves.toEqual(slateResponse);
+
+    const adminList = firstValueFrom(service.listAdminCacicElectionSlates('poll-1'));
+    http.expectOne('/api/admin/polls/poll-1/cacic-election/slates').flush([adminSlateResponse]);
+    await expect(adminList).resolves.toEqual([adminSlateResponse]);
+
+    const createAdmin = firstValueFrom(service.createAdminCacicElectionSlate('poll-1', slateRequest));
+    const createAdminRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/slates');
+    expect(createAdminRequest.request.method).toBe('POST');
+    expect(createAdminRequest.request.body).toEqual(slateRequest);
+    createAdminRequest.flush(adminSlateResponse);
+    await expect(createAdmin).resolves.toEqual(adminSlateResponse);
+
+    const updateAdmin = firstValueFrom(service.updateAdminCacicElectionSlate('poll-1', 'slate/1', slateRequest));
+    const updateAdminRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/slates/slate%2F1');
+    expect(updateAdminRequest.request.method).toBe('PUT');
+    expect(updateAdminRequest.request.body).toEqual(slateRequest);
+    updateAdminRequest.flush(adminSlateResponse);
+    await expect(updateAdmin).resolves.toEqual(adminSlateResponse);
+
+    const reject = firstValueFrom(service.rejectCacicElectionSlate('poll-1', 'slate/1', { reason: 'Faltou cargo.' }));
+    const rejectRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/slates/slate%2F1/rejection');
+    expect(rejectRequest.request.method).toBe('PATCH');
+    expect(rejectRequest.request.body).toEqual({ reason: 'Faltou cargo.' });
+    rejectRequest.flush({ ...adminSlateResponse, status: 'rejected', rejectionReason: 'Faltou cargo.' });
+    await expect(reject).resolves.toEqual({ ...adminSlateResponse, status: 'rejected', rejectionReason: 'Faltou cargo.' });
+
+    const enabled = firstValueFrom(service.updateCacicElectionSlateEnabled('poll-1', 'slate/1', { enabled: false }));
+    const enabledRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/slates/slate%2F1/enabled');
+    expect(enabledRequest.request.method).toBe('PATCH');
+    expect(enabledRequest.request.body).toEqual({ enabled: false });
+    enabledRequest.flush({ ...adminSlateResponse, enabled: false });
+    await expect(enabled).resolves.toEqual({ ...adminSlateResponse, enabled: false });
+
+    const remove = firstValueFrom(service.deleteCacicElectionSlate('poll-1', 'slate/1'));
+    const removeRequest = http.expectOne('/api/admin/polls/poll-1/cacic-election/slates/slate%2F1');
+    expect(removeRequest.request.method).toBe('DELETE');
+    removeRequest.flush(null);
+    await expect(remove).resolves.toBeNull();
   });
 
   it('opens credentialed EventSource streams with encoded poll ids and non-negative cursors', () => {

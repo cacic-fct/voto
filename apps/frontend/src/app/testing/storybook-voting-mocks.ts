@@ -7,8 +7,13 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { fakerPT_BR as faker } from '@faker-js/faker';
 import { HttpResponse, delay, http, type RequestHandler } from 'msw';
 import {
+  AdminCacicElectionSlate,
   AuthenticatedUser,
+  CacicElectionSlate,
+  CacicElectionSlateStatus,
   EventManagerEvent,
+  CacicElectionPhase,
+  PollMode,
   POLL_VOTER_ELIGIBILITY_SOURCES,
   POLL_VOTING_STYLES,
   Poll,
@@ -25,7 +30,11 @@ import {
   PollUserResponseState,
   PollVoterEligibilitySource,
   PollVotingStyle,
+  RejectCacicElectionSlateRequest,
+  SubmitCacicElectionSlateRequest,
   SubmitPollResponseRequest,
+  UpdateCacicElectionSlateEnabledRequest,
+  UpdateCacicElectionSlateRequest,
   VOTING_ADMIN_PERMISSIONS,
 } from '@org/voting-contracts';
 
@@ -48,6 +57,27 @@ export type SubmitStoryState = (typeof submitStateOptions)[number];
 
 export const votingStyleControlOptions = [...POLL_VOTING_STYLES];
 export const voterEligibilityControlOptions = [...POLL_VOTER_ELIGIBILITY_SOURCES];
+export const pollModeControlOptions: PollMode[] = ['regular', 'cacicElection'];
+export const cacicElectionPhaseControlOptions: CacicElectionPhase[] = ['slateSubmission', 'election'];
+export const pollStatusControlOptions: PollStatus[] = ['draft', 'published', 'closed'];
+export const mySlateStateOptions = ['nenhuma', 'pendente', 'aprovada', 'rejeitada'] as const;
+export type MySlateStoryState = (typeof mySlateStateOptions)[number];
+
+export const pollModeControlLabels: Record<PollMode, string> = {
+  regular: 'Votação regular',
+  cacicElection: 'Eleições do CACiC',
+};
+
+export const cacicElectionPhaseControlLabels: Record<CacicElectionPhase, string> = {
+  slateSubmission: 'Submissão de chapas',
+  election: 'Eleição',
+};
+
+export const pollStatusControlLabels: Record<PollStatus, string> = {
+  draft: 'Rascunho',
+  published: 'Publicada',
+  closed: 'Encerrada',
+};
 
 export const votingStyleControlLabels: Record<PollVotingStyle, string> = {
   public: 'Público',
@@ -76,6 +106,7 @@ export type VotingStoryState = {
   pollDescription: string;
   pollDetailState: ApiStoryState;
   pollElementCount: number;
+  pollStatus: PollStatus;
   pollTitle: string;
   publicPollCount: number;
   publicPollsState: ApiStoryState;
@@ -83,9 +114,15 @@ export type VotingStoryState = {
   submitState: SubmitStoryState;
   voterEligibilitySource: PollVoterEligibilitySource;
   votingStyle: PollVotingStyle;
+  resultsPublic: boolean;
+  resultsLive: boolean;
   requireVerifiedUnespRole: boolean;
   allowResponseEditing: boolean;
   allowMultipleResponses: boolean;
+  pollMode: PollMode;
+  cacicElectionPhase: CacicElectionPhase;
+  slateCount: number;
+  mySlateState: MySlateStoryState;
 };
 
 const defaultVotingStoryState: VotingStoryState = {
@@ -98,6 +135,7 @@ const defaultVotingStoryState: VotingStoryState = {
   pollDescription: 'Escolha as opções que representam melhor a decisão coletiva.',
   pollDetailState: 'carregado',
   pollElementCount: 5,
+  pollStatus: 'published',
   pollTitle: 'Votação da assembleia geral',
   publicPollCount: 4,
   publicPollsState: 'carregado',
@@ -105,9 +143,15 @@ const defaultVotingStoryState: VotingStoryState = {
   submitState: 'sucesso',
   voterEligibilitySource: 'authenticatedUsers',
   votingStyle: 'secret',
+  resultsPublic: false,
+  resultsLive: false,
   requireVerifiedUnespRole: false,
   allowResponseEditing: false,
   allowMultipleResponses: false,
+  pollMode: 'regular',
+  cacicElectionPhase: 'slateSubmission',
+  slateCount: 3,
+  mySlateState: 'nenhuma',
 };
 
 let votingStoryState = defaultVotingStoryState;
@@ -152,6 +196,28 @@ export const votingMswHandlers: RequestHandler[] = [
   http.get('/api/polls/:id', async ({ params }) =>
     resolvePollState(votingStoryState.pollDetailState, createPoll(String(params['id'] ?? 'poll-story'))),
   ),
+  http.get('/api/polls/:id/results', ({ params }) =>
+    HttpResponse.json<PollResults>(createPollResults(String(params['id'] ?? 'poll-story'))),
+  ),
+  http.get('/api/polls/direct/:directLinkToken/results', ({ params }) =>
+    HttpResponse.json<PollResults>(createPollResults(String(params['directLinkToken'] ?? 'poll-story'))),
+  ),
+  http.get('/api/polls/:id/cacic-election/slates', ({ params }) =>
+    HttpResponse.json<CacicElectionSlate[]>(createCacicElectionSlates(String(params['id'] ?? 'poll-story'))),
+  ),
+  http.get('/api/polls/:id/cacic-election/slates/me', ({ params }) =>
+    HttpResponse.json<AdminCacicElectionSlate | null>(createMyCacicElectionSlate(String(params['id'] ?? 'poll-story'))),
+  ),
+  http.put('/api/polls/:id/cacic-election/slates/me', async ({ params, request }) => {
+    const body = (await request.json()) as SubmitCacicElectionSlateRequest;
+    return HttpResponse.json<CacicElectionSlate>(
+      createCacicElectionSlate(String(params['id'] ?? 'poll-story'), 0, {
+        name: body.name || 'Chapa enviada',
+        status: 'pending',
+        members: body.members,
+      }),
+    );
+  }),
   http.post('/api/polls/:id/responses', async ({ params, request }) => {
     const body = (await request.json()) as SubmitPollResponseRequest;
 
@@ -185,6 +251,60 @@ export const votingMswHandlers: RequestHandler[] = [
   http.get('/api/admin/polls/:id/results', ({ params }) =>
     HttpResponse.json<PollResults>(createPollResults(String(params['id'] ?? 'admin-poll-story'))),
   ),
+  http.get('/api/admin/polls/:id/cacic-election/slates', ({ params }) =>
+    HttpResponse.json<AdminCacicElectionSlate[]>(
+      createCacicElectionSlates(String(params['id'] ?? 'admin-poll-story'), { includePrivateIdentifiers: true }),
+    ),
+  ),
+  http.post('/api/admin/polls/:id/cacic-election/slates', async ({ params, request }) => {
+    const body = (await request.json()) as UpdateCacicElectionSlateRequest;
+    return HttpResponse.json<AdminCacicElectionSlate>(
+      createCacicElectionSlate(String(params['id'] ?? 'admin-poll-story'), 0, {
+        includePrivateIdentifiers: true,
+        name: body.name || 'Chapa administrativa',
+        status: body.status ?? 'approved',
+        enabled: body.enabled ?? true,
+        submissionSource: 'admin',
+        members: body.members,
+      }),
+    );
+  }),
+  http.put('/api/admin/polls/:id/cacic-election/slates/:slateId', async ({ params, request }) => {
+    const body = (await request.json()) as UpdateCacicElectionSlateRequest;
+    return HttpResponse.json<AdminCacicElectionSlate>(
+      createCacicElectionSlate(String(params['id'] ?? 'admin-poll-story'), 0, {
+        includePrivateIdentifiers: true,
+        id: String(params['slateId'] ?? 'slate-1'),
+        name: body.name || 'Chapa atualizada',
+        status: body.status ?? 'approved',
+        enabled: body.enabled ?? true,
+        members: body.members,
+      }),
+    );
+  }),
+  http.patch('/api/admin/polls/:id/cacic-election/slates/:slateId/rejection', async ({ params, request }) => {
+    const body = (await request.json()) as RejectCacicElectionSlateRequest;
+    return HttpResponse.json<AdminCacicElectionSlate>(
+      createCacicElectionSlate(String(params['id'] ?? 'admin-poll-story'), 0, {
+        includePrivateIdentifiers: true,
+        id: String(params['slateId'] ?? 'slate-1'),
+        status: 'rejected',
+        enabled: false,
+        rejectionReason: body.reason || 'Motivo registrado no Storybook.',
+      }),
+    );
+  }),
+  http.patch('/api/admin/polls/:id/cacic-election/slates/:slateId/enabled', async ({ params, request }) => {
+    const body = (await request.json()) as UpdateCacicElectionSlateEnabledRequest;
+    return HttpResponse.json<AdminCacicElectionSlate>(
+      createCacicElectionSlate(String(params['id'] ?? 'admin-poll-story'), 0, {
+        includePrivateIdentifiers: true,
+        id: String(params['slateId'] ?? 'slate-1'),
+        enabled: body.enabled,
+      }),
+    );
+  }),
+  http.delete('/api/admin/polls/:id/cacic-election/slates/:slateId', () => HttpResponse.json(null)),
   http.post('/api/admin/polls/:id/eligibility-enrollments', async ({ request }) => {
     const body = (await request.json()) as { enrollmentNumbers?: string[] };
     return HttpResponse.json<PollEligibilityEnrollmentImportResult>(
@@ -280,7 +400,9 @@ function createPollSummaries(count: number): PollSummary[] {
         id: poll.id,
         title: poll.title,
         description: poll.description,
-        status: index % 3 === 2 ? 'closed' : 'published',
+        status: index === 0 ? poll.status : index % 3 === 2 ? 'closed' : 'published',
+        mode: poll.mode,
+        cacicElectionPhase: poll.cacicElectionPhase,
         createdAt: poll.createdAt,
         updatedAt: poll.updatedAt,
         publishedAt: poll.publishedAt,
@@ -303,6 +425,9 @@ function createPollSummaries(count: number): PollSummary[] {
 function createPoll(id: string, title = votingStoryState.pollTitle, overrides: Partial<Poll> = {}): Poll {
   return withSeed(votingStoryState.seed + id.length, () => {
     const linkedEvent = votingStoryState.includeLinkedEvent ? createEvents(1)[0] : undefined;
+    const mode = overrides.mode ?? votingStoryState.pollMode;
+    const cacicElectionPhase =
+      mode === 'cacicElection' ? overrides.cacicElectionPhase ?? votingStoryState.cacicElectionPhase : undefined;
     const votingStyle = overrides.votingStyle ?? votingStoryState.votingStyle;
     const allowMultipleResponses = overrides.allowMultipleResponses ?? votingStoryState.allowMultipleResponses;
     const allowResponseEditing =
@@ -310,24 +435,42 @@ function createPoll(id: string, title = votingStoryState.pollTitle, overrides: P
       !allowMultipleResponses &&
       (overrides.allowResponseEditing ?? votingStoryState.allowResponseEditing);
 
-    const elements = overrides.elements ?? createPollElements(votingStoryState.pollElementCount);
+    const elements =
+      overrides.elements ??
+      (mode === 'cacicElection' && cacicElectionPhase === 'election'
+        ? createCacicElectionVoteElements(id)
+        : createPollElements(votingStoryState.pollElementCount));
 
     return {
       id,
       title,
       description: overrides.description ?? votingStoryState.pollDescription,
       descriptionImages: coercePollImages(id, (overrides as { descriptionImages?: unknown }).descriptionImages),
-      status: overrides.status ?? 'published',
-      votingStyle,
-      voterEligibilitySource: overrides.voterEligibilitySource ?? votingStoryState.voterEligibilitySource,
-      requireVerifiedUnespRole: overrides.requireVerifiedUnespRole ?? votingStoryState.requireVerifiedUnespRole,
-      directLinkEnabled: overrides.directLinkEnabled ?? false,
+      status: overrides.status ?? votingStoryState.pollStatus,
+      mode,
+      cacicElectionPhase,
+      votingStyle: mode === 'cacicElection' && cacicElectionPhase === 'election' ? 'anonymous' : votingStyle,
+      voterEligibilitySource:
+        mode === 'cacicElection' && cacicElectionPhase === 'election'
+          ? 'enrollmentList'
+          : overrides.voterEligibilitySource ?? votingStoryState.voterEligibilitySource,
+      requireVerifiedUnespRole:
+        mode === 'cacicElection' && cacicElectionPhase === 'election'
+          ? false
+          : overrides.requireVerifiedUnespRole ?? votingStoryState.requireVerifiedUnespRole,
+      directLinkEnabled: mode === 'cacicElection' ? false : overrides.directLinkEnabled ?? false,
       directLinkToken: overrides.directLinkToken,
-      resultsPublic: overrides.resultsPublic ?? false,
-      resultsLive: overrides.resultsLive ?? false,
+      resultsPublic:
+        mode === 'cacicElection'
+          ? cacicElectionPhase === 'election'
+          : overrides.resultsPublic ?? votingStoryState.resultsPublic,
+      resultsLive:
+        mode === 'cacicElection'
+          ? false
+          : overrides.resultsLive ?? votingStoryState.resultsLive,
       allowResponseEditing,
-      allowMultipleResponses,
-      linkedEvent,
+      allowMultipleResponses: mode === 'cacicElection' && cacicElectionPhase === 'election' ? false : allowMultipleResponses,
+      linkedEvent: mode === 'cacicElection' && cacicElectionPhase === 'election' ? undefined : linkedEvent,
       elements: elements.map((element) => ({
         ...element,
         descriptionImages: coercePollImages(id, (element as { descriptionImages?: unknown }).descriptionImages),
@@ -335,6 +478,9 @@ function createPoll(id: string, title = votingStoryState.pollTitle, overrides: P
       createdAt: new Date('2026-06-10T10:00:00.000Z').toISOString(),
       updatedAt: new Date('2026-06-15T18:30:00.000Z').toISOString(),
       publishedAt: new Date('2026-06-15T18:30:00.000Z').toISOString(),
+      visibleFrom: overrides.visibleFrom,
+      votingStartsAt: overrides.votingStartsAt,
+      votingEndsAt: overrides.votingEndsAt,
     };
   });
 }
@@ -449,45 +595,245 @@ function createEligibilityImportResult(createdCount: number): PollEligibilityEnr
   };
 }
 
+type SlateFactoryOptions = {
+  includePrivateIdentifiers?: boolean;
+  id?: string;
+  name?: string;
+  status?: CacicElectionSlateStatus;
+  enabled?: boolean;
+  rejectionReason?: string;
+  submissionSource?: CacicElectionSlate['submissionSource'];
+  members?: SubmitCacicElectionSlateRequest['members'];
+};
+
+function createCacicElectionSlates(
+  pollId: string,
+  options: SlateFactoryOptions & { includePrivateIdentifiers: true },
+): AdminCacicElectionSlate[];
+function createCacicElectionSlates(pollId: string, options?: SlateFactoryOptions): CacicElectionSlate[];
+function createCacicElectionSlates(
+  pollId: string,
+  options: SlateFactoryOptions = {},
+): AdminCacicElectionSlate[] | CacicElectionSlate[] {
+  return Array.from({ length: Math.max(0, votingStoryState.slateCount) }, (_, index) =>
+    createCacicElectionSlate(pollId, index, options),
+  ) as AdminCacicElectionSlate[] | CacicElectionSlate[];
+}
+
+function createMyCacicElectionSlate(pollId: string): AdminCacicElectionSlate | null {
+  if (votingStoryState.mySlateState === 'nenhuma') {
+    return null;
+  }
+
+  const status: CacicElectionSlateStatus =
+    votingStoryState.mySlateState === 'pendente'
+      ? 'pending'
+      : votingStoryState.mySlateState === 'aprovada'
+        ? 'approved'
+        : 'rejected';
+
+  return createCacicElectionSlate(pollId, 0, {
+    includePrivateIdentifiers: true,
+    name: 'Chapa enviada pelo usuário',
+    status,
+    enabled: status !== 'rejected',
+    rejectionReason: status === 'rejected' ? 'A chapa ainda não contempla todos os cargos obrigatórios.' : undefined,
+  });
+}
+
+function createCacicElectionSlate(
+  pollId: string,
+  index: number,
+  options: SlateFactoryOptions & { includePrivateIdentifiers: true },
+): AdminCacicElectionSlate;
+function createCacicElectionSlate(pollId: string, index: number, options?: SlateFactoryOptions): CacicElectionSlate;
+function createCacicElectionSlate(
+  pollId: string,
+  index: number,
+  options: SlateFactoryOptions = {},
+): AdminCacicElectionSlate | CacicElectionSlate {
+  const members = options.members ?? createCacicElectionSlateMembers(index);
+  const publicMembers = members.map((member, memberIndex) => ({
+    id: `${options.id ?? `slate-${index + 1}`}-member-${memberIndex + 1}`,
+    fullName: member.fullName,
+    ...(member.enrollmentNumber ? { enrollmentYear: member.enrollmentNumber.replace(/\D/g, '').slice(0, 2) } : {}),
+    role: member.role,
+    ...(member.customRole ? { customRole: member.customRole } : {}),
+    isRepresentative: member.isRepresentative,
+  }));
+  const base = {
+    id: options.id ?? `slate-${index + 1}`,
+    pollId,
+    name: options.name ?? `Chapa ${['Aurora', 'Horizonte', 'Integração', 'Movimento'][index % 4]}`,
+    status: options.status ?? 'approved',
+    enabled: options.enabled ?? true,
+    ...(options.rejectionReason ? { rejectionReason: options.rejectionReason } : {}),
+    submissionSource: options.submissionSource ?? (index % 3 === 0 ? 'public' : 'admin'),
+    submittedBy: {
+      userId: `user-${index + 1}`,
+      name: faker.person.fullName(),
+      preferredUsername: faker.internet.username().toLowerCase(),
+      email: faker.internet.email().toLowerCase(),
+    },
+    submittedAt: new Date(Date.UTC(2026, 5, 12 + index, 14, 0, 0)).toISOString(),
+    reviewedAt:
+      options.status === 'pending' ? undefined : new Date(Date.UTC(2026, 5, 13 + index, 14, 0, 0)).toISOString(),
+  } satisfies Omit<CacicElectionSlate, 'members'>;
+
+  if (!options.includePrivateIdentifiers) {
+    return {
+      ...base,
+      members: publicMembers,
+    };
+  }
+
+  return {
+    ...base,
+    members: publicMembers.map((member, memberIndex) => ({
+      ...member,
+      ...(members[memberIndex].enrollmentNumber ? { enrollmentNumber: members[memberIndex].enrollmentNumber } : {}),
+      identifierType: members[memberIndex].identifierType,
+      identifierValue: members[memberIndex].identifierValue,
+    })),
+  };
+}
+
+function createCacicElectionSlateMembers(index: number): SubmitCacicElectionSlateRequest['members'] {
+  const names = Array.from({ length: 6 }, () => faker.person.fullName());
+  return [
+    {
+      fullName: names[0],
+      enrollmentNumber: `26${String(index + 1).padStart(6, '0')}`,
+      role: 'president',
+      isRepresentative: true,
+      identifierType: 'email',
+      identifierValue: `presidente-${index + 1}@example.com`,
+    },
+    {
+      fullName: names[1],
+      enrollmentNumber: `25${String(index + 2).padStart(6, '0')}`,
+      role: 'vicePresident',
+      isRepresentative: false,
+      identifierType: 'email',
+      identifierValue: `vice-${index + 1}@example.com`,
+    },
+    {
+      fullName: names[2],
+      enrollmentNumber: `24${String(index + 3).padStart(6, '0')}`,
+      role: 'financialDirector',
+      isRepresentative: false,
+      identifierType: 'phone',
+      identifierValue: `1899999000${index}`,
+    },
+    {
+      fullName: names[3],
+      enrollmentNumber: `23${String(index + 4).padStart(6, '0')}`,
+      role: 'communicationDirector',
+      isRepresentative: false,
+      identifierType: 'email',
+      identifierValue: `comunicacao-${index + 1}@example.com`,
+    },
+    {
+      fullName: names[4],
+      enrollmentNumber: `22${String(index + 5).padStart(6, '0')}`,
+      role: 'eventsDirector',
+      isRepresentative: false,
+      identifierType: 'cpf',
+      identifierValue: `1234567890${index % 10}`,
+    },
+    {
+      fullName: names[5],
+      enrollmentNumber: `21${String(index + 6).padStart(6, '0')}`,
+      role: 'publicRelationsDirector',
+      isRepresentative: false,
+      identifierType: 'email',
+      identifierValue: `relacoes-${index + 1}@example.com`,
+    },
+  ];
+}
+
+function createCacicElectionVoteElements(pollId: string): PollElement[] {
+  return [
+    {
+      id: 'cacic-election-vote',
+      type: 'singleChoice',
+      title: 'Escolha a chapa',
+      description: 'Selecione uma chapa aprovada ou registre voto em branco ou nulo.',
+      required: true,
+      options: [
+        ...createCacicElectionSlates(pollId).map((slate) => ({
+          id: `slate:${slate.id}`,
+          label: slate.name,
+          description: `${slate.members.length} integrantes`,
+        })),
+        {
+          id: 'cacic-election-blank',
+          label: 'Branco',
+          description: 'Registrar voto em branco.',
+        },
+        {
+          id: 'cacic-election-null',
+          label: 'Nulo',
+          description: 'Registrar voto nulo.',
+        },
+      ],
+    },
+  ];
+}
+
 function createPollResults(pollId: string): PollResults {
   const poll = createPoll(pollId);
   const responseCount = Math.max(0, Math.min(36, Math.max(6, votingStoryState.eligibilityEnrollmentCount * 3)));
   const courseCodes = ['12', '34', '56'];
   const roles = ['aluno-graduacao', 'aluno-pos-graduacao', 'docente'];
 
-  return withSeed(votingStoryState.seed + 600, () => ({
-    pollId,
-    anonymous: poll.votingStyle === 'anonymous',
-    responseCount,
-    responses: Array.from({ length: responseCount }, (_, responseIndex) => {
+  return withSeed(votingStoryState.seed + 600, () => {
+    const answersReleased = !(
+      poll.mode === 'cacicElection' &&
+      poll.cacicElectionPhase === 'election' &&
+      poll.status !== 'closed'
+    );
+    const voters = Array.from({ length: responseCount }, (_, responseIndex) => {
       const courseCode = courseCodes[responseIndex % courseCodes.length];
       const enrollmentNumber = `${String(26 - (responseIndex % 5)).padStart(2, '0')}${courseCode}${String(
         responseIndex + 1,
       ).padStart(5, '0')}`;
 
       return {
-        id: `response-${responseIndex + 1}`,
-        submittedAt: new Date(Date.UTC(2026, 5, 18, 12, responseIndex, 0)).toISOString(),
-        voter:
-          poll.votingStyle === 'anonymous'
-            ? undefined
-            : {
-                userId: `user-${responseIndex + 1}`,
-                name: faker.person.fullName(),
-                preferredUsername: faker.internet.username().toLowerCase(),
-                email: faker.internet.email().toLowerCase(),
-                unespRole: roles[responseIndex % roles.length],
-                enrollmentNumber,
-              },
-        answers: poll.elements
-          .filter((element) => element.type !== 'section' && element.type !== 'statement')
-          .map((element) => ({
-            elementId: element.id,
-            value: createResultAnswerValue(element, responseIndex),
-          })),
+        userId: `user-${responseIndex + 1}`,
+        name: faker.person.fullName(),
+        preferredUsername: faker.internet.username().toLowerCase(),
+        email: faker.internet.email().toLowerCase(),
+        unespRole: roles[responseIndex % roles.length],
+        enrollmentNumber,
       };
-    }),
-  }));
+    });
+
+    return {
+      pollId,
+      anonymous: poll.votingStyle === 'anonymous',
+      answersReleased,
+      responseCount,
+      ...(poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election'
+        ? { voterCount: voters.length, voters }
+        : {}),
+      responses: answersReleased
+        ? Array.from({ length: responseCount }, (_, responseIndex) => {
+            return {
+              id: `response-${responseIndex + 1}`,
+              submittedAt: new Date(Date.UTC(2026, 5, 18, 12, responseIndex, 0)).toISOString(),
+              voter: poll.votingStyle === 'anonymous' ? undefined : voters[responseIndex],
+              answers: poll.elements
+                .filter((element) => element.type !== 'section' && element.type !== 'statement')
+                .map((element) => ({
+                  elementId: element.id,
+                  value: createResultAnswerValue(element, responseIndex),
+                })),
+            };
+          })
+        : [],
+    };
+  });
 }
 
 function createResultAnswerValue(element: PollElement, responseIndex: number): PollAnswerValue {

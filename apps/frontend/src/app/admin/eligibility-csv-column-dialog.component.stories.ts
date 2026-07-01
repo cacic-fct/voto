@@ -157,3 +157,9 @@ export const CabecalhosAlternativos: Story = {
     linhas: 4,
   },
 };
+
+export const SemPrevia: Story = {
+  args: {
+    linhas: 0,
+  },
+};

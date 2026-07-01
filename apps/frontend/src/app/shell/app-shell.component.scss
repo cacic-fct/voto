@@ -51,8 +51,7 @@ main {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   overflow: auto hidden;
   border-top: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface) 94%, transparent);
-  backdrop-filter: blur(16px);
+  background: var(--mat-sys-surface-container);
 }
 
 .nav-button {

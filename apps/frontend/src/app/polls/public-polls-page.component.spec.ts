@@ -16,6 +16,7 @@ describe('PublicPollsPageComponent', () => {
       title: 'Eleição CACiC',
       description: 'Escolha a próxima gestão.',
       status: 'published',
+      mode: 'regular',
       createdAt: '2026-06-01T10:00:00.000Z',
       updatedAt: '2026-06-01T10:00:00.000Z',
       publishedAt: '2026-06-01T10:00:00.000Z',
@@ -55,17 +56,60 @@ describe('PublicPollsPageComponent', () => {
   it('should render published polls', () => {
     expect(api.listPublicPolls).toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Eleição CACiC');
-    expect(fixture.nativeElement.textContent).toContain('12 respostas');
+    expect(fixture.nativeElement.textContent).toContain('Sigiloso');
+    expect(fixture.nativeElement.textContent).not.toContain('12 respostas');
+    expect(fixture.nativeElement.textContent).not.toContain('2 itens');
+    expect(fixture.nativeElement.textContent).not.toContain('Usuários autenticados');
+  });
+
+  it('should show vote and results actions for live public results', async () => {
+    TestBed.resetTestingModule();
+    api = {
+      listPublicPolls: vi.fn().mockReturnValue(
+        of([
+          {
+            ...polls[0],
+            resultsPublic: true,
+            resultsLive: true,
+          },
+        ]),
+      ),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [PublicPollsPageComponent],
+      providers: [provideRouter([]), { provide: PollApiService, useValue: api }],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PublicPollsPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Ver resultados');
+    expect(text).toContain('Votar');
   });
 
   it('should label closed, dated, and undated poll statuses', () => {
     const component = fixture.componentInstance as unknown as {
       pollStatusLabel(poll: PollSummary): string;
+      canShowResults(poll: PollSummary): boolean;
     };
 
     expect(component.pollStatusLabel({ ...polls[0], status: 'closed' })).toBe('Encerrada');
     expect(component.pollStatusLabel({ ...polls[0], publishedAt: undefined })).toBe('Publicada');
     expect(component.pollStatusLabel(polls[0])).toContain('Publicada em');
+    expect(component.canShowResults({ ...polls[0], resultsPublic: true, resultsLive: true })).toBe(true);
+    expect(
+      component.canShowResults({
+        ...polls[0],
+        mode: 'cacicElection',
+        cacicElectionPhase: 'election',
+        resultsPublic: true,
+        resultsLive: true,
+      }),
+    ).toBe(false);
   });
 
   it('should show a localized error when public polls fail to load', async () => {

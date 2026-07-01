@@ -12,6 +12,14 @@ import type {
   PollSummary,
   PollUserResponseState,
 } from '@org/voting-contracts';
+import {
+  createAdminSlate,
+  createElectionPoll,
+  createSlate,
+  createSlateRequest,
+  createSlateSubmissionPoll,
+  pollToE2eSummary,
+} from './fixtures/cacic-election';
 
 const now = '2026-06-21T12:00:00.000Z';
 const coveredFrontendRoutes = [
@@ -36,6 +44,7 @@ const voterUser: AuthenticatedUser = {
 
 const pollSummary: PollSummary = {
   id: 'poll-1',
+  mode: 'regular',
   title: 'Eleição CACiC 2026',
   description: 'Escolha a próxima gestão do CACiC.',
   status: 'published',
@@ -116,6 +125,7 @@ const closedPoll: Poll = {
 const closedPollResults: PollResults = {
   pollId: closedPoll.id,
   anonymous: false,
+  answersReleased: true,
   responseCount: 2,
   responses: [
     { id: 'response-1', submittedAt: now, answers: [{ elementId: 'choice', value: 'sim' }] },
@@ -309,6 +319,77 @@ test('opens a direct-link poll route and submits through the direct-link API', a
   });
 });
 
+test('submits a CACiC slate and casts an election vote', async ({ page }) => {
+  const slateSubmissionPoll = createSlateSubmissionPoll();
+  const electionPoll = createElectionPoll();
+  const approvedSlate = createSlate();
+  let submittedSlate: unknown;
+  let submittedVote: unknown;
+
+  await mockAuthenticatedSession(page);
+  await mockPublicPolls(page, {
+    polls: {
+      [slateSubmissionPoll.id]: slateSubmissionPoll,
+      [electionPoll.id]: electionPoll,
+    },
+    summaries: [pollToE2eSummary(slateSubmissionPoll), pollToE2eSummary(electionPoll)],
+  });
+  await page.route(`**/api/polls/${slateSubmissionPoll.id}/cacic-election/slates/me`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: null });
+      return;
+    }
+
+    submittedSlate = route.request().postDataJSON();
+    await route.fulfill({
+      json: createAdminSlate({
+        ...createSlate({ pollId: slateSubmissionPoll.id, status: 'pending' }),
+        members: createAdminSlate().members,
+      }),
+    });
+  });
+  await page.route(`**/api/polls/${electionPoll.id}/cacic-election/slates`, async (route) => {
+    await route.fulfill({ json: [approvedSlate] });
+  });
+  await page.route(`**/api/polls/${electionPoll.id}/responses`, async (route) => {
+    submittedVote = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      json: {
+        id: 'election-response',
+        pollId: electionPoll.id,
+        submittedAt: now,
+        answers: [{ elementId: 'cacic-election-vote', value: 'slate:slate-1' }],
+      } satisfies PollResponse,
+    });
+  });
+
+  await page.goto(`/polls/${slateSubmissionPoll.id}`);
+  await page.getByLabel('Nome da chapa').fill('Chapa Integração');
+  for (const [index, member] of createSlateRequest().members.entries()) {
+    await page.getByLabel('Nome completo').nth(index).fill(member.fullName);
+    await page.getByLabel('Matrícula').nth(index).fill(member.enrollmentNumber ?? '');
+    await page.getByLabel('Identificador').nth(index).fill(member.identifierValue);
+  }
+  await page.getByText('Concordo em não criar contas').click();
+  await page.getByText('O representante da chapa leu').click();
+  await page.getByRole('button', { name: /Enviar chapa/ }).click();
+  await expect(page.getByText('Chapa enviada para revisão.')).toBeVisible();
+
+  expect(submittedSlate).toEqual(createSlateRequest());
+
+  await page.goto(`/polls/${electionPoll.id}`);
+  await expect(page.getByRole('heading', { name: 'Eleições do CACiC' })).toBeVisible();
+  await expect(page.getByText('Ana Presidente')).toBeVisible();
+  await page.getByRole('radio', { name: /Votar em Chapa Integração/ }).click();
+  await page.getByRole('button', { name: /Enviar voto/ }).click();
+
+  await expect(page.getByText('Resposta registrada')).toBeVisible();
+  expect(submittedVote).toEqual({
+    answers: [{ elementId: 'cacic-election-vote', value: 'slate:slate-1' }],
+  });
+});
+
 test('shows public results for a closed poll', async ({ page }) => {
   await mockAuthenticatedSession(page);
   await mockPublicPolls(page, {
@@ -389,6 +470,7 @@ test('updates status, deletes polls, and renders admin results', async ({ page }
     results: {
       pollId: draftPoll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [
         {
@@ -538,7 +620,13 @@ async function mockPublicPolls(page: Page, mocks: PublicPollMocks = {}): Promise
     });
     await page.route(`**/api/polls/${id}/results`, async (route) => {
       await route.fulfill({
-        json: mocks.results?.[id] ?? { pollId: id, anonymous: false, responseCount: 0, responses: [] },
+        json: mocks.results?.[id] ?? {
+          pollId: id,
+          anonymous: false,
+          answersReleased: false,
+          responseCount: 0,
+          responses: [],
+        },
       });
     });
   }
@@ -555,6 +643,7 @@ async function mockPublicPolls(page: Page, mocks: PublicPollMocks = {}): Promise
         json: mocks.directResults?.[token] ?? {
           pollId: definition.id,
           anonymous: false,
+          answersReleased: false,
           responseCount: 0,
           responses: [],
         },
@@ -614,7 +703,13 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
 
   await page.route('**/api/admin/polls/*/results', async (route) => {
     await route.fulfill({
-      json: mocks.results ?? { pollId: currentPoll.id, anonymous: false, responseCount: 0, responses: [] },
+      json: mocks.results ?? {
+        pollId: currentPoll.id,
+        anonymous: false,
+        answersReleased: false,
+        responseCount: 0,
+        responses: [],
+      },
     });
   });
 

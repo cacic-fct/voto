@@ -1,10 +1,12 @@
 import {
+  CacicElectionPhase,
   Poll,
   PollElement,
   PollElementSettings,
   PollElementType,
   PollImage,
   PollLinkedEvent,
+  PollMode,
   PollStatus,
   PollVoterEligibilitySource,
   PollVotingStyle,
@@ -13,8 +15,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import {
+  CacicElectionPhase as DbCacicElectionPhase,
   PollElementType as DbPollElementType,
   PollImagePlacement as DbPollImagePlacement,
+  PollMode as DbPollMode,
   PollStatus as DbPollStatus,
   PollVoterEligibilitySource as DbPollVoterEligibilitySource,
   PollVotingStyle as DbPollVotingStyle,
@@ -48,6 +52,8 @@ export function toContractPoll(poll: PollRecord, options: PollContractOptions = 
     description: poll.description ?? undefined,
     ...(descriptionImages.length > 0 ? { descriptionImages } : {}),
     status: toContractStatus(poll.status),
+    mode: poll.mode ? toContractPollMode(poll.mode) : 'regular',
+    cacicElectionPhase: toContractCacicElectionPhase(poll.cacicElectionPhase ?? null),
     votingStyle: toContractVotingStyle(poll.votingStyle),
     voterEligibilitySource: toContractVoterEligibilitySource(poll.voterEligibilitySource),
     requireVerifiedUnespRole: poll.requireVerifiedUnespRole,
@@ -61,6 +67,9 @@ export function toContractPoll(poll: PollRecord, options: PollContractOptions = 
     createdAt: poll.createdAt.toISOString(),
     updatedAt: poll.updatedAt.toISOString(),
     publishedAt: poll.publishedAt?.toISOString(),
+    visibleFrom: poll.visibleFrom?.toISOString(),
+    votingStartsAt: poll.votingStartsAt?.toISOString(),
+    votingEndsAt: poll.votingEndsAt?.toISOString(),
     elements: poll.elements.map((element) =>
       toContractElement(element, imagesByElementId.get(element.id) ?? [], options),
     ),
@@ -172,6 +181,44 @@ export function toContractStatus(status: DbPollStatus): PollStatus {
       return 'published';
     case DbPollStatus.CLOSED:
       return 'closed';
+  }
+}
+
+export function toDbPollMode(mode: PollMode): DbPollMode {
+  switch (mode) {
+    case 'regular':
+      return DbPollMode.REGULAR;
+    case 'cacicElection':
+      return DbPollMode.CACIC_ELECTION;
+  }
+}
+
+export function toContractPollMode(mode: DbPollMode): PollMode {
+  switch (mode) {
+    case DbPollMode.REGULAR:
+      return 'regular';
+    case DbPollMode.CACIC_ELECTION:
+      return 'cacicElection';
+  }
+}
+
+export function toDbCacicElectionPhase(phase: CacicElectionPhase): DbCacicElectionPhase {
+  switch (phase) {
+    case 'slateSubmission':
+      return DbCacicElectionPhase.SLATE_SUBMISSION;
+    case 'election':
+      return DbCacicElectionPhase.ELECTION;
+  }
+}
+
+export function toContractCacicElectionPhase(phase: DbCacicElectionPhase | null): CacicElectionPhase | undefined {
+  switch (phase) {
+    case DbCacicElectionPhase.SLATE_SUBMISSION:
+      return 'slateSubmission';
+    case DbCacicElectionPhase.ELECTION:
+      return 'election';
+    case null:
+      return undefined;
   }
 }
 

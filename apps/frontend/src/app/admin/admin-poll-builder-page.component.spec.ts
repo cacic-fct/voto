@@ -30,6 +30,7 @@ describe('AdminPollBuilderPageComponent', () => {
     | 'listLinkableEvents'
 	    | 'getAdminPoll'
 	    | 'getAdminPollResults'
+	    | 'exportCacicElectionVoterEnrollments'
 	    | 'openAdminPollResultsEvents'
 	    | 'parseResultsDelta'
 	    | 'listPollEligibilityEnrollments'
@@ -37,6 +38,12 @@ describe('AdminPollBuilderPageComponent', () => {
 	    | 'importPollEligibilityEnrollments'
 	    | 'deletePollEligibilityEnrollment'
 	    | 'clearPollEligibilityEnrollments'
+	    | 'listAdminCacicElectionSlates'
+	    | 'createAdminCacicElectionSlate'
+	    | 'updateAdminCacicElectionSlate'
+	    | 'rejectCacicElectionSlate'
+	    | 'updateCacicElectionSlateEnabled'
+	    | 'deleteCacicElectionSlate'
 	    | 'createPoll'
 	    | 'updatePoll'
 	    | 'uploadPollImage'
@@ -60,6 +67,7 @@ describe('AdminPollBuilderPageComponent', () => {
     title: 'Assembleia CACiC',
     description: 'Votação administrativa.',
     status: 'draft',
+    mode: 'regular',
     createdAt: '2026-06-01T10:00:00.000Z',
     updatedAt: '2026-06-01T10:00:00.000Z',
     votingStyle: 'secret',
@@ -95,10 +103,12 @@ describe('AdminPollBuilderPageComponent', () => {
         of({
           pollId: poll.id,
           anonymous: false,
+          answersReleased: true,
           responseCount: 0,
           responses: [],
         }),
       ),
+      exportCacicElectionVoterEnrollments: vi.fn().mockReturnValue(of(new Blob(['261200001']))),
       openAdminPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
       listPollEligibilityEnrollments: vi.fn().mockReturnValue(of({ entries: [eligibilityEntry], totalCount: 1 })),
@@ -110,6 +120,12 @@ describe('AdminPollBuilderPageComponent', () => {
       ),
       deletePollEligibilityEnrollment: vi.fn().mockReturnValue(of(undefined)),
       clearPollEligibilityEnrollments: vi.fn().mockReturnValue(of({ entries: [], totalCount: 0 })),
+      listAdminCacicElectionSlates: vi.fn().mockReturnValue(of([])),
+      createAdminCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      updateAdminCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      rejectCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      updateCacicElectionSlateEnabled: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      deleteCacicElectionSlate: vi.fn().mockReturnValue(of(undefined)),
       createPoll: vi.fn().mockReturnValue(of(poll)),
       updatePoll: vi.fn().mockReturnValue(of(poll)),
       uploadPollImage: vi.fn().mockReturnValue(
@@ -158,7 +174,7 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(api.listLinkableEvents).toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Área restrita');
     expect(fixture.nativeElement.textContent).toContain('Assembleia CACiC');
-    expect(fixture.nativeElement.textContent).toContain('Vincular votação à evento');
+    expect(fixture.nativeElement.textContent).toContain('Vincular votação a um evento');
   });
 
 	  it('should save a new poll draft', async () => {
@@ -174,6 +190,8 @@ describe('AdminPollBuilderPageComponent', () => {
       description: '',
       descriptionImages: undefined,
       status: 'draft',
+      mode: 'regular',
+      cacicElectionPhase: undefined,
       votingStyle: 'secret',
       voterEligibilitySource: 'authenticatedUsers',
       requireVerifiedUnespRole: false,
@@ -182,6 +200,9 @@ describe('AdminPollBuilderPageComponent', () => {
       resultsLive: false,
       allowResponseEditing: false,
       allowMultipleResponses: false,
+      visibleFrom: undefined,
+      votingStartsAt: undefined,
+      votingEndsAt: undefined,
       linkedEventId: undefined,
       elements: [],
 	    });
@@ -224,6 +245,46 @@ describe('AdminPollBuilderPageComponent', () => {
     await component.addManualEnrollmentNumbers();
 
     expect(snackBar.open).toHaveBeenCalledWith('Informe pelo menos uma matrícula.', 'OK', { duration: 3000 });
+  });
+
+  it('should download voter enrollment numbers for closed CACiC elections', async () => {
+    const click = vi.fn();
+    const createObjectUrl = vi.fn().mockReturnValue('blob:matriculas');
+    const revokeObjectUrl = vi.fn();
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue({
+      click,
+      download: '',
+      href: '',
+    } as unknown as HTMLAnchorElement);
+    vi.stubGlobal('URL', {
+      ...globalThis.URL,
+      createObjectURL: createObjectUrl,
+      revokeObjectURL: revokeObjectUrl,
+    });
+    const blob = new Blob(['261200001\n261200002'], { type: 'text/plain' });
+    vi.mocked(api.exportCacicElectionVoterEnrollments).mockReturnValueOnce(of(blob));
+    const component = fixture.componentInstance as unknown as {
+      builder: PollBuilderDraftService;
+      canExportCacicElectionVoters(): boolean;
+      exportCacicElectionVoterEnrollments(): Promise<void>;
+    };
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      status: 'closed',
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+    });
+
+    expect(component.canExportCacicElectionVoters()).toBe(true);
+    await component.exportCacicElectionVoterEnrollments();
+
+    expect(api.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith('poll-1');
+    expect(createObjectUrl).toHaveBeenCalledWith(blob);
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:matriculas');
+    expect(snackBar.open).toHaveBeenCalledWith('Arquivo de matrículas gerado.', 'OK', { duration: 2500 });
+    createElement.mockRestore();
   });
 
   it('should import CSV eligibility files through the selected header', async () => {
@@ -352,6 +413,7 @@ describe('AdminPollBuilderPageComponent', () => {
     component.results.set({
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [
         {
@@ -382,7 +444,7 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00' })).toContain('09:00 - 09:30');
     expect(answerValueLabel(choiceElement, undefined)).toBe('Sem resposta');
     expect(component.responseVoterLabel({ id: 'empty', submittedAt: '', answers: [] })).toBe('Identidade não disponível');
-    expect(component.peopleLabel({ ...eligibilityEntry, people: [] })).toBe('Nenhuma pessoa encontrada');
+    expect(component.peopleLabel({ ...eligibilityEntry, people: [] })).toBe('Nenhum usuário encontrado');
     expect(component.peopleLabel(eligibilityEntry)).toBe('Ana Souza');
     expect(component.eventDateLabel(event)).toContain('16/06/2026');
     expect(component.voterRows()[0]).toMatchObject({
@@ -438,13 +500,14 @@ describe('AdminPollBuilderPageComponent', () => {
     component.linkableEvents.set([]);
     expect(component.eventOptions()[0]).toMatchObject({ id: 'archived-event', shouldCollectAttendance: false });
 
-    component.results.set({ pollId: poll.id, anonymous: false, responseCount: 0, responses: [] });
+    component.results.set({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] });
     component.selectedIndividualResponseId.set('missing');
     expect(component.selectedIndividualResponse()).toBeNull();
     expect(component.selectedIndividualAnswers()).toEqual([]);
     component.results.set({
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [{ id: 'anonymous-response', submittedAt: '2026-06-18T12:00:00.000Z', answers: [] }],
     });
@@ -453,6 +516,7 @@ describe('AdminPollBuilderPageComponent', () => {
     component.results.set({
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [
         {
@@ -518,6 +582,7 @@ describe('AdminPollBuilderPageComponent', () => {
     const initialResults: PollResults = {
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [{ id: 'response-1', submittedAt: '2026-06-18T12:00:00.000Z', answers: [] }],
     };
@@ -629,6 +694,7 @@ describe('AdminPollBuilderPageComponent', () => {
     component.results.set({
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [
         {
@@ -800,7 +866,7 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(snackBar.open).toHaveBeenCalledWith('Não foi possível carregar os resultados.', 'OK', { duration: 3000 });
 
     vi.mocked(api.getAdminPollResults).mockReturnValueOnce(
-      of({ pollId: 'poll-1', anonymous: false, responseCount: 0, responses: [] }),
+      of({ pollId: 'poll-1', anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
     );
     component.isBrowser = false;
     await component.loadResults();
@@ -809,7 +875,7 @@ describe('AdminPollBuilderPageComponent', () => {
     component.results.set(null);
     component.applyResultsDelta({ pollId: 'poll-1', responseCount: 1, responses: [] });
     expect(component.results()).toBeNull();
-    component.results.set({ pollId: 'poll-1', anonymous: false, responseCount: 1, responses: [] });
+    component.results.set({ pollId: 'poll-1', anonymous: false, answersReleased: true, responseCount: 1, responses: [] });
     component.applyResultsDelta({ pollId: 'other', responseCount: 2, responses: [] });
     expect(component.results()?.responseCount).toBe(1);
 

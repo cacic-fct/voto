@@ -5,6 +5,7 @@ import { workspaceRoot } from '@nx/devkit';
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
 const startServers = process.env['E2E_START_SERVERS'] === 'true';
+const webServerCommand = process.env['E2E_WEB_SERVER_COMMAND'] || 'bun nx run frontend:serve';
 
 /**
  * Read environment variables from file.
@@ -26,7 +27,7 @@ export default defineConfig({
   /* Services are expected to be running already in local development. */
   webServer: startServers
     ? {
-        command: 'bun nx run frontend:serve',
+        command: webServerCommand,
         url: baseURL,
         reuseExistingServer: true,
         cwd: workspaceRoot,

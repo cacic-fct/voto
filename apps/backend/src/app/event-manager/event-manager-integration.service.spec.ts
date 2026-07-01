@@ -1,5 +1,4 @@
 import { ServiceUnavailableException } from '@nestjs/common';
-import { EVENT_MANAGER_M2M_VOTING_ROUTES } from '@cacic-fct/event-manager-m2m-contracts';
 import axios from 'axios';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
 import { EventManagerIntegrationService } from './event-manager-integration.service';
@@ -129,70 +128,4 @@ describe('EventManagerIntegrationService', () => {
     );
   });
 
-  it('deduplicates enrollment lookup input and batches people lookup requests', async () => {
-    const firstBatch = Array.from({ length: 500 }, (_, index) => `2024${String(index).padStart(4, '0')}`);
-    const input = [' ', ...firstBatch, firstBatch[0], '20249999'];
-    mockedAxios.post
-      .mockResolvedValueOnce({
-        data: {
-          people: [{ enrollmentNumber: ' 20240000 ', name: ' Ada ', email: ' ada@example.com ' }],
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          people: [{ enrollmentNumber: '20249999', name: 'Grace', email: '' }],
-        },
-      });
-
-    await expect(createService().lookupPeopleByEnrollmentNumbers(input)).resolves.toEqual([
-      { enrollmentNumber: '20240000', name: 'Ada', email: 'ada@example.com' },
-      { enrollmentNumber: '20249999', name: 'Grace', email: null },
-    ]);
-
-    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
-    expect((mockedAxios.post.mock.calls[0][1] as { enrollmentNumbers: string[] }).enrollmentNumbers).toHaveLength(500);
-    expect((mockedAxios.post.mock.calls[1][1] as { enrollmentNumbers: string[] }).enrollmentNumbers).toEqual(['20249999']);
-  });
-
-  it('falls back to the built-in people lookup route when the contract helper is unavailable', async () => {
-    const routes = EVENT_MANAGER_M2M_VOTING_ROUTES as unknown as {
-      peopleLookup?: () => string;
-    };
-    const originalPeopleLookup = routes.peopleLookup;
-    delete routes.peopleLookup;
-    mockedAxios.post.mockResolvedValueOnce({ data: { people: [] } });
-
-    try {
-      await expect(createService().lookupPeopleByEnrollmentNumbers(['20240001'])).resolves.toEqual([]);
-    } finally {
-      routes.peopleLookup = originalPeopleLookup;
-    }
-
-    expect(mockedAxios.post.mock.calls[0][0]).toBe(
-      'https://events.example/api/internal/voting/people/lookup',
-    );
-  });
-
-  it('short-circuits empty people lookups and rejects invalid lookup responses', async () => {
-    await expect(createService().lookupPeopleByEnrollmentNumbers([' ', ''])).resolves.toEqual([]);
-    expect(mockedAxios.post).not.toHaveBeenCalled();
-
-    mockedAxios.post.mockResolvedValueOnce({ data: { people: 'invalid' } });
-    await expect(createService().lookupPeopleByEnrollmentNumbers(['20240001'])).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-
-    mockedAxios.post.mockResolvedValueOnce({ data: { people: [null] } });
-    await expect(createService().lookupPeopleByEnrollmentNumbers(['20240001'])).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-  });
-
-  it('wraps people lookup failures', async () => {
-    mockedAxios.post.mockRejectedValue(new Error('network'));
-
-    await expect(createService().lookupPeopleByEnrollmentNumbers(['20240001'])).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-  });
 });

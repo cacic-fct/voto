@@ -32,6 +32,8 @@ import { PollImage } from '@org/voting-contracts';
 
     .description-text {
       margin: 0;
+      overflow-wrap: anywhere;
+      text-wrap: pretty;
       white-space: pre-line;
     }
 

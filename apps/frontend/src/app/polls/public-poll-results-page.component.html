@@ -1,0 +1,164 @@
+<section class="page-stack">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  @if (poll(); as currentPoll) {
+    <header class="page-header">
+      <a matIconButton [routerLink]="backLink()" aria-label="Voltar para a votação">
+        <mat-icon>arrow_back</mat-icon>
+      </a>
+      <div>
+        <h1>Resultados de {{ currentPoll.title }}</h1>
+        <p>
+          {{ votingStylePublicResultsDescription(currentPoll.votingStyle) }}
+        </p>
+      </div>
+    </header>
+
+    @if (results(); as currentResults) {
+      <p class="result-count">{{ voteCountText(currentResults.responseCount) }}</p>
+
+      @if (!currentResults.answersReleased) {
+        <mat-card appearance="outlined" class="notice-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>lock_clock</mat-icon>
+            <mat-card-title>Respostas ainda não liberadas</mat-card-title>
+            <mat-card-subtitle>
+              O resumo ficará disponível quando a votação permitir a publicação.
+            </mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      } @else if (currentResults.responseCount === 0) {
+        <mat-card appearance="outlined" class="notice-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>inbox</mat-icon>
+            <mat-card-title>Nenhuma resposta registrada</mat-card-title>
+            <mat-card-subtitle>
+              Os resultados aparecerão aqui assim que houver respostas liberadas.
+            </mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      } @else {
+        <section class="result-section" aria-labelledby="summary-title">
+          <div class="section-heading">
+            <h2 id="summary-title">Resumo por pergunta</h2>
+            <p>Contagens calculadas a partir das respostas liberadas ao público.</p>
+          </div>
+
+          <div class="question-result-list">
+            @for (summary of questionSummaries(); track summary.element.id) {
+              <mat-card appearance="outlined" class="question-result-card">
+                <mat-card-header>
+                  <mat-icon mat-card-avatar>bar_chart</mat-icon>
+                  <mat-card-title>{{ summary.element.title }}</mat-card-title>
+                  <mat-card-subtitle>{{ summary.answeredCount }} respostas</mat-card-subtitle>
+                </mat-card-header>
+
+                <mat-card-content>
+                  @if (summary.buckets.length > 0) {
+                    <div class="result-bucket-list">
+                      @for (bucket of summary.buckets; track bucket.label) {
+                        <div class="result-bucket">
+                          <div>
+                            <span>{{ bucket.label }}</span>
+                            <strong>{{ bucket.count }}</strong>
+                          </div>
+                          <div class="result-bar-track" aria-hidden="true">
+                            <span
+                              [style.width.%]="
+                                resultBucketPercent(summary, bucket)
+                              "
+                            ></span>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  } @else if (summary.textAnswers.length > 0) {
+                    <div class="public-text-answers">
+                      @for (answer of summary.textAnswers; track $index) {
+                        <blockquote>{{ answer }}</blockquote>
+                      }
+                    </div>
+                  } @else if (
+                    (summary.element.type === 'shortText' ||
+                      summary.element.type === 'longText') &&
+                    summary.answeredCount > 0
+                  ) {
+                    <p class="empty-note">
+                      Respostas textuais individuais ficam ocultas neste estilo.
+                    </p>
+                  } @else {
+                    <p class="empty-note">
+                      Nenhuma resposta para esta pergunta.
+                    </p>
+                  }
+                </mat-card-content>
+              </mat-card>
+            }
+          </div>
+        </section>
+
+        @if (canShowParticipants()) {
+          <section class="result-section" aria-labelledby="participants-title">
+            <div class="section-heading">
+              <h2 id="participants-title">Participantes</h2>
+              <p>Lista pública de pessoas com participação registrada.</p>
+            </div>
+
+            <mat-chip-set aria-label="Participantes da votação">
+              @for (voter of currentResults.voters ?? []; track voter.userId) {
+                <mat-chip>
+                  {{ voter.name || voter.preferredUsername || voter.email || voter.userId }}
+                </mat-chip>
+              }
+            </mat-chip-set>
+          </section>
+        }
+
+        @if (canShowIndividualResponses()) {
+          <section class="result-section" aria-labelledby="responses-title">
+            <div class="section-heading">
+              <h2 id="responses-title">Respostas individuais</h2>
+              <p>Detalhamento liberado para votações públicas.</p>
+            </div>
+
+            <div class="individual-response-list">
+              @for (
+                response of currentResults.responses;
+                track response.id;
+                let responseIndex = $index
+              ) {
+                <mat-card appearance="outlined" class="individual-response-card">
+                  <mat-card-header>
+                    <mat-icon mat-card-avatar>article</mat-icon>
+                    <mat-card-title>{{
+                      responseLabel(response, responseIndex)
+                    }}</mat-card-title>
+                    <mat-card-subtitle>{{ responseSubtitle(response) }}</mat-card-subtitle>
+                  </mat-card-header>
+                  <mat-card-content>
+                    <dl>
+                      @for (row of responseAnswerRows(response); track row.question) {
+                        <div>
+                          <dt>{{ row.question }}</dt>
+                          <dd>{{ row.value }}</dd>
+                        </div>
+                      }
+                    </dl>
+                  </mat-card-content>
+                </mat-card>
+              }
+            </div>
+          </section>
+        }
+      }
+    }
+  }
+
+  @if (error()) {
+    <mat-card appearance="outlined" class="notice-card">
+      <mat-card-content>{{ error() }}</mat-card-content>
+    </mat-card>
+  }
+</section>

@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   AddPollEligibilityEnrollmentsRequest,
+  AdminCacicElectionSlate,
+  CacicElectionSlate,
   EventManagerEvent,
   ImportPollEligibilityEnrollmentsRequest,
   Poll,
@@ -14,8 +16,12 @@ import {
   PollStatus,
   PollSummary,
   PollUserResponseState,
+  RejectCacicElectionSlateRequest,
   SavePollRequest,
+  SubmitCacicElectionSlateRequest,
   SubmitPollResponseRequest,
+  UpdateCacicElectionSlateEnabledRequest,
+  UpdateCacicElectionSlateRequest,
 } from '@org/voting-contracts';
 import { Observable } from 'rxjs';
 
@@ -48,6 +54,21 @@ export class PollApiService {
 
   getMyPollResponse(id: string): Observable<PollUserResponseState> {
     return this.http.get<PollUserResponseState>(`/api/polls/${id}/responses/me`);
+  }
+
+  listPublicCacicElectionSlates(id: string): Observable<CacicElectionSlate[]> {
+    return this.http.get<CacicElectionSlate[]>(`/api/polls/${id}/cacic-election/slates`);
+  }
+
+  getMyCacicElectionSlate(id: string): Observable<AdminCacicElectionSlate | null> {
+    return this.http.get<AdminCacicElectionSlate | null>(`/api/polls/${id}/cacic-election/slates/me`);
+  }
+
+  submitCacicElectionSlate(
+    id: string,
+    request: SubmitCacicElectionSlateRequest,
+  ): Observable<CacicElectionSlate> {
+    return this.http.put<CacicElectionSlate>(`/api/polls/${id}/cacic-election/slates/me`, request);
   }
 
   getMyDirectLinkPollResponse(directLinkToken: string): Observable<PollUserResponseState> {
@@ -104,6 +125,62 @@ export class PollApiService {
 
   getAdminPollResults(id: string): Observable<PollResults> {
     return this.http.get<PollResults>(`/api/admin/polls/${id}/results`);
+  }
+
+  exportCacicElectionVoterEnrollments(id: string): Observable<Blob> {
+    return this.http.get(`/api/admin/polls/${id}/cacic-election/voter-enrollments.txt`, {
+      responseType: 'blob',
+    });
+  }
+
+  listAdminCacicElectionSlates(id: string): Observable<AdminCacicElectionSlate[]> {
+    return this.http.get<AdminCacicElectionSlate[]>(`/api/admin/polls/${id}/cacic-election/slates`);
+  }
+
+  createAdminCacicElectionSlate(
+    id: string,
+    request: UpdateCacicElectionSlateRequest,
+  ): Observable<AdminCacicElectionSlate> {
+    return this.http.post<AdminCacicElectionSlate>(`/api/admin/polls/${id}/cacic-election/slates`, request);
+  }
+
+  updateAdminCacicElectionSlate(
+    id: string,
+    slateId: string,
+    request: UpdateCacicElectionSlateRequest,
+  ): Observable<AdminCacicElectionSlate> {
+    return this.http.put<AdminCacicElectionSlate>(
+      `/api/admin/polls/${id}/cacic-election/slates/${encodeURIComponent(slateId)}`,
+      request,
+    );
+  }
+
+  rejectCacicElectionSlate(
+    id: string,
+    slateId: string,
+    request: RejectCacicElectionSlateRequest,
+  ): Observable<AdminCacicElectionSlate> {
+    return this.http.patch<AdminCacicElectionSlate>(
+      `/api/admin/polls/${id}/cacic-election/slates/${encodeURIComponent(slateId)}/rejection`,
+      request,
+    );
+  }
+
+  updateCacicElectionSlateEnabled(
+    id: string,
+    slateId: string,
+    request: UpdateCacicElectionSlateEnabledRequest,
+  ): Observable<AdminCacicElectionSlate> {
+    return this.http.patch<AdminCacicElectionSlate>(
+      `/api/admin/polls/${id}/cacic-election/slates/${encodeURIComponent(slateId)}/enabled`,
+      request,
+    );
+  }
+
+  deleteCacicElectionSlate(id: string, slateId: string): Observable<void> {
+    return this.http.delete<void>(
+      `/api/admin/polls/${id}/cacic-election/slates/${encodeURIComponent(slateId)}`,
+    );
   }
 
   getPublicPollResults(id: string): Observable<PollResults> {

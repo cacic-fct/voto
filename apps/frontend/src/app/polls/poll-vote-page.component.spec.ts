@@ -2,7 +2,15 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { Poll, PollElement, PollResponse, PollResults } from '@org/voting-contracts';
+import {
+  AdminCacicElectionSlate,
+  CacicElectionSlate,
+  Poll,
+  PollElement,
+  PollResponse,
+  PollResults,
+  SubmitCacicElectionSlateRequest,
+} from '@org/voting-contracts';
 import { of, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from './poll-api.service';
@@ -19,6 +27,9 @@ describe('PollVotePageComponent', () => {
     | 'openPublicPollResultsEvents'
     | 'parseResultsDelta'
     | 'submitResponse'
+    | 'listPublicCacicElectionSlates'
+    | 'getMyCacicElectionSlate'
+    | 'submitCacicElectionSlate'
   >;
 
   const poll: Poll = {
@@ -26,6 +37,7 @@ describe('PollVotePageComponent', () => {
     title: 'Eleição CACiC',
     description: 'Escolha uma opção.',
     status: 'published',
+    mode: 'regular',
     votingStyle: 'secret',
     voterEligibilitySource: 'authenticatedUsers',
     requireVerifiedUnespRole: false,
@@ -70,6 +82,7 @@ describe('PollVotePageComponent', () => {
         of({
           pollId: poll.id,
           anonymous: false,
+          answersReleased: true,
           responseCount: 0,
           responses: [],
         }),
@@ -77,6 +90,9 @@ describe('PollVotePageComponent', () => {
       openPublicPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
       submitResponse: vi.fn().mockReturnValue(of(response)),
+      listPublicCacicElectionSlates: vi.fn().mockReturnValue(of([])),
+      getMyCacicElectionSlate: vi.fn().mockReturnValue(of(null)),
+      submitCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
     };
 
     await TestBed.configureTestingModule({
@@ -110,6 +126,88 @@ describe('PollVotePageComponent', () => {
   it('should load the selected poll', () => {
     expect(api.getPublicPoll).toHaveBeenCalledWith('poll-1');
     expect(fixture.nativeElement.textContent).toContain('Eleição CACiC');
+  });
+
+  it('should load and submit CACiC election slates during slate submission', async () => {
+    const component = fixture.componentInstance as unknown as {
+      slates: { (): CacicElectionSlate[] };
+      mySlate: { (): AdminCacicElectionSlate | null };
+      savingSlate: { (): boolean };
+      error: { (): string | null };
+      loadCacicElectionSlates(poll: Poll): Promise<void>;
+      loadMyCacicElectionSlate(poll: Poll): Promise<void>;
+      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
+      memberEnrollmentYearLabel(member: CacicElectionSlate['members'][number]): string;
+      slateStatusLabel(status: CacicElectionSlate['status']): string;
+      slateRoleLabel(role: CacicElectionSlate['members'][number]['role'], customRole?: string): string;
+    };
+    const slatePoll: Poll = {
+      ...poll,
+      mode: 'cacicElection',
+      cacicElectionPhase: 'slateSubmission',
+    };
+    const publicSlate: CacicElectionSlate = {
+      id: 'slate-1',
+      pollId: poll.id,
+      name: 'Chapa Aurora',
+      status: 'approved',
+      enabled: true,
+      submissionSource: 'public',
+      submittedAt: '2026-06-16T10:00:00.000Z',
+      members: [
+        {
+          id: 'member-1',
+          fullName: 'Ada Lovelace',
+          role: 'president',
+          isRepresentative: true,
+        },
+      ],
+    };
+    const mySlate: AdminCacicElectionSlate = {
+      ...publicSlate,
+      status: 'rejected',
+      rejectionReason: 'Faltou um cargo obrigatório.',
+      members: [
+        {
+          ...publicSlate.members[0],
+          identifierType: 'email',
+          identifierValue: 'ada@example.com',
+        },
+      ],
+    };
+    const request: SubmitCacicElectionSlateRequest = {
+      name: 'Chapa Aurora',
+      members: [
+        {
+          fullName: 'Ada Lovelace',
+          role: 'president',
+          isRepresentative: true,
+          identifierType: 'email',
+          identifierValue: 'ada@example.com',
+        },
+      ],
+    };
+
+    vi.mocked(api.getMyCacicElectionSlate)
+      .mockReturnValueOnce(of(mySlate))
+      .mockReturnValueOnce(of(null));
+
+    await component.loadCacicElectionSlates(slatePoll);
+    await component.loadMyCacicElectionSlate(slatePoll);
+
+    expect(component.slates()).toEqual([]);
+    expect(component.mySlate()).toEqual(mySlate);
+    expect(component.memberEnrollmentYearLabel({ ...publicSlate.members[0], enrollmentYear: '26' })).toBe('2026');
+    expect(component.slateStatusLabel('rejected')).toBe('Rejeitada');
+    expect(component.slateRoleLabel('other', 'Diretoria de Projetos')).toBe('Diretoria de Projetos');
+
+    await component.submitSlate(slatePoll, request);
+
+    expect(api.submitCacicElectionSlate).toHaveBeenCalledWith(poll.id, request);
+    expect(api.listPublicCacicElectionSlates).not.toHaveBeenCalled();
+    expect(api.getMyCacicElectionSlate).toHaveBeenCalledTimes(2);
+    expect(component.savingSlate()).toBe(false);
+    expect(component.error()).toBeNull();
   });
 
   it('should submit answers', async () => {
@@ -449,6 +547,7 @@ describe('PollVotePageComponent', () => {
     component.results.set({
       pollId: resultPoll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 2,
       responses: [
         {
@@ -542,6 +641,7 @@ describe('PollVotePageComponent', () => {
     const initialResults: PollResults = {
       pollId: poll.id,
       anonymous: false,
+      answersReleased: true,
       responseCount: 1,
       responses: [{ id: 'response-1', submittedAt: '2026-06-16T10:00:00.000Z', answers: [] }],
     };
@@ -575,7 +675,7 @@ describe('PollVotePageComponent', () => {
     };
     component.isBrowser = false;
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
-      of({ pollId: poll.id, anonymous: false, responseCount: 0, responses: [] }),
+      of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
     );
 
     await component.loadPublicResults({ ...poll, resultsPublic: true, resultsLive: true });
@@ -730,17 +830,17 @@ describe('PollVotePageComponent', () => {
     await component.loadUserResponseState(poll);
     expect(component.responseState()).toMatchObject({ hasSubmitted: false });
 
-    component.results.set({ pollId: poll.id, anonymous: false, responseCount: 1, responses: [] });
+    component.results.set({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 1, responses: [] });
     component.applyResultsDelta({ pollId: 'other', responseCount: 2, responses: [] });
     expect(component.results()?.responseCount).toBe(1);
 
     vi.mocked(api.submitResponse).mockReturnValueOnce(of(response));
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
-      of({ pollId: poll.id, anonymous: false, responseCount: 1, responses: [] }),
+      of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 1, responses: [] }),
     );
     component.results.set(null);
     await component.submit({ ...poll, resultsPublic: true, resultsLive: true });
-    expect(api.getPublicPollResults).toHaveBeenCalledWith(poll.id);
+    expect(api.getPublicPollResults).not.toHaveBeenCalledWith(poll.id);
   });
 
   it('should expose 401 and generic submit error messages', async () => {

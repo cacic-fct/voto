@@ -64,6 +64,22 @@ export type PollStatus = 'draft' | 'published' | 'closed';
 
 export const POLL_STATUSES = ['draft', 'published', 'closed'] as const;
 
+export type PollMode = 'regular' | 'cacicElection';
+
+export const POLL_MODES = ['regular', 'cacicElection'] as const;
+
+export type CacicElectionPhase = 'slateSubmission' | 'election';
+
+export const CACIC_ELECTION_PHASES = ['slateSubmission', 'election'] as const;
+
+export const CACIC_ELECTION_SLATE_FORM_ELEMENT_ID = 'cacic-election-slate-form';
+
+export const CACIC_ELECTION_VOTE_ELEMENT_ID = 'cacic-election-vote';
+
+export const CACIC_ELECTION_BLANK_OPTION_ID = 'cacic-election-blank';
+
+export const CACIC_ELECTION_NULL_OPTION_ID = 'cacic-election-null';
+
 export type PollVotingStyle = 'public' | 'partiallySecret' | 'secret' | 'anonymous';
 
 export const POLL_VOTING_STYLES = ['public', 'partiallySecret', 'secret', 'anonymous'] as const;
@@ -124,6 +140,8 @@ export type Poll = {
   title: string;
   description?: string;
   status: PollStatus;
+  mode: PollMode;
+  cacicElectionPhase?: CacicElectionPhase;
   votingStyle: PollVotingStyle;
   voterEligibilitySource: PollVoterEligibilitySource;
   requireVerifiedUnespRole: boolean;
@@ -139,6 +157,9 @@ export type Poll = {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+  visibleFrom?: string | null;
+  votingStartsAt?: string | null;
+  votingEndsAt?: string | null;
 };
 
 export type PollSummary = Pick<
@@ -147,9 +168,14 @@ export type PollSummary = Pick<
   | 'title'
   | 'description'
   | 'status'
+  | 'mode'
+  | 'cacicElectionPhase'
   | 'createdAt'
   | 'updatedAt'
   | 'publishedAt'
+  | 'visibleFrom'
+  | 'votingStartsAt'
+  | 'votingEndsAt'
   | 'linkedEvent'
   | 'votingStyle'
   | 'voterEligibilitySource'
@@ -169,6 +195,8 @@ export type SavePollRequest = {
   description?: string;
   descriptionImages?: PollImageReference[];
   status?: PollStatus;
+  mode?: PollMode;
+  cacicElectionPhase?: CacicElectionPhase;
   votingStyle?: PollVotingStyle;
   voterEligibilitySource?: PollVoterEligibilitySource;
   requireVerifiedUnespRole?: boolean;
@@ -177,6 +205,9 @@ export type SavePollRequest = {
   resultsLive?: boolean;
   allowResponseEditing?: boolean;
   allowMultipleResponses?: boolean;
+  visibleFrom?: string | null;
+  votingStartsAt?: string | null;
+  votingEndsAt?: string | null;
   linkedEventId?: string;
   elements: (Omit<PollElement, 'descriptionImages'> & {
     descriptionImages?: PollImageReference[];
@@ -232,13 +263,19 @@ export type PollResultsResponse = {
 export type PollResults = {
   pollId: string;
   anonymous: boolean;
+  answersReleased: boolean;
   responseCount: number;
+  voterCount?: number;
+  voters?: PollResultsVoter[];
   responses: PollResultsResponse[];
 };
 
 export type PollResultsDelta = {
   pollId: string;
+  answersReleased?: boolean;
   responseCount: number;
+  voterCount?: number;
+  voters?: PollResultsVoter[];
   responses: PollResultsResponse[];
 };
 
@@ -250,8 +287,9 @@ export type PollEligibilityMutationMode = 'append' | 'replace';
 
 export const POLL_ELIGIBILITY_MUTATION_MODES = ['append', 'replace'] as const;
 
-export type EventManagerPerson = {
-  enrollmentNumber: string;
+export type AccountManagerPerson = {
+  userId?: string;
+  enrollmentNumber?: string | null;
   name: string;
   email?: string | null;
 };
@@ -260,7 +298,7 @@ export type PollEligibilityEnrollment = {
   pollId: string;
   enrollmentNumber: string;
   createdAt: string;
-  people: EventManagerPerson[];
+  people: AccountManagerPerson[];
 };
 
 export type PollEligibilityEnrollmentList = {
@@ -286,6 +324,95 @@ export type PollEligibilityEnrollmentImportResult = PollEligibilityEnrollmentLis
   existingCount: number;
   invalidCount: number;
   replacedCount: number;
+};
+
+export type CacicElectionSlateStatus = 'pending' | 'approved' | 'rejected';
+
+export const CACIC_ELECTION_SLATE_STATUSES = ['pending', 'approved', 'rejected'] as const;
+
+export type CacicElectionSlateSubmissionSource = 'public' | 'admin';
+
+export const CACIC_ELECTION_SLATE_SUBMISSION_SOURCES = ['public', 'admin'] as const;
+
+export type CacicElectionSlateMemberRole =
+  | 'president'
+  | 'vicePresident'
+  | 'financialDirector'
+  | 'communicationDirector'
+  | 'eventsDirector'
+  | 'publicRelationsDirector'
+  | 'other';
+
+export const CACIC_ELECTION_SLATE_MEMBER_ROLES = [
+  'president',
+  'vicePresident',
+  'financialDirector',
+  'communicationDirector',
+  'eventsDirector',
+  'publicRelationsDirector',
+  'other',
+] as const;
+
+export type CacicElectionSlateMemberIdentifierType = 'cpf' | 'phone' | 'email';
+
+export const CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES = ['cpf', 'phone', 'email'] as const;
+
+export type CacicElectionSlateMember = {
+  id: string;
+  fullName: string;
+  enrollmentYear?: string;
+  role: CacicElectionSlateMemberRole;
+  customRole?: string;
+  isRepresentative: boolean;
+};
+
+export type CacicElectionSlateMemberWithIdentifier = CacicElectionSlateMember & {
+  enrollmentNumber?: string;
+  identifierType: CacicElectionSlateMemberIdentifierType;
+  identifierValue: string;
+};
+
+export type CacicElectionSlate = {
+  id: string;
+  pollId: string;
+  name: string;
+  status: CacicElectionSlateStatus;
+  enabled: boolean;
+  rejectionReason?: string;
+  submissionSource: CacicElectionSlateSubmissionSource;
+  submittedBy?: {
+    userId: string;
+    name?: string;
+    preferredUsername?: string;
+    email?: string;
+  };
+  submittedAt: string;
+  reviewedAt?: string;
+  members: CacicElectionSlateMember[];
+};
+
+export type AdminCacicElectionSlate = Omit<CacicElectionSlate, 'members'> & {
+  members: CacicElectionSlateMemberWithIdentifier[];
+};
+
+export type SubmitCacicElectionSlateMemberRequest = Omit<CacicElectionSlateMemberWithIdentifier, 'id'>;
+
+export type SubmitCacicElectionSlateRequest = {
+  name: string;
+  members: SubmitCacicElectionSlateMemberRequest[];
+};
+
+export type UpdateCacicElectionSlateRequest = SubmitCacicElectionSlateRequest & {
+  status?: CacicElectionSlateStatus;
+  enabled?: boolean;
+};
+
+export type RejectCacicElectionSlateRequest = {
+  reason: string;
+};
+
+export type UpdateCacicElectionSlateEnabledRequest = {
+  enabled: boolean;
 };
 
 export function normalizePermissions(permissions: readonly string[]): string[] {

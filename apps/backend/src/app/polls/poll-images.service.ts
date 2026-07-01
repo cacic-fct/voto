@@ -125,6 +125,7 @@ export class PollImagesService {
           select: {
             status: true,
             resultsPublic: true,
+            visibleFrom: true,
           },
         },
       },
@@ -175,12 +176,14 @@ export class PollImagesService {
   }
 
   private canReadPollImage(
-    poll: { status: DbPollStatus; resultsPublic: boolean },
+    poll: { status: DbPollStatus; resultsPublic: boolean; visibleFrom: Date | null },
     user?: AuthenticatedPrincipal,
     allowPublishedRead = false,
   ): boolean {
+    const isVisible = !poll.visibleFrom || poll.visibleFrom <= new Date();
     if (
       allowPublishedRead &&
+      isVisible &&
       (poll.status === DbPollStatus.PUBLISHED || (poll.status === DbPollStatus.CLOSED && poll.resultsPublic))
     ) {
       return true;

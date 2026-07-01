@@ -1,5 +1,6 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
+import { generateKeyPairSync, type JsonWebKey, sign as signToken } from 'node:crypto';
 import { AuthSessionStoreService } from './auth-session-store.service';
 import { AuthorizationStateService } from './authorization-state.service';
 import { AuthSession, AuthorizationState } from './auth.types';
@@ -9,6 +10,15 @@ import { PrismaService } from '../prisma/prisma.service';
 jest.mock('axios');
 
 const mockedAxios = jest.mocked(axios);
+const TEST_ISSUER = 'https://sso.example/realms/cacic';
+const TEST_KEY_ID = 'test-key';
+const signingKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const publicJwk = {
+  ...signingKeys.publicKey.export({ format: 'jwk' }),
+  kid: TEST_KEY_ID,
+  alg: 'RS256',
+  use: 'sig',
+} as JsonWebKey & { kid: string; alg: string; use: string };
 
 type SessionStoreMock = jest.Mocked<
   Pick<
@@ -28,7 +38,28 @@ type PrismaMock = {
 };
 
 function tokenWithClaims(claims: Record<string, unknown>): string {
-  return `header.${Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url')}.signature`;
+  const jwtClaims = {
+    iss: TEST_ISSUER,
+    aud: 'voto-client',
+    azp: 'voto-client',
+    exp: Math.floor(Date.now() / 1000) + 120,
+    ...claims,
+  };
+  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: TEST_KEY_ID }), 'utf8').toString(
+    'base64url',
+  );
+  const encodedPayload = Buffer.from(JSON.stringify(jwtClaims), 'utf8').toString('base64url');
+  const signature = signToken('RSA-SHA256', Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'), signingKeys.privateKey);
+  return `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
+}
+
+function jwksResponse(keys: unknown[]): Response {
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: jest.fn().mockResolvedValue({ keys }),
+  } as unknown as Response;
 }
 
 function createSessionStoreMock(): SessionStoreMock {
@@ -61,9 +92,11 @@ function createPrismaMock(): PrismaMock {
 
 describe('KeycloakAuthService', () => {
   const originalEnv = process.env;
+  const originalFetch = global.fetch;
   let sessions: SessionStoreMock;
   let authorizationState: AuthorizationStateMock;
   let prisma: PrismaMock;
+  let fetchMock: jest.MockedFunction<typeof fetch>;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
@@ -75,8 +108,12 @@ describe('KeycloakAuthService', () => {
       KEYCLOAK_POST_LOGOUT_REDIRECT_URI: 'https://app.example/login',
       KEYCLOAK_INTROSPECTION_CACHE_TTL_MS: '60000',
     };
+    fetchMock = jest.fn().mockResolvedValue(jwksResponse([publicJwk]));
+    global.fetch = fetchMock;
     delete process.env.KEYCLOAK_CLIENT_SECRET;
     delete process.env.KEYCLOAK_IDP_HINT;
+    delete process.env.KEYCLOAK_ALLOWED_ACCESS_TOKEN_CLIENTS;
+    delete process.env.KEYCLOAK_TOKEN_ENDPOINT_AUTH_METHOD;
     sessions = createSessionStoreMock();
     authorizationState = createAuthorizationStateMock();
     prisma = createPrismaMock();
@@ -86,6 +123,7 @@ describe('KeycloakAuthService', () => {
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     jest.useRealTimers();
   });
 
@@ -175,8 +213,15 @@ describe('KeycloakAuthService', () => {
     const payload = mockedAxios.post.mock.calls[0][1] as string;
     expect(mockedAxios.post.mock.calls[0][0]).toBe('https://sso.example/realms/cacic/protocol/openid-connect/token');
     expect(payload).toContain('grant_type=authorization_code');
-    expect(payload).toContain('client_secret=secret');
+    expect(payload).not.toContain('client_secret=secret');
     expect(payload).toContain('redirect_uri=https%3A%2F%2Fstate.example%2Fcallback');
+    expect(mockedAxios.post.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('voto-client:secret').toString('base64')}`,
+        }),
+      }),
+    );
   });
 
   it('wraps token exchange and refresh failures', async () => {
@@ -203,18 +248,23 @@ describe('KeycloakAuthService', () => {
 
     await expect(service.refreshAccessToken('refresh')).resolves.toEqual({ access_token: 'new-access' });
     expect(mockedAxios.post.mock.calls[0][1]).toContain('grant_type=refresh_token');
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=secret');
+    expect(mockedAxios.post.mock.calls[0][1]).not.toContain('client_secret=secret');
+    expect(mockedAxios.post.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('voto-client:secret').toString('base64')}`,
+        }),
+      }),
+    );
   });
 
-  it('creates sessions, derives expiration, and syncs principals from userinfo claims', async () => {
+  it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
       exp: Math.floor(Date.now() / 1000) + 120,
       realm_access: { roles: ['voter'] },
       resource_access: { voting: { roles: ['poll-admin'] } },
       scope: 'openid profile',
-    });
-    mockUserInfo({
       sub: 'user-1',
       preferred_username: 'ada',
       email: 'ada@example.com',
@@ -369,7 +419,7 @@ describe('KeycloakAuthService', () => {
     await expect(service.authenticateSession('session-1', ['poll#delete'])).resolves.toMatchObject({ sub: 'admin-1' });
     await expect(service.authenticateSession('session-1', ['poll#create'])).resolves.toMatchObject({ sub: 'admin-1' });
 
-    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -673,8 +723,7 @@ describe('KeycloakAuthService', () => {
     expect(sessions.waitForRefreshLockRelease).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back from introspection to userinfo and rejects inactive tokens', async () => {
-    process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
+  it('uses cached JWKS keys and rejects tokens signed by unknown keys', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
     sessions.get.mockResolvedValue({
@@ -684,77 +733,102 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
 
-    mockedAxios.post.mockRejectedValueOnce(new Error('introspection-down'));
-    mockedAxios.get.mockResolvedValueOnce({ data: { sub: 'user-1' } });
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    const inactiveToken = tokenWithClaims({ sub: 'inactive-user', exp: Math.floor(Date.now() / 1000) + 120 });
+    const otherKeyPair = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const encodedHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'unknown-key' }), 'utf8').toString(
+      'base64url',
+    );
+    const encodedPayload = Buffer.from(
+      JSON.stringify({
+        iss: TEST_ISSUER,
+        aud: 'voto-client',
+        azp: 'voto-client',
+        exp: Math.floor(Date.now() / 1000) + 120,
+        sub: 'unknown-key-user',
+      }),
+      'utf8',
+    ).toString('base64url');
+    const signature = signToken(
+      'RSA-SHA256',
+      Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'),
+      otherKeyPair.privateKey,
+    );
+    const unknownKeyToken = `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
     sessions.get.mockResolvedValueOnce({
-      accessToken: inactiveToken,
+      accessToken: unknownKeyToken,
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.post.mockResolvedValueOnce({ data: { active: false } });
     await expect(service.authenticateSession('session-2')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('uses active introspection claims when userinfo fails and rejects fully invalid tokens', async () => {
-    process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
+  it('rejects malformed, unsupported, and invalid issuer tokens', async () => {
     const service = createService();
-    const accessToken = tokenWithClaims({ exp: Math.floor(Date.now() / 1000) + 120 });
-    sessions.get.mockResolvedValue({
+    sessions.get.mockResolvedValueOnce({
+      accessToken: 'not-a-jwt',
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const unsignedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT', kid: TEST_KEY_ID }), 'utf8').toString(
+      'base64url',
+    );
+    const unsupportedAlgToken = `${unsignedHeader}.${Buffer.from(
+      JSON.stringify({
+        iss: TEST_ISSUER,
+        aud: 'voto-client',
+        azp: 'voto-client',
+        exp: Math.floor(Date.now() / 1000) + 120,
+        sub: 'unsupported',
+      }),
+      'utf8',
+    ).toString('base64url')}.signature`;
+    sessions.get.mockResolvedValueOnce({
+      accessToken: unsupportedAlgToken,
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    await expect(service.authenticateSession('session-2')).rejects.toBeInstanceOf(UnauthorizedException);
+
+    sessions.get.mockResolvedValueOnce({
+      accessToken: tokenWithClaims({ iss: 'https://other.example/realms/cacic', sub: 'wrong-issuer' }),
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    await expect(service.authenticateSession('session-3')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('uses verified JWT claims without calling introspection or userinfo endpoints', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      preferred_username: 'jwt-user',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
+    sessions.get.mockResolvedValueOnce({
       accessToken,
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.post.mockResolvedValueOnce({ data: { active: true, sub: 'introspected-user' } });
-    mockedAxios.get.mockRejectedValueOnce(new Error('userinfo-down'));
-
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'introspected-user' });
-
-    const invalidToken = tokenWithClaims({ sub: 'invalid-user', exp: Math.floor(Date.now() / 1000) + 120 });
-    sessions.get.mockResolvedValueOnce({
-      accessToken: invalidToken,
-      refreshToken: 'refresh',
-      accessTokenExpiresAt: Date.now() + 120000,
-      sessionExpiresAt: Date.now() + 600000,
-    });
-    mockedAxios.post.mockRejectedValueOnce(new Error('introspection-down'));
-    mockedAxios.get.mockRejectedValueOnce(new Error('userinfo-down'));
-    await expect(service.authenticateSession('session-2')).rejects.toBeInstanceOf(UnauthorizedException);
-  });
-
-  it('merges JWT claims from introspection and treats missing active flags as userinfo-only validation', async () => {
-    process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
-    const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
-    const introspectionJwt = tokenWithClaims({ preferred_username: 'jwt-user' });
-    sessions.get.mockResolvedValueOnce({
-      accessToken,
-      refreshToken: 'refresh',
-      accessTokenExpiresAt: Date.now() + 120000,
-      sessionExpiresAt: Date.now() + 600000,
-    });
-    mockedAxios.post.mockResolvedValueOnce({ data: { active: true, jwt: introspectionJwt } });
-    mockedAxios.get.mockResolvedValueOnce({ data: { sub: 'user-1' } });
 
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({
       preferredUsername: 'jwt-user',
     });
-
-    const userInfoOnlyToken = tokenWithClaims({ sub: 'user-2', exp: Math.floor(Date.now() / 1000) + 120 });
-    sessions.get.mockResolvedValueOnce({
-      accessToken: userInfoOnlyToken,
-      refreshToken: 'refresh',
-      accessTokenExpiresAt: Date.now() + 120000,
-      sessionExpiresAt: Date.now() + 600000,
-    });
-    mockedAxios.post.mockResolvedValueOnce({ data: { sub: 'ignored-without-active' } });
-    mockedAxios.get.mockResolvedValueOnce({ data: { sub: 'user-2' } });
-
-    await expect(service.authenticateSession('session-2')).resolves.toMatchObject({ sub: 'user-2' });
+    expect(mockedAxios.post).not.toHaveBeenCalledWith(
+      expect.stringContaining('/protocol/openid-connect/token/introspect'),
+      expect.any(String),
+      expect.any(Object),
+    );
+    expect(mockedAxios.get).not.toHaveBeenCalled();
   });
 
   it('handles permission evaluation denial and transient failures as no grants', async () => {
@@ -791,13 +865,11 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.post
-      .mockResolvedValueOnce({ data: { active: true, sub: 'user-1' } })
-      .mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['read'] }] });
+    mockedAxios.post.mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['read'] }] });
     mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
 
     await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual(['poll#read']);
-    expect(mockedAxios.post.mock.calls[1][1]).toContain('client_secret=secret');
+    expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=secret');
   });
 
   it('clears sessions, reads logout input, and builds logout URLs', async () => {
@@ -858,7 +930,7 @@ describe('KeycloakAuthService', () => {
   it('uses fallback expiration and cache TTL parsing when token expirations are absent', async () => {
     process.env.KEYCLOAK_INTROSPECTION_CACHE_TTL_MS = 'invalid';
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1' });
+    const accessToken = tokenWithClaims({ sub: 'user-1', name: ' Explicit Name ' });
     mockUserInfo({ sub: 'user-1', name: ' Explicit Name ' });
 
     await service.createSession({ access_token: accessToken, expires_in: 5, refresh_expires_in: 10 });
@@ -895,7 +967,7 @@ describe('KeycloakAuthService', () => {
     );
   });
 
-  it('uses access-token fallback expiration when no token expiry data exists', async () => {
+  it('uses access-token JWT expiration when no token response expiry data exists', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({ sub: 'user-1' });
     mockUserInfo({ sub: 'user-1' });
@@ -905,7 +977,7 @@ describe('KeycloakAuthService', () => {
     expect(sessions.set).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        accessTokenExpiresAt: Date.now() + 3600000,
+        accessTokenExpiresAt: Date.now() + 120000,
         sessionExpiresAt: Date.now() + 3600000,
       }),
     );

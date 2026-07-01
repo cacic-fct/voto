@@ -22,10 +22,15 @@ describe('PollBuilderDraftService', () => {
   it('should create a blank draft', () => {
     expect(service.draft().title).toBe('');
     expect(service.draft().status).toBe('draft');
+    expect(service.draft().mode).toBe('regular');
+    expect(service.draft().cacicElectionPhase).toBeUndefined();
     expect(service.draft().resultsPublic).toBe(false);
     expect(service.draft().resultsLive).toBe(false);
     expect(service.draft().allowResponseEditing).toBe(false);
     expect(service.draft().allowMultipleResponses).toBe(false);
+    expect(service.draft().visibleFrom).toBeUndefined();
+    expect(service.draft().votingStartsAt).toBeUndefined();
+    expect(service.draft().votingEndsAt).toBeUndefined();
     expect(service.canSave()).toBe(false);
   });
 
@@ -173,6 +178,67 @@ describe('PollBuilderDraftService', () => {
     expect(service.draft().allowResponseEditing).toBe(false);
   });
 
+  it('should apply CACiC slate-submission rules without changing regular poll controls', () => {
+    service.updatePollMode({ value: 'cacicElection' } as never);
+    service.updateDirectLinkEnabled({ checked: true } as never);
+    service.updateResultsPublic({ checked: true } as never);
+    service.updateResultsLive({ checked: true } as never);
+
+    expect(service.draft()).toMatchObject({
+      mode: 'cacicElection',
+      cacicElectionPhase: 'slateSubmission',
+      directLinkEnabled: false,
+      resultsPublic: false,
+      resultsLive: false,
+    });
+    expect(service.isCacicElection()).toBe(true);
+    expect(service.isCacicElectionSlateSubmission()).toBe(true);
+    expect(service.toSaveRequest()).toMatchObject({
+      mode: 'cacicElection',
+      cacicElectionPhase: 'slateSubmission',
+      directLinkEnabled: false,
+      resultsPublic: false,
+      resultsLive: false,
+    });
+  });
+
+  it('should force CACiC election voting privacy, eligibility, and submission rules', () => {
+    service.updatePollMode({ value: 'cacicElection' } as never);
+    service.updateVotingStyle({ value: 'public' } as never);
+    service.updateVoterEligibilitySource({ value: 'eventAttendance' } as never);
+    service.updateRequireVerifiedUnespRole({ checked: true } as never);
+    service.updateAllowMultipleResponses({ checked: true } as never);
+    service.updateAllowResponseEditing({ checked: true } as never);
+    service.updateCacicElectionPhase({ value: 'election' } as never);
+
+    expect(service.draft()).toMatchObject({
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+      votingStyle: 'anonymous',
+      voterEligibilitySource: 'enrollmentList',
+      requireVerifiedUnespRole: false,
+      directLinkEnabled: false,
+      resultsPublic: true,
+      resultsLive: false,
+      allowResponseEditing: false,
+      allowMultipleResponses: false,
+      linkedEvent: undefined,
+    });
+    expect(service.isCacicElectionVoting()).toBe(true);
+    expect(service.toSaveRequest()).toMatchObject({
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+      votingStyle: 'anonymous',
+      voterEligibilitySource: 'enrollmentList',
+      requireVerifiedUnespRole: false,
+      resultsPublic: true,
+      resultsLive: false,
+      allowResponseEditing: false,
+      allowMultipleResponses: false,
+      linkedEventId: undefined,
+    });
+  });
+
   it('should update poll text fields and reset to a new poll', () => {
     service.updatePollTitle(textEvent(' Assembleia '));
     service.updatePollDescription(textEvent('Descrição da votação', 'textarea'));
@@ -186,6 +252,29 @@ describe('PollBuilderDraftService', () => {
     expect(service.draft().title).toBe('');
     expect(service.draft().description).toBe('');
     expect(service.canSave()).toBe(false);
+  });
+
+  it('should store publication schedule values at minute precision', () => {
+    service.updateVisibleFrom(textEvent('2026-06-27T09:10:45'));
+    service.updateVotingStartsAt(textEvent('2026-06-27T10:11:32'));
+    service.updateVotingEndsAt(textEvent('2026-06-27T18:12:59'));
+
+    expect(service.draft().visibleFrom).toBe(new Date('2026-06-27T09:10:00').toISOString());
+    expect(service.draft().votingStartsAt).toBe(new Date('2026-06-27T10:11:00').toISOString());
+    expect(service.draft().votingEndsAt).toBe(new Date('2026-06-27T18:12:00').toISOString());
+    expect(service.dateTimeInputValue(service.draft().votingStartsAt)).toBe('2026-06-27T10:11');
+    expect(service.toSaveRequest()).toMatchObject({
+      visibleFrom: new Date('2026-06-27T09:10:00').toISOString(),
+      votingStartsAt: new Date('2026-06-27T10:11:00').toISOString(),
+      votingEndsAt: new Date('2026-06-27T18:12:00').toISOString(),
+    });
+
+    service.updateVotingEndsAt(textEvent(''));
+
+    expect(service.draft().votingEndsAt).toBeNull();
+    expect(service.toSaveRequest()).toMatchObject({
+      votingEndsAt: null,
+    });
   });
 
   it('should reorder and remove elements', () => {

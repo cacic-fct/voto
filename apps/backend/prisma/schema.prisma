@@ -12,6 +12,16 @@ enum PollStatus {
   CLOSED
 }
 
+enum PollMode {
+  REGULAR
+  CACIC_ELECTION
+}
+
+enum CacicElectionPhase {
+  SLATE_SUBMISSION
+  ELECTION
+}
+
 enum PollVotingStyle {
   PUBLIC
   PARTIALLY_SECRET
@@ -52,6 +62,33 @@ enum PollImagePlacement {
   ELEMENT_DESCRIPTION
 }
 
+enum CacicElectionSlateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CacicElectionSlateSubmissionSource {
+  PUBLIC
+  ADMIN
+}
+
+enum CacicElectionSlateMemberRole {
+  PRESIDENT
+  VICE_PRESIDENT
+  FINANCIAL_DIRECTOR
+  COMMUNICATION_DIRECTOR
+  EVENTS_DIRECTOR
+  PUBLIC_RELATIONS_DIRECTOR
+  OTHER
+}
+
+enum CacicElectionSlateMemberIdentifierType {
+  CPF
+  PHONE
+  EMAIL
+}
+
 model User {
   id                String         @id
   preferredUsername String?
@@ -68,6 +105,9 @@ model User {
   responses         PollResponse[]
   pollVotes         PollVoter[]
   pollEligibilityEnrollments PollEligibilityEnrollment[]
+  submittedCacicElectionSlates CacicElectionSlate[] @relation("CacicElectionSlateSubmittedBy")
+  adminCreatedCacicElectionSlates CacicElectionSlate[] @relation("CacicElectionSlateAdminCreatedBy")
+  reviewedCacicElectionSlates CacicElectionSlate[] @relation("CacicElectionSlateReviewedBy")
 
   @@index([email])
 }
@@ -77,6 +117,8 @@ model Poll {
   title       String
   description String?
   status      PollStatus     @default(DRAFT)
+  mode        PollMode        @default(REGULAR)
+  cacicElectionPhase CacicElectionPhase?
   votingStyle PollVotingStyle @default(SECRET)
   voterEligibilitySource      PollVoterEligibilitySource @default(AUTHENTICATED_USERS)
   requireVerifiedUnespRole    Boolean @default(false)
@@ -95,6 +137,9 @@ model Poll {
   linkedEventLocationDescription   String?
   publishedAt DateTime?
   closedAt    DateTime?
+  visibleFrom DateTime?
+  votingStartsAt DateTime?
+  votingEndsAt   DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   createdBy   User?          @relation("PollCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -104,10 +149,61 @@ model Poll {
   voters      PollVoter[]
   eligibilityEnrollments PollEligibilityEnrollment[]
   images      PollImage[]
+  cacicElectionSlates CacicElectionSlate[]
 
   @@index([status])
+  @@index([status, visibleFrom])
+  @@index([status, votingStartsAt, votingEndsAt])
+  @@index([mode, cacicElectionPhase])
   @@index([createdAt])
   @@index([linkedEventId])
+}
+
+model CacicElectionSlate {
+  id               String                            @id @default(cuid())
+  pollId           String
+  name             String
+  status           CacicElectionSlateStatus          @default(PENDING)
+  enabled          Boolean                           @default(true)
+  rejectionReason  String?
+  submissionSource CacicElectionSlateSubmissionSource @default(PUBLIC)
+  submittedById    String?
+  adminCreatedById String?
+  reviewedById     String?
+  submittedAt      DateTime                          @default(now())
+  reviewedAt       DateTime?
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
+  poll             Poll                              @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  submittedBy      User?                             @relation("CacicElectionSlateSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  adminCreatedBy   User?                             @relation("CacicElectionSlateAdminCreatedBy", fields: [adminCreatedById], references: [id], onDelete: SetNull)
+  reviewedBy       User?                             @relation("CacicElectionSlateReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  members          CacicElectionSlateMember[]
+
+  @@unique([pollId, submittedById])
+  @@index([pollId, status, enabled])
+  @@index([submittedById])
+  @@index([adminCreatedById])
+  @@index([reviewedById])
+  @@index([submittedAt])
+}
+
+model CacicElectionSlateMember {
+  id               String                                  @id @default(cuid())
+  slateId          String
+  fullName         String
+  enrollmentNumber String?
+  role             CacicElectionSlateMemberRole
+  customRole       String?
+  isRepresentative Boolean                                @default(false)
+  identifierType  CacicElectionSlateMemberIdentifierType
+  identifierValue String
+  position        Int
+  createdAt       DateTime                                @default(now())
+  updatedAt       DateTime                                @updatedAt
+  slate           CacicElectionSlate                      @relation(fields: [slateId], references: [id], onDelete: Cascade)
+
+  @@index([slateId, position])
 }
 
 model PollImage {

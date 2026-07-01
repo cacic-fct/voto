@@ -1,18 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CACIC_ELECTION_PHASES,
+  CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES,
+  CACIC_ELECTION_SLATE_MEMBER_ROLES,
+  CACIC_ELECTION_SLATE_STATUSES,
   POLL_ELEMENT_TYPES,
   POLL_ELIGIBILITY_IMPORT_FORMATS,
   POLL_ELIGIBILITY_MUTATION_MODES,
+  POLL_MODES,
   POLL_SCHEDULING_INVITEE_MODES,
   POLL_STATUSES,
   POLL_VOTER_ELIGIBILITY_SOURCES,
   POLL_VOTING_STYLES,
+  CacicElectionPhase,
+  CacicElectionSlateMemberIdentifierType,
+  CacicElectionSlateMemberRole,
+  CacicElectionSlateStatus,
   PollEligibilityImportFormat,
   PollEligibilityMutationMode,
   PollAnswerValue,
   PollElementSettings,
   PollElementType,
   PollImageReference,
+  PollMode,
   PollSchedulingAvailabilityWindow,
   PollSchedulingInviteeMode,
   PollSchedulingSettings,
@@ -26,6 +36,7 @@ import {
   Allow,
   IsArray,
   IsBoolean,
+  IsISO8601,
   IsIn,
   IsInt,
   IsOptional,
@@ -303,6 +314,16 @@ export class SavePollDto {
   @IsIn(POLL_STATUSES)
   status?: PollStatus;
 
+  @ApiPropertyOptional({ enum: POLL_MODES, example: 'regular' })
+  @IsOptional()
+  @IsIn(POLL_MODES)
+  mode?: PollMode;
+
+  @ApiPropertyOptional({ enum: CACIC_ELECTION_PHASES, example: 'slateSubmission' })
+  @IsOptional()
+  @IsIn(CACIC_ELECTION_PHASES)
+  cacicElectionPhase?: CacicElectionPhase;
+
   @ApiPropertyOptional({ enum: POLL_VOTING_STYLES, example: 'secret' })
   @IsOptional()
   @IsIn(POLL_VOTING_STYLES)
@@ -362,6 +383,30 @@ export class SavePollDto {
   @IsOptional()
   @IsBoolean()
   allowMultipleResponses?: boolean;
+
+  @ApiPropertyOptional({
+    example: '2026-06-27T12:30:00.000Z',
+    description: 'First instant when authenticated voters can see this poll in public routes.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  visibleFrom?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-06-27T13:00:00.000Z',
+    description: 'First instant when voting responses are accepted.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  votingStartsAt?: string | null;
+
+  @ApiPropertyOptional({
+    example: '2026-06-27T18:00:00.000Z',
+    description: 'Instant when voting responses stop being accepted.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  votingEndsAt?: string | null;
 
   @ApiPropertyOptional({ example: '018f47b1-5c4e-7c7b-9e6f-0c8c2f7281ad' })
   @IsOptional()
@@ -457,4 +502,79 @@ export class ImportPollEligibilityEnrollmentsDto {
   @IsString()
   @MaxLength(255)
   fileName?: string;
+}
+
+export class CacicElectionSlateMemberDto {
+  @ApiProperty({ example: 'Ada Lovelace' })
+  @IsString()
+  @MaxLength(240)
+  fullName!: string;
+
+  @ApiPropertyOptional({ example: '26123456' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  enrollmentNumber?: string;
+
+  @ApiProperty({ enum: CACIC_ELECTION_SLATE_MEMBER_ROLES, example: 'president' })
+  @IsIn(CACIC_ELECTION_SLATE_MEMBER_ROLES)
+  role!: CacicElectionSlateMemberRole;
+
+  @ApiPropertyOptional({ example: 'Diretoria de Projetos' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  customRole?: string;
+
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  isRepresentative!: boolean;
+
+  @ApiProperty({ enum: CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES, example: 'email' })
+  @IsIn(CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES)
+  identifierType!: CacicElectionSlateMemberIdentifierType;
+
+  @ApiProperty({ example: 'ada@example.com' })
+  @IsString()
+  @MaxLength(255)
+  identifierValue!: string;
+}
+
+export class SubmitCacicElectionSlateDto {
+  @ApiProperty({ example: 'Chapa Aurora' })
+  @IsString()
+  @MaxLength(240)
+  name!: string;
+
+  @ApiProperty({ type: [CacicElectionSlateMemberDto] })
+  @IsArray()
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => CacicElectionSlateMemberDto)
+  members!: CacicElectionSlateMemberDto[];
+}
+
+export class UpdateCacicElectionSlateDto extends SubmitCacicElectionSlateDto {
+  @ApiPropertyOptional({ enum: CACIC_ELECTION_SLATE_STATUSES, example: 'approved' })
+  @IsOptional()
+  @IsIn(CACIC_ELECTION_SLATE_STATUSES)
+  status?: CacicElectionSlateStatus;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class RejectCacicElectionSlateDto {
+  @ApiProperty({ example: 'A chapa não contemplou todos os cargos obrigatórios.' })
+  @IsString()
+  @MaxLength(2000)
+  reason!: string;
+}
+
+export class UpdateCacicElectionSlateEnabledDto {
+  @ApiProperty({ example: false })
+  @IsBoolean()
+  enabled!: boolean;
 }

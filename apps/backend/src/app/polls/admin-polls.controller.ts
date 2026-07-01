@@ -11,6 +11,7 @@ import {
   Put,
   Query,
   Req,
+  Res,
   Sse,
   UnauthorizedException,
   UploadedFile,
@@ -31,6 +32,7 @@ import {
 } from '@nestjs/swagger';
 import {
   EventManagerEvent,
+  AdminCacicElectionSlate,
   Poll,
   PollEligibilityEnrollmentImportResult,
   PollEligibilityEnrollmentList,
@@ -38,6 +40,7 @@ import {
   PollResults,
   PollSummary,
 } from '@org/voting-contracts';
+import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -45,7 +48,10 @@ import {
   AddPollEligibilityEnrollmentsDto,
   ImportPollEligibilityEnrollmentsDto,
   PollStatusDto,
+  RejectCacicElectionSlateDto,
   SavePollDto,
+  UpdateCacicElectionSlateDto,
+  UpdateCacicElectionSlateEnabledDto,
 } from './dto/poll.dto';
 import { PollsService } from './polls.service';
 import {
@@ -150,11 +156,99 @@ export class AdminPollsController {
     return this.polls.getAdminPollResults(id);
   }
 
+  @Get(':id/cacic-election/voter-enrollments.txt')
+  @RequirePermissions('poll#read')
+  @ApiOperation({ summary: 'Download enrollment numbers for voters in a closed CACiC election' })
+  @ApiOkResponse({ description: 'Plain text with one enrollment number per line.' })
+  async exportCacicElectionVoterEnrollments(
+    @Param('id') id: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    const content = await this.polls.exportCacicElectionVoterEnrollments(id);
+    response
+      .type('text/plain; charset=utf-8')
+      .attachment(`cacic-election-${id}-voters.txt`)
+      .send(content);
+  }
+
   @Sse(':id/results/events')
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'Stream new poll result responses for administrators' })
   streamPollResults(@Param('id') id: string, @Query('after') after?: string): Observable<MessageEvent> {
     return this.polls.streamAdminPollResults(id, this.parseResultCursor(after));
+  }
+
+  @Get(':id/cacic-election/slates')
+  @RequirePermissions('poll#read')
+  @ApiOperation({ summary: 'List CACiC election slate submissions for administrator review' })
+  @ApiOkResponse({ description: 'Slate submissions including private identifier fields for administrator review.' })
+  listCacicElectionSlates(@Param('id') id: string): Promise<AdminCacicElectionSlate[]> {
+    return this.polls.listAdminCacicElectionSlates(id);
+  }
+
+  @Post(':id/cacic-election/slates')
+  @RequirePermissions('poll#edit')
+  @ApiOperation({ summary: 'Create a CACiC election slate manually as an administrator' })
+  @ApiBody({ type: UpdateCacicElectionSlateDto })
+  @ApiCreatedResponse({ description: 'Created slate submission.' })
+  createCacicElectionSlate(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: UpdateCacicElectionSlateDto,
+  ): Promise<AdminCacicElectionSlate> {
+    return this.polls.createAdminCacicElectionSlate(id, body, this.getUser(request));
+  }
+
+  @Put(':id/cacic-election/slates/:slateId')
+  @RequirePermissions('poll#edit')
+  @ApiOperation({ summary: 'Replace a CACiC election slate submission as an administrator' })
+  @ApiBody({ type: UpdateCacicElectionSlateDto })
+  @ApiOkResponse({ description: 'Updated slate submission.' })
+  updateCacicElectionSlate(
+    @Param('id') id: string,
+    @Param('slateId') slateId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: UpdateCacicElectionSlateDto,
+  ): Promise<AdminCacicElectionSlate> {
+    return this.polls.updateAdminCacicElectionSlate(id, slateId, body, this.getUser(request));
+  }
+
+  @Patch(':id/cacic-election/slates/:slateId/rejection')
+  @RequirePermissions('poll#edit')
+  @ApiOperation({ summary: 'Reject a CACiC election slate submission with a reason' })
+  @ApiBody({ type: RejectCacicElectionSlateDto })
+  @ApiOkResponse({ description: 'Rejected slate submission.' })
+  rejectCacicElectionSlate(
+    @Param('id') id: string,
+    @Param('slateId') slateId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: RejectCacicElectionSlateDto,
+  ): Promise<AdminCacicElectionSlate> {
+    return this.polls.rejectCacicElectionSlate(id, slateId, body, this.getUser(request));
+  }
+
+  @Patch(':id/cacic-election/slates/:slateId/enabled')
+  @RequirePermissions('poll#edit')
+  @ApiOperation({ summary: 'Enable or disable an approved CACiC election slate' })
+  @ApiBody({ type: UpdateCacicElectionSlateEnabledDto })
+  @ApiOkResponse({ description: 'Updated slate submission.' })
+  updateCacicElectionSlateEnabled(
+    @Param('id') id: string,
+    @Param('slateId') slateId: string,
+    @Body() body: UpdateCacicElectionSlateEnabledDto,
+  ): Promise<AdminCacicElectionSlate> {
+    return this.polls.updateCacicElectionSlateEnabled(id, slateId, body);
+  }
+
+  @Delete(':id/cacic-election/slates/:slateId')
+  @RequirePermissions('poll#edit')
+  @ApiOperation({ summary: 'Delete a CACiC election slate submission' })
+  @ApiNoContentResponse({ description: 'Slate submission deleted.' })
+  async deleteCacicElectionSlate(
+    @Param('id') id: string,
+    @Param('slateId') slateId: string,
+  ): Promise<void> {
+    await this.polls.deleteCacicElectionSlate(id, slateId);
   }
 
   @Get(':id')

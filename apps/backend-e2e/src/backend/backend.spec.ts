@@ -2,9 +2,12 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Readable } from 'node:stream';
 import request from 'supertest';
 import { of } from 'rxjs';
 import {
+  AdminCacicElectionSlate,
+  CacicElectionSlate,
   Poll,
   PollEligibilityEnrollmentImportResult,
   PollEligibilityEnrollmentList,
@@ -12,6 +15,7 @@ import {
   PollResponse,
   PollResults,
   PollUserResponseState,
+  SubmitCacicElectionSlateRequest,
 } from '@org/voting-contracts';
 import { AppController } from '@org/backend/app/app.controller';
 import { AppService } from '@org/backend/app/app.service';
@@ -78,27 +82,37 @@ type PollsMock = jest.Mocked<
     | 'assertPublishedDirectLinkPollReadable'
     | 'assertPublishedPollReadable'
     | 'clearEligibilityEnrollments'
+    | 'createAdminCacicElectionSlate'
     | 'createPoll'
+    | 'deleteCacicElectionSlate'
     | 'deleteEligibilityEnrollment'
     | 'deletePoll'
+    | 'exportCacicElectionVoterEnrollments'
     | 'getAdminPoll'
     | 'getAdminPollResults'
     | 'getDirectLinkPublicPollResults'
     | 'getDirectLinkUserResponseState'
+    | 'getMyCacicElectionSlate'
     | 'getPublishedPoll'
     | 'getPublishedPollByDirectLink'
     | 'getPublicPollResults'
     | 'getUserResponseState'
     | 'importEligibilityEnrollments'
     | 'listAdminPolls'
+    | 'listAdminCacicElectionSlates'
     | 'listEligibilityEnrollments'
     | 'listLinkableEvents'
+    | 'listPublicCacicElectionSlates'
+    | 'rejectCacicElectionSlate'
     | 'listPublicPolls'
     | 'streamAdminPollResults'
     | 'streamDirectLinkPublicPollResults'
     | 'streamPublicPollResults'
+    | 'submitCacicElectionSlate'
     | 'submitDirectLinkResponse'
     | 'submitResponse'
+    | 'updateAdminCacicElectionSlate'
+    | 'updateCacicElectionSlateEnabled'
     | 'updatePoll'
     | 'updatePollStatus'
   >
@@ -130,6 +144,9 @@ const protectedRouteCases = [
   { method: 'get', route: '/api/polls/:id/results', url: '/api/polls/poll-1/results' },
   { method: 'get', route: '/api/polls/:id/responses/me', url: '/api/polls/poll-1/responses/me' },
   { method: 'get', route: '/api/polls/:id/results/events', url: '/api/polls/poll-1/results/events' },
+  { method: 'get', route: '/api/polls/:id/cacic-election/slates', url: '/api/polls/poll-1/cacic-election/slates' },
+  { method: 'get', route: '/api/polls/:id/cacic-election/slates/me', url: '/api/polls/poll-1/cacic-election/slates/me' },
+  { method: 'put', route: '/api/polls/:id/cacic-election/slates/me', url: '/api/polls/poll-1/cacic-election/slates/me', body: createSlateRequest() },
   { method: 'post', route: '/api/polls/:id/responses', url: '/api/polls/poll-1/responses', body: { answers: [] } },
   { method: 'get', route: '/api/admin/polls', url: '/api/admin/polls' },
   { method: 'get', route: '/api/admin/polls/linkable-events', url: '/api/admin/polls/linkable-events' },
@@ -139,7 +156,14 @@ const protectedRouteCases = [
   { method: 'delete', route: '/api/admin/polls/:id/eligibility-enrollments', url: '/api/admin/polls/poll-1/eligibility-enrollments' },
   { method: 'delete', route: '/api/admin/polls/:id/eligibility-enrollments/:enrollmentNumber', url: '/api/admin/polls/poll-1/eligibility-enrollments/20240001' },
   { method: 'get', route: '/api/admin/polls/:id/results', url: '/api/admin/polls/poll-1/results' },
+  { method: 'get', route: '/api/admin/polls/:id/cacic-election/voter-enrollments.txt', url: '/api/admin/polls/poll-1/cacic-election/voter-enrollments.txt' },
   { method: 'get', route: '/api/admin/polls/:id/results/events', url: '/api/admin/polls/poll-1/results/events' },
+  { method: 'get', route: '/api/admin/polls/:id/cacic-election/slates', url: '/api/admin/polls/poll-1/cacic-election/slates' },
+  { method: 'post', route: '/api/admin/polls/:id/cacic-election/slates', url: '/api/admin/polls/poll-1/cacic-election/slates', body: createSlateRequest() },
+  { method: 'put', route: '/api/admin/polls/:id/cacic-election/slates/:slateId', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1', body: { ...createSlateRequest(), status: 'approved' } },
+  { method: 'patch', route: '/api/admin/polls/:id/cacic-election/slates/:slateId/rejection', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/rejection', body: { reason: 'Documentos incompletos.' } },
+  { method: 'patch', route: '/api/admin/polls/:id/cacic-election/slates/:slateId/enabled', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/enabled', body: { enabled: false } },
+  { method: 'delete', route: '/api/admin/polls/:id/cacic-election/slates/:slateId', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1' },
   { method: 'get', route: '/api/admin/polls/:id', url: '/api/admin/polls/poll-1' },
   { method: 'post', route: '/api/admin/polls/:id/images', url: '/api/admin/polls/poll-1/images' },
   { method: 'delete', route: '/api/admin/polls/:id/images/:imageId', url: '/api/admin/polls/poll-1/images/image-1' },
@@ -293,6 +317,46 @@ describe('API integration coverage', () => {
     expect(auth.evaluateSessionPermissions).toHaveBeenCalledWith('session-1', ['poll#read', 'poll#create']);
   });
 
+  it('serves authenticated public poll, admin poll, image, and slate routes through the Nest HTTP boundary', async () => {
+    pollImages.getPollImage.mockResolvedValue({
+      stream: Readable.from([Buffer.from('image')]),
+      contentLength: 5,
+      contentType: 'image/avif',
+    });
+    const authenticated = () => request(app.getHttpServer()).get('/api/polls/poll-1').set('Cookie', 'cacic_voto_session=session-1');
+
+    await expect(authenticated()).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ id: 'poll-1' }) });
+    await expect(
+      request(app.getHttpServer()).get('/api/polls/poll-1/responses/me').set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ hasSubmitted: false }) });
+    await expect(
+      request(app.getHttpServer()).get('/api/polls/poll-1/images/image-1').set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({ status: 200, headers: expect.objectContaining({ 'content-type': 'image/avif' }) });
+    await expect(
+      request(app.getHttpServer()).get('/api/polls/poll-1/cacic-election/slates').set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({ status: 200, body: [expect.objectContaining({ id: 'slate-1' })] });
+    await expect(
+      request(app.getHttpServer()).put('/api/polls/poll-1/cacic-election/slates/me').set('Cookie', 'cacic_voto_session=session-1').send(createSlateRequest()),
+    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ id: 'slate-1' }) });
+    await expect(
+      request(app.getHttpServer()).get('/api/admin/polls/poll-1/cacic-election/slates').set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({ status: 200, body: [expect.objectContaining({ id: 'slate-1' })] });
+    await expect(
+      request(app.getHttpServer())
+        .patch('/api/admin/polls/poll-1/cacic-election/slates/slate-1/enabled')
+        .set('Cookie', 'cacic_voto_session=session-1')
+        .send({ enabled: false }),
+    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ enabled: false }) });
+
+    expect(polls.getPublishedPoll).toHaveBeenCalledWith('poll-1', expect.objectContaining({ sub: 'user-1' }));
+    expect(polls.submitCacicElectionSlate).toHaveBeenCalledWith(
+      'poll-1',
+      createSlateRequest(),
+      expect.objectContaining({ sub: 'user-1' }),
+    );
+    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith('poll-1', 'slate-1', { enabled: false });
+  });
+
   it('publishes the OpenAPI contract for auth, public poll, and admin poll routes', async () => {
     const res = await request(app.getHttpServer()).get('/api/docs-json');
     const body = res.body as OpenApiDocument;
@@ -314,11 +378,15 @@ describe('API integration coverage', () => {
     expect(body.paths).toEqual(
       expect.objectContaining({
         '/api/admin/polls': expect.any(Object),
+        '/api/admin/polls/{id}/cacic-election/voter-enrollments.txt': expect.any(Object),
         '/api/admin/polls/{id}/eligibility-enrollments/import': expect.any(Object),
+        '/api/admin/polls/{id}/cacic-election/slates': expect.any(Object),
+        '/api/admin/polls/{id}/cacic-election/slates/{slateId}/enabled': expect.any(Object),
         '/api/admin/polls/{id}/results': expect.any(Object),
         '/api/auth/me': expect.any(Object),
         '/api/auth/permissions/evaluate': expect.any(Object),
         '/api/polls': expect.any(Object),
+        '/api/polls/{id}/cacic-election/slates/me': expect.any(Object),
         '/api/polls/{id}/responses': expect.any(Object),
       }),
     );
@@ -384,27 +452,37 @@ function createPollsMock(): PollsMock {
     assertPublishedDirectLinkPollReadable: jest.fn(),
     assertPublishedPollReadable: jest.fn(),
     clearEligibilityEnrollments: jest.fn(),
+    createAdminCacicElectionSlate: jest.fn(),
     createPoll: jest.fn(),
+    deleteCacicElectionSlate: jest.fn(),
     deleteEligibilityEnrollment: jest.fn(),
     deletePoll: jest.fn(),
+    exportCacicElectionVoterEnrollments: jest.fn(),
     getAdminPoll: jest.fn(),
     getAdminPollResults: jest.fn(),
     getDirectLinkPublicPollResults: jest.fn(),
     getDirectLinkUserResponseState: jest.fn(),
+    getMyCacicElectionSlate: jest.fn(),
     getPublishedPoll: jest.fn(),
     getPublishedPollByDirectLink: jest.fn(),
     getPublicPollResults: jest.fn(),
     getUserResponseState: jest.fn(),
     importEligibilityEnrollments: jest.fn(),
     listAdminPolls: jest.fn(),
+    listAdminCacicElectionSlates: jest.fn(),
     listEligibilityEnrollments: jest.fn(),
     listLinkableEvents: jest.fn(),
+    listPublicCacicElectionSlates: jest.fn(),
+    rejectCacicElectionSlate: jest.fn(),
     listPublicPolls: jest.fn(),
     streamAdminPollResults: jest.fn(),
     streamDirectLinkPublicPollResults: jest.fn(),
     streamPublicPollResults: jest.fn(),
+    submitCacicElectionSlate: jest.fn(),
     submitDirectLinkResponse: jest.fn(),
     submitResponse: jest.fn(),
+    updateAdminCacicElectionSlate: jest.fn(),
+    updateCacicElectionSlateEnabled: jest.fn(),
     updatePoll: jest.fn(),
     updatePollStatus: jest.fn(),
   } as PollsMock;
@@ -459,6 +537,9 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   polls.getUserResponseState.mockResolvedValue(createResponseState());
   polls.streamPublicPollResults.mockReturnValue(of({ data: { pollId: 'poll-1' } }));
   polls.submitResponse.mockResolvedValue(createPollResponse());
+  polls.listPublicCacicElectionSlates.mockResolvedValue([createSlate()]);
+  polls.getMyCacicElectionSlate.mockResolvedValue(createAdminSlate());
+  polls.submitCacicElectionSlate.mockResolvedValue(createSlate());
   polls.listAdminPolls.mockResolvedValue([]);
   polls.listLinkableEvents.mockResolvedValue([]);
   polls.listEligibilityEnrollments.mockResolvedValue(createEligibilityList());
@@ -467,7 +548,16 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   polls.clearEligibilityEnrollments.mockResolvedValue(createEligibilityList());
   polls.deleteEligibilityEnrollment.mockResolvedValue(undefined);
   polls.getAdminPollResults.mockResolvedValue(createPollResults());
+  polls.exportCacicElectionVoterEnrollments.mockResolvedValue('24123456');
   polls.streamAdminPollResults.mockReturnValue(of({ data: { pollId: 'poll-1' } }));
+  polls.listAdminCacicElectionSlates.mockResolvedValue([createAdminSlate()]);
+  polls.createAdminCacicElectionSlate.mockResolvedValue(createAdminSlate());
+  polls.updateAdminCacicElectionSlate.mockResolvedValue(createAdminSlate());
+  polls.rejectCacicElectionSlate.mockResolvedValue(createAdminSlate({ status: 'rejected', rejectionReason: 'Documentos incompletos.' }));
+  polls.updateCacicElectionSlateEnabled.mockImplementation(async (_pollId, _slateId, input) =>
+    createAdminSlate({ enabled: input.enabled }),
+  );
+  polls.deleteCacicElectionSlate.mockResolvedValue(undefined);
   polls.getAdminPoll.mockResolvedValue(createPoll());
   polls.createPoll.mockResolvedValue(createPoll());
   polls.updatePoll.mockResolvedValue(createPoll());
@@ -495,6 +585,112 @@ function createPrincipal(): AuthenticatedPrincipal {
   };
 }
 
+function createSlateRequest(): SubmitCacicElectionSlateRequest {
+  return {
+    name: 'Chapa Integração',
+    members: [
+      {
+        fullName: 'Ana Presidente',
+        enrollmentNumber: '26123456',
+        role: 'president',
+        isRepresentative: true,
+        identifierType: 'email',
+        identifierValue: 'ana@example.com',
+      },
+      {
+        fullName: 'Bia Vice',
+        enrollmentNumber: '25123456',
+        role: 'vicePresident',
+        isRepresentative: false,
+        identifierType: 'email',
+        identifierValue: 'bia@example.com',
+      },
+      {
+        fullName: 'Caio Financeiro',
+        enrollmentNumber: '24123456',
+        role: 'financialDirector',
+        isRepresentative: false,
+        identifierType: 'phone',
+        identifierValue: '18999990001',
+      },
+      {
+        fullName: 'Duda Comunicação',
+        enrollmentNumber: '23123456',
+        role: 'communicationDirector',
+        isRepresentative: false,
+        identifierType: 'email',
+        identifierValue: 'duda@example.com',
+      },
+      {
+        fullName: 'Eva Eventos',
+        enrollmentNumber: '22123456',
+        role: 'eventsDirector',
+        isRepresentative: false,
+        identifierType: 'cpf',
+        identifierValue: '12345678901',
+      },
+      {
+        fullName: 'Fabio Relações',
+        enrollmentNumber: '21123456',
+        role: 'publicRelationsDirector',
+        isRepresentative: false,
+        identifierType: 'email',
+        identifierValue: 'fabio@example.com',
+      },
+    ],
+  };
+}
+
+function createSlate(overrides: Partial<CacicElectionSlate> = {}): CacicElectionSlate {
+  return {
+    enabled: true,
+    id: 'slate-1',
+    members: createSlateRequest().members.map((member, index) => ({
+      id: `slate-1-member-${index + 1}`,
+      fullName: member.fullName,
+      enrollmentYear: readEnrollmentYear(member.enrollmentNumber),
+      role: member.role,
+      isRepresentative: member.isRepresentative,
+    })),
+    name: 'Chapa Integração',
+    pollId: 'poll-1',
+    reviewedAt: '2026-06-21T12:00:00.000Z',
+    status: 'approved',
+    submissionSource: 'public',
+    submittedAt: '2026-06-21T12:00:00.000Z',
+    submittedBy: {
+      email: 'ana@example.com',
+      name: 'Ana Presidente',
+      preferredUsername: 'ana',
+      userId: 'user-1',
+    },
+    ...overrides,
+  };
+}
+
+function createAdminSlate(overrides: Partial<AdminCacicElectionSlate> = {}): AdminCacicElectionSlate {
+  const request = createSlateRequest();
+
+  return {
+    ...createSlate(),
+    members: request.members.map((member, index) => ({
+      id: `slate-1-member-${index + 1}`,
+      fullName: member.fullName,
+      enrollmentNumber: member.enrollmentNumber,
+      enrollmentYear: readEnrollmentYear(member.enrollmentNumber),
+      role: member.role,
+      isRepresentative: member.isRepresentative,
+      identifierType: member.identifierType,
+      identifierValue: member.identifierValue,
+    })),
+    ...overrides,
+  };
+}
+
+function readEnrollmentYear(enrollmentNumber: string | undefined): string | undefined {
+  return enrollmentNumber?.slice(0, 2);
+}
+
 function createPoll(): Poll {
   return {
     allowMultipleResponses: false,
@@ -503,6 +699,7 @@ function createPoll(): Poll {
     directLinkEnabled: false,
     elements: [],
     id: 'poll-1',
+    mode: 'regular',
     requireVerifiedUnespRole: false,
     resultsLive: false,
     resultsPublic: false,
@@ -534,6 +731,7 @@ function createResponseState(): PollUserResponseState {
 function createPollResults(): PollResults {
   return {
     anonymous: false,
+    answersReleased: true,
     pollId: 'poll-1',
     responseCount: 0,
     responses: [],

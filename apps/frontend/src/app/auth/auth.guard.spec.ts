@@ -45,6 +45,17 @@ describe('auth guards', () => {
     expect(router.serializeUrl(result as UrlTree)).toBe('/login');
   });
 
+  it('redirects guests after logout without starting a new login', () => {
+    vi.mocked(auth.consumePostLogoutRedirect).mockReturnValue(true);
+
+    const result = TestBed.runInInjectionContext(() =>
+      authGuard({} as ActivatedRouteSnapshot, { url: '/admin' } as RouterStateSnapshot),
+    );
+
+    expect(auth.login).not.toHaveBeenCalled();
+    expect(router.serializeUrl(result as UrlTree)).toBe('/login');
+  });
+
   it('redirects authenticated users away from login', () => {
     isAuthenticated.set(true);
 

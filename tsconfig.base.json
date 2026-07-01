@@ -25,6 +25,12 @@
       ],
       "@cacic-fct/form-contracts": [
         "./libs/shared/form-contracts/src/index.ts"
+      ],
+      "@cacic-fct/account-manager-m2m-contracts": [
+        "../cacic-account-manager/dist/libs/m2m-contracts/index.d.ts"
+      ],
+      "@cacic-fct/event-manager-m2m-contracts": [
+        "../fct-app/dist/libs/event-manager-m2m-contracts/index.d.ts"
       ]
     }
   },

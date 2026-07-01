@@ -7,7 +7,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { PollSummary } from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
-import { voterEligibilityLabel, votingStyleLabel } from './poll-metadata';
+import { votingStyleLabel } from './poll-metadata';
 import { PollApiService } from './poll-api.service';
 
 @Component({
@@ -28,7 +28,6 @@ export class PublicPollsPageComponent {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly votingStyleLabel = votingStyleLabel;
-  protected readonly voterEligibilityLabel = voterEligibilityLabel;
 
   protected pollStatusLabel(poll: PollSummary): string {
     if (poll.status === 'closed') {
@@ -36,6 +35,21 @@ export class PublicPollsPageComponent {
     }
 
     return poll.publishedAt ? `Publicada em ${this.dateTimeFormatter.format(new Date(poll.publishedAt))}` : 'Publicada';
+  }
+
+  protected canVote(poll: PollSummary): boolean {
+    return poll.status !== 'closed';
+  }
+
+  protected canShowResults(poll: PollSummary): boolean {
+    if (
+      poll.mode === 'cacicElection' &&
+      poll.cacicElectionPhase === 'election'
+    ) {
+      return poll.resultsPublic && poll.status === 'closed';
+    }
+
+    return poll.resultsPublic && (poll.resultsLive || poll.status === 'closed');
   }
 
   constructor() {

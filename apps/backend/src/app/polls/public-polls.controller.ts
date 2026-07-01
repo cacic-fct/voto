@@ -1,10 +1,18 @@
-import { Body, Controller, Get, MessageEvent, Param, Post, Query, Req, Res, Sse } from '@nestjs/common';
+import { Body, Controller, Get, MessageEvent, Param, Post, Put, Query, Req, Res, Sse } from '@nestjs/common';
 import { ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Poll, PollResponse, PollResults, PollSummary, PollUserResponseState } from '@org/voting-contracts';
+import {
+  AdminCacicElectionSlate,
+  CacicElectionSlate,
+  Poll,
+  PollResponse,
+  PollResults,
+  PollSummary,
+  PollUserResponseState,
+} from '@org/voting-contracts';
 import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { AuthenticatedRequest } from '../auth/auth.types';
-import { SubmitPollResponseDto } from './dto/poll.dto';
+import { SubmitCacicElectionSlateDto, SubmitPollResponseDto } from './dto/poll.dto';
 import { PollImagesService } from './poll-images.service';
 import { PollsService } from './polls.service';
 
@@ -139,6 +147,37 @@ export class PublicPollsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PollResults> {
     return this.polls.getPublicPollResults(id, request.user);
+  }
+
+  @Get(':id/cacic-election/slates')
+  @ApiOperation({ summary: 'List approved CACiC election slate submissions' })
+  @ApiOkResponse({ description: 'Approved slate submissions without private identifier fields.' })
+  listCacicElectionSlates(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<CacicElectionSlate[]> {
+    return this.polls.listPublicCacicElectionSlates(id, request.user);
+  }
+
+  @Get(':id/cacic-election/slates/me')
+  @ApiOperation({ summary: 'Read the current authenticated user CACiC election slate submission' })
+  @ApiOkResponse({ description: 'Current user slate submission when present.' })
+  getMyCacicElectionSlate(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AdminCacicElectionSlate | null> {
+    return this.polls.getMyCacicElectionSlate(id, request.user);
+  }
+
+  @Put(':id/cacic-election/slates/me')
+  @ApiOperation({ summary: 'Submit or resubmit the current user CACiC election slate' })
+  @ApiOkResponse({ description: 'Stored slate submission without private identifier fields.' })
+  submitCacicElectionSlate(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: SubmitCacicElectionSlateDto,
+  ): Promise<CacicElectionSlate> {
+    return this.polls.submitCacicElectionSlate(id, body, request.user);
   }
 
   @Get(':id/responses/me')

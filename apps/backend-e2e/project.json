@@ -13,6 +13,14 @@
         "jestConfig": "apps/backend-e2e/jest.config.cts",
         "passWithNoTests": true
       }
+    },
+    "e2e-keycloak": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/coverage/backend-e2e"],
+      "options": {
+        "command": "node tools/run-backend-keycloak-e2e.mjs",
+        "forwardAllArgs": true
+      }
     }
   }
 }

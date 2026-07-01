@@ -105,6 +105,19 @@ export function votingStyleVoterDescription(style: PollVotingStyle): string {
   return VOTING_STYLE_METADATA[style].voterDescription;
 }
 
+export function votingStylePublicResultsDescription(style: PollVotingStyle): string {
+  switch (style) {
+    case 'public':
+      return 'Resultados públicos podem exibir resumo, participantes e respostas individuais.';
+    case 'partiallySecret':
+      return 'Resultados públicos podem exibir resumo e participantes, sem vincular participantes às respostas.';
+    case 'secret':
+      return 'Resultados públicos exibem apenas o resumo das respostas liberadas. Participantes e votos individuais ficam restritos aos administradores.';
+    case 'anonymous':
+      return 'Resultados públicos exibem apenas o resumo das respostas liberadas. As respostas não carregam usuário nem horário.';
+  }
+}
+
 export function voterEligibilityLabel(source: PollVoterEligibilitySource): string {
   return VOTER_ELIGIBILITY_METADATA[source].label;
 }

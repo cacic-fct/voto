@@ -45,10 +45,16 @@ Create a second confidential client for backend-to-backend calls:
 - Standard flow: disabled
 - Direct access grants: disabled
 
-Copy its secret into `KEYCLOAK_M2M_CLIENT_SECRET`. Grant the service account the Event Manager role/scope required for `/internal/voting/events` and attendance checks. In local development, use:
+Copy its secret into `KEYCLOAK_M2M_CLIENT_SECRET`. Grant the service account:
+
+- Event Manager access for `/internal/voting/events` and attendance checks.
+- Account Manager `users:read` on `cacic-account-manager-audience` for fresh Keycloak user lookups.
+
+In local development, use:
 
 ```bash
 EVENT_MANAGER_M2M_AUDIENCE="cacic-event-manager-api"
+ACCOUNT_MANAGER_M2M_AUDIENCE="cacic-account-manager-audience"
 ```
 
 ## Environment
@@ -66,6 +72,10 @@ KEYCLOAK_POST_LOGIN_REDIRECT_URI="http://localhost:4200"
 KEYCLOAK_POST_LOGOUT_REDIRECT_URI="http://localhost:4200/"
 KEYCLOAK_M2M_CLIENT_ID="cacic-voto-m2m"
 KEYCLOAK_M2M_CLIENT_SECRET="..."
+EVENT_MANAGER_API_URL="http://localhost:3000/api"
+EVENT_MANAGER_M2M_AUDIENCE="cacic-event-manager-api"
+ACCOUNT_MANAGER_API_URL="http://localhost:3000/api"
+ACCOUNT_MANAGER_M2M_AUDIENCE="cacic-account-manager-audience"
 ```
 
 Start Postgres and Redis with Docker Compose, then run Prisma migrations only after confirming the target database:
