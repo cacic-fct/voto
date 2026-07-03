@@ -6,6 +6,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  AdminCacicElectionSlate,
+  PollUserResponseState,
+} from '@org/voting-contracts';
+import {
   CacicElectionPhase as DbCacicElectionPhase,
   CacicElectionSlateMemberIdentifierType as DbCacicElectionSlateMemberIdentifierType,
   CacicElectionSlateMemberRole as DbCacicElectionSlateMemberRole,
@@ -24,6 +28,7 @@ import { EventManagerIntegrationService } from '../event-manager/event-manager-i
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacicElectionSlateMemberDto, SavePollDto } from './dto/poll.dto';
+import { ElementRecord, PollPublicationScheduleData } from './poll-records';
 import { PollsService } from './polls.service';
 
 type PrismaMock = {
@@ -99,7 +104,10 @@ type FeatureFlagMock = {
 };
 
 type PollsInternals = {
+  listAdminCacicElectionSlates(pollId: string): Promise<AdminCacicElectionSlate[]>;
+  getDirectLinkUserResponseState(directLinkToken: string, user?: AuthenticatedPrincipal): Promise<PollUserResponseState>;
   validatePollInput(input: SavePollDto): void;
+  validatePollPublicationSchedule(schedule: PollPublicationScheduleData): void;
   normalizeElementSettings(element: SavePollDto['elements'][number]): unknown;
   resolvePollMetadata(input: SavePollDto, existing?: unknown): Promise<unknown>;
   resolvePollResultVisibility(input: SavePollDto, existing?: unknown, metadata?: unknown): unknown;
@@ -112,6 +120,7 @@ type PollsInternals = {
       votingStyle: DbPollVotingStyle;
     },
   ): unknown;
+  resolvePollPublicationSchedule(input: SavePollDto, existing?: PollPublicationScheduleData): PollPublicationScheduleData;
   parseEligibilityImport(input: { format: 'csv' | 'txt'; content: string; selectedHeader?: string }): unknown;
   normalizeEnrollmentNumbers(rawValues: readonly unknown[]): unknown;
   toPollResultsVoter(user: {
@@ -144,6 +153,7 @@ type PollsInternals = {
   publishPollResults(event: { admin: { pollId: string; responseCount?: number; responses?: unknown[] }; public: unknown }): void;
   resultSubscribers: Map<string, Set<unknown>>;
   toContractPoll(poll: unknown): unknown;
+  toContractElement(element: ElementRecord): unknown;
   toDbStatus(status: string): DbPollStatus;
   toDbVotingStyle(style: string): DbPollVotingStyle;
   toDbVoterEligibilitySource(source: string): DbPollVoterEligibilitySource;
@@ -155,6 +165,7 @@ type PollsInternals = {
   cleanOptionalText(value?: string): string | undefined;
   parseEventDate(value: string, fieldName: string): Date;
   parseStringList(value: string): string[];
+  readElementSettings(element: ElementRecord): unknown;
 };
 
 function createPrismaMock(): PrismaMock {
@@ -3606,5 +3617,73 @@ describe('PollsService', () => {
         },
       ],
     });
+  });
+
+  it('keeps compatibility facade methods delegated after the service split', async () => {
+    const cacicElection = (service as unknown as {
+      cacicElection: {
+        listAdminCacicElectionSlates: jest.Mock<Promise<AdminCacicElectionSlate[]>, [string]>;
+      };
+    }).cacicElection;
+    const responses = (service as unknown as {
+      responses: {
+        getDirectLinkUserResponseState: jest.Mock<Promise<PollUserResponseState>, [string, AuthenticatedPrincipal?]>;
+      };
+    }).responses;
+    const mutations = (service as unknown as {
+      mutations: {
+        validatePollPublicationSchedule: jest.Mock<void, [PollPublicationScheduleData]>;
+        resolvePollPublicationSchedule: jest.Mock<PollPublicationScheduleData, [SavePollDto, PollPublicationScheduleData?]>;
+      };
+    }).mutations;
+    const slates: AdminCacicElectionSlate[] = [
+      {
+        id: 'slate-1',
+        pollId: 'poll-1',
+        name: 'Chapa Aurora',
+        status: 'approved',
+        enabled: true,
+        submissionSource: 'public',
+        submittedAt: '2026-06-21T12:00:00.000Z',
+        members: [],
+      },
+    ];
+    const user = createUser();
+    const responseState: PollUserResponseState = {
+      hasSubmitted: true,
+      canEdit: false,
+      canSubmitAnother: true,
+    };
+    const schedule: PollPublicationScheduleData = {
+      visibleFrom: new Date('2026-06-22T12:00:00.000Z'),
+      votingStartsAt: new Date('2026-06-22T13:00:00.000Z'),
+      votingEndsAt: null,
+    };
+
+    jest.spyOn(cacicElection, 'listAdminCacicElectionSlates').mockResolvedValueOnce(slates);
+    jest.spyOn(responses, 'getDirectLinkUserResponseState').mockResolvedValueOnce(responseState);
+    jest.spyOn(mutations, 'validatePollPublicationSchedule').mockReturnValueOnce(undefined);
+    jest.spyOn(mutations, 'resolvePollPublicationSchedule').mockReturnValueOnce(schedule);
+
+    await expect(internals.listAdminCacicElectionSlates('poll-1')).resolves.toBe(slates);
+    await expect(internals.getDirectLinkUserResponseState('direct-token', user)).resolves.toBe(responseState);
+    expect(() => internals.validatePollPublicationSchedule(schedule)).not.toThrow();
+    expect(internals.resolvePollPublicationSchedule(savePoll({ status: 'published' }), schedule)).toBe(schedule);
+    expect(
+      internals.toContractElement(
+        dbElement({
+          type: DbPollElementType.SINGLE_CHOICE,
+          options: [option('a', 'A')],
+        }),
+      ),
+    ).toMatchObject({ options: [{ id: 'a', label: 'A' }] });
+    expect(
+      internals.readElementSettings(
+        dbElement({
+          type: DbPollElementType.SCHEDULING,
+          settings: { scheduling: schedulingSettings() },
+        }),
+      ),
+    ).toEqual({ scheduling: schedulingSettings() });
   });
 });

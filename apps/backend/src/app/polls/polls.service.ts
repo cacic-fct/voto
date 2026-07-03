@@ -12,6 +12,7 @@ import {
   PollResponse,
   PollResponseAnswer,
   PollResults,
+  PollResultsDelta,
   PollResultsVoter,
   PollSchedulingSettings,
   PollStatus,
@@ -76,6 +77,7 @@ import {
   PollPublicationScheduleData,
   PollResponseOptionsData,
   PollResultStreamEvent,
+  PollResultsMetadata,
   PollResultVisibilityData,
 } from './poll-records';
 import { PollResponsesService } from './poll-responses.service';
@@ -219,6 +221,14 @@ export class PollsService {
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
     return this.results.streamDirectLinkPublicPollResults(directLinkToken, after, user);
+  }
+
+  getPollResultsDelta(
+    poll: PollResultsMetadata,
+    after: number,
+    audience: 'admin' | 'public',
+  ): Promise<PollResultsDelta> {
+    return this.results.getPollResultsDelta(poll, after, audience);
   }
 
   createPoll(input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {

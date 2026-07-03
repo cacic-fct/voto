@@ -22,11 +22,16 @@ describe('PollVotePageComponent', () => {
   let api: Pick<
     PollApiService,
     | 'getPublicPoll'
+    | 'getDirectLinkPoll'
     | 'getMyPollResponse'
+    | 'getMyDirectLinkPollResponse'
     | 'getPublicPollResults'
+    | 'getDirectLinkPollResults'
     | 'openPublicPollResultsEvents'
+    | 'openDirectLinkPollResultsEvents'
     | 'parseResultsDelta'
     | 'submitResponse'
+    | 'submitDirectLinkResponse'
     | 'listPublicCacicElectionSlates'
     | 'getMyCacicElectionSlate'
     | 'submitCacicElectionSlate'
@@ -71,7 +76,15 @@ describe('PollVotePageComponent', () => {
   beforeEach(async () => {
     api = {
       getPublicPoll: vi.fn().mockReturnValue(of(poll)),
+      getDirectLinkPoll: vi.fn().mockReturnValue(of(poll)),
       getMyPollResponse: vi.fn().mockReturnValue(
+        of({
+          hasSubmitted: false,
+          canEdit: false,
+          canSubmitAnother: false,
+        }),
+      ),
+      getMyDirectLinkPollResponse: vi.fn().mockReturnValue(
         of({
           hasSubmitted: false,
           canEdit: false,
@@ -87,9 +100,20 @@ describe('PollVotePageComponent', () => {
           responses: [],
         }),
       ),
+      getDirectLinkPollResults: vi.fn().mockReturnValue(
+        of({
+          pollId: poll.id,
+          anonymous: false,
+          answersReleased: true,
+          responseCount: 0,
+          responses: [],
+        }),
+      ),
       openPublicPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      openDirectLinkPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
       submitResponse: vi.fn().mockReturnValue(of(response)),
+      submitDirectLinkResponse: vi.fn().mockReturnValue(of(response)),
       listPublicCacicElectionSlates: vi.fn().mockReturnValue(of([])),
       getMyCacicElectionSlate: vi.fn().mockReturnValue(of(null)),
       submitCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
@@ -388,6 +412,7 @@ describe('PollVotePageComponent', () => {
       gridTemplateColumns(element: PollElement): string;
       linearScaleValues(element: PollElement): number[];
       starRatingValues(element: PollElement): number[];
+      ratingOptionLabel(elementId: string, value: number): string;
     };
     const gridElement: PollElement = {
       id: 'grid',
@@ -426,6 +451,8 @@ describe('PollVotePageComponent', () => {
       2,
       3,
     ]);
+    expect(component.ratingOptionLabel('rating', 4)).toBe('4 estrelas selecionadas');
+    expect(component.ratingOptionLabel('rating', 5)).toBe('5 estrelas');
   });
 
   it('should build scheduling slots and invitee values', () => {
@@ -466,6 +493,7 @@ describe('PollVotePageComponent', () => {
     const input = document.createElement('input');
     input.value = 'ana@unesp.br';
     component.setSchedulingInvitee('schedule', 0, 'email', { target: input } as unknown as Event);
+    component.setSchedulingInvitee('schedule', 1, 'name', { target: document.createElement('div') } as unknown as Event);
 
     expect(slots).toHaveLength(2);
     expect(slots[0].label).toContain('09:00 - 09:30');
@@ -477,7 +505,47 @@ describe('PollVotePageComponent', () => {
     expect(component.isSchedulingSlotSelected('schedule', 'window-1:09:00')).toBe(true);
     expect(component.schedulingInviteeIndexes(schedulingElement)).toEqual([0, 1]);
     expect(component.schedulingInviteeValue('schedule', 0, 'email')).toBe('ana@unesp.br');
+    expect(component.schedulingInviteeValue('schedule', 1, 'name')).toBe('');
+    expect(component.schedulingInviteeValue('schedule', 9, 'name')).toBe('');
     expect(component.schedulingInviteeLabel(schedulingElement.settings?.scheduling)).toBe('Convidados obrigatórios');
+  });
+
+  it('should expose text fallback and CACiC election vote helpers', () => {
+    const component = fixture.componentInstance as unknown as {
+      setTextAnswer(elementId: string, event: Event): void;
+      textAnswerValue(elementId: string): string;
+      isCacicElectionPoll(poll: Poll): boolean;
+      isCacicElectionVotingPoll(poll: Poll): boolean;
+      cacicElectionVoteElement(poll: Poll): PollElement | null;
+      voteFormElements(poll: Poll): PollElement[];
+      cacicElectionBallotOptions(poll: Poll): { id: string; label: string }[];
+      setCacicElectionVote(optionId: string): void;
+      isCacicElectionVoteSelected(optionId: string): boolean;
+    };
+    const voteElement: PollElement = {
+      id: 'cacic-election-vote',
+      type: 'singleChoice',
+      title: 'Voto',
+      required: true,
+      options: [{ id: 'blank', label: 'Branco' }],
+    };
+    const electionPoll = {
+      ...poll,
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+      elements: [poll.elements[0], voteElement],
+    } satisfies Poll;
+
+    component.setTextAnswer('fallback', { target: document.createElement('div') } as unknown as Event);
+    component.setCacicElectionVote('blank');
+
+    expect(component.textAnswerValue('fallback')).toBe('');
+    expect(component.isCacicElectionPoll(electionPoll)).toBe(true);
+    expect(component.isCacicElectionVotingPoll(electionPoll)).toBe(true);
+    expect(component.cacicElectionVoteElement(electionPoll)).toBe(voteElement);
+    expect(component.voteFormElements(electionPoll)).toEqual([poll.elements[0]]);
+    expect(component.cacicElectionBallotOptions(electionPoll)).toEqual([{ id: 'blank', label: 'Branco' }]);
+    expect(component.isCacicElectionVoteSelected('blank')).toBe(true);
   });
 
   it('should build public result summaries for option, text, grid, and scheduling answers', () => {
@@ -901,9 +969,9 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
-              paramMap: {
-                get: vi.fn().mockReturnValue('poll-1'),
-              },
+	              paramMap: {
+	                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
+	              },
             },
           },
         },
@@ -916,5 +984,140 @@ describe('PollVotePageComponent', () => {
     expect((failingFixture.componentInstance as unknown as { error: { (): string | null } }).error()).toBe(
       'Não foi possível carregar a votação.',
     );
+  });
+
+  it('should load direct-link polls and use direct-link response and result APIs', async () => {
+    TestBed.resetTestingModule();
+    const eventSource = {
+      close: vi.fn(),
+      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+    };
+    const directApi = {
+      ...api,
+      getDirectLinkPoll: vi.fn().mockReturnValue(of({ ...poll, resultsPublic: true, resultsLive: true })),
+      getMyDirectLinkPollResponse: vi.fn().mockReturnValue(
+        of({
+          hasSubmitted: false,
+          canEdit: false,
+          canSubmitAnother: false,
+        }),
+      ),
+      getDirectLinkPollResults: vi.fn().mockReturnValue(
+        of({
+          pollId: poll.id,
+          anonymous: false,
+          answersReleased: true,
+          responseCount: 1,
+          responses: [{ id: 'response-1', answers: [] }],
+        }),
+      ),
+      openDirectLinkPollResultsEvents: vi.fn().mockReturnValue(eventSource as unknown as EventSource),
+      parseResultsDelta: vi.fn().mockReturnValue({
+        pollId: poll.id,
+        responseCount: 2,
+        responses: [{ id: 'response-2', answers: [] }],
+      }),
+      submitDirectLinkResponse: vi.fn().mockReturnValue(of(response)),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: directApi },
+        { provide: PLATFORM_ID, useValue: 'browser' },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: {
+                get: vi.fn((name: string) => (name === 'directLinkToken' ? 'direct-token' : null)),
+              },
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const directFixture = TestBed.createComponent(PollVotePageComponent);
+    directFixture.detectChanges();
+    await directFixture.whenStable();
+
+	    const component = directFixture.componentInstance as unknown as {
+	      results: { (): PollResults | null };
+	      loadPublicResults(poll: Poll): Promise<void>;
+	      resultsLink(poll: Poll): unknown[];
+	      submit(poll: Poll): Promise<void>;
+	      ngOnDestroy(): void;
+	    };
+
+	    await new Promise<void>((resolve) => setTimeout(resolve));
+	    await component.loadPublicResults({ ...poll, resultsPublic: true, resultsLive: true });
+	    eventSource.onmessage?.({ data: '{}' } as MessageEvent<string>);
+	    await component.submit(poll);
+
+    expect(directApi.getDirectLinkPoll).toHaveBeenCalledWith('direct-token');
+    expect(directApi.getMyDirectLinkPollResponse).toHaveBeenCalledWith('direct-token');
+    expect(directApi.getDirectLinkPollResults).toHaveBeenCalledWith('direct-token');
+    expect(directApi.openDirectLinkPollResultsEvents).toHaveBeenCalledWith('direct-token', 0);
+    expect(directApi.submitDirectLinkResponse).toHaveBeenCalledWith('direct-token', {
+      answers: [{ elementId: 'element-1', value: null }],
+    });
+    expect(component.results()?.responseCount).toBe(2);
+    expect(component.resultsLink(poll)).toEqual(['/polls/direct', 'direct-token', 'results']);
+    component.ngOnDestroy();
+    expect(eventSource.close).toHaveBeenCalled();
+  });
+
+  it('should handle slate loading failures and skip EventSource on the server', async () => {
+    TestBed.resetTestingModule();
+    const serverApi = {
+      ...api,
+      getPublicPoll: vi.fn().mockReturnValue(of({ ...poll, resultsPublic: true, resultsLive: true })),
+      getPublicPollResults: vi.fn().mockReturnValue(of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] })),
+      listPublicCacicElectionSlates: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+      getMyCacicElectionSlate: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+      submitCacicElectionSlate: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: serverApi },
+        { provide: PLATFORM_ID, useValue: 'server' },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: {
+                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
+              },
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const serverFixture = TestBed.createComponent(PollVotePageComponent);
+    serverFixture.detectChanges();
+    await serverFixture.whenStable();
+    const component = serverFixture.componentInstance as unknown as {
+      slates: { (): CacicElectionSlate[] };
+      mySlate: { (): AdminCacicElectionSlate | null };
+      error: { (): string | null };
+      loadCacicElectionSlates(poll: Poll): Promise<void>;
+      loadMyCacicElectionSlate(poll: Poll): Promise<void>;
+      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
+    };
+    const electionPoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'election' } satisfies Poll;
+    const slatePoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'slateSubmission' } satisfies Poll;
+
+    await component.loadCacicElectionSlates(electionPoll);
+    await component.loadMyCacicElectionSlate(poll);
+    await component.loadMyCacicElectionSlate(slatePoll);
+    await component.submitSlate(slatePoll, { name: '', members: [] });
+
+    expect(component.slates()).toEqual([]);
+    expect(component.mySlate()).toBeNull();
+    expect(component.error()).toBe('Não foi possível enviar a chapa. Confira os campos obrigatórios.');
+    expect(serverApi.openPublicPollResultsEvents).not.toHaveBeenCalled();
   });
 });

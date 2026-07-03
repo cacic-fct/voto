@@ -1,6 +1,7 @@
 import {
   PollAnswerValue,
   PollElement,
+  Poll,
   PollResultsResponse,
 } from '@org/voting-contracts';
 import {
@@ -30,6 +31,26 @@ export function buildPublicQuestionSummaries(
   return collectResultElementVersions(elements, responses).map((version) =>
     buildPublicQuestionSummary(version, elements, responses),
   );
+}
+
+export function shouldShowPublicResults(poll: Poll): boolean {
+  if (
+    poll.mode === 'cacicElection' &&
+    poll.cacicElectionPhase === 'election'
+  ) {
+    return poll.resultsPublic && poll.status === 'closed';
+  }
+
+  return poll.resultsPublic && (poll.resultsLive || poll.status === 'closed');
+}
+
+export function resultBucketPercent(
+  summary: Pick<PublicQuestionResultSummary, 'answeredCount'>,
+  bucket: Pick<PublicResultBucket, 'count'>,
+): number {
+  return summary.answeredCount > 0
+    ? Math.round((bucket.count / summary.answeredCount) * 100)
+    : 0;
 }
 
 function buildPublicQuestionSummary(

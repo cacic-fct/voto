@@ -105,7 +105,7 @@ export function resultElementVersionKey(element: PollElement): string {
 
 export function answerValueLabel(
   element: PollElement,
-  value: PollAnswerValue | undefined,
+  value: unknown,
   options: { includeSchedulingInvitees?: boolean } = {},
 ): string {
   if (isEmptyAnswerValue(value)) {
@@ -158,7 +158,7 @@ export function answerValueLabel(
   return 'Sem resposta';
 }
 
-export function answerValueLabels(element: PollElement, value: PollAnswerValue | undefined): string[] {
+export function answerValueLabels(element: PollElement, value: unknown): string[] {
   if (typeof value === 'number') {
     return [String(value)];
   }
@@ -196,7 +196,7 @@ export function answerValueLabels(element: PollElement, value: PollAnswerValue |
   return [];
 }
 
-export function isEmptyAnswerValue(value: PollAnswerValue | undefined): boolean {
+export function isEmptyAnswerValue(value: unknown): boolean {
   return (
     value === undefined ||
     value === null ||

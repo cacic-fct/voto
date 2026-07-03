@@ -29,7 +29,9 @@ const coveredFrontendRoutes = [
   'login',
   'polls',
   'polls/:id',
+  'polls/:id/results',
   'polls/direct/:directLinkToken',
+  'polls/direct/:directLinkToken/results',
 ] as const;
 
 const voterUser: AuthenticatedUser = {

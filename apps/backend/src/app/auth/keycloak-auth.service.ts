@@ -2,26 +2,25 @@ import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@
 import { hasVotingAdminRole, normalizePermissions } from '@org/voting-contracts';
 import { Prisma } from '@prisma/client';
 import axios from 'axios';
-import { Buffer } from 'node:buffer';
-import { createPublicKey, type JsonWebKey, type KeyObject, randomBytes, verify as verifySignature } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   DEFAULT_KEYCLOAK_CLIENT_ID,
   DEFAULT_KEYCLOAK_REALM_URL,
 } from './auth.constants';
 import { AuthSessionStoreService } from './auth-session-store.service';
 import { AuthorizationStateService } from './authorization-state.service';
-import { AuthSession, AuthenticatedPrincipal, AuthorizationState, TokenClaims, TokenResponse } from './auth.types';
-import { summarizeKeycloakFailure } from './keycloak-error-logging';
+import { AuthSession, AuthenticatedPrincipal, AuthorizationState, TokenResponse } from './auth.types';
 import {
   decodeJwtPayload,
   extractOidcScopes,
   extractPermissionClaims,
   extractPermissions,
   extractRoles,
-  isRecord,
   readNumberClaim,
   readStringClaim,
 } from './keycloak-claims.utils';
+import { KeycloakTokenClient } from './keycloak-token-client';
+import { KeycloakTokenVerifier } from './keycloak-token-verifier';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CachedUser = {
@@ -33,8 +32,6 @@ type CachedUser = {
 export class KeycloakAuthService {
   private readonly logger = new Logger(KeycloakAuthService.name);
   private readonly userCache = new Map<string, CachedUser>();
-  private jwksCache?: { keys: Map<string, KeyObject>; expiresAt: number };
-  private readonly keycloakFailureLogs = new Map<string, { loggedAt: number; suppressed: number }>();
   private readonly accessTokenRefreshSkewMs = 30_000;
   private readonly keycloakFailureLogSuppressionMs = 60_000;
 
@@ -54,6 +51,21 @@ export class KeycloakAuthService {
     process.env.KEYCLOAK_JWT_CLOCK_SKEW_SECONDS,
     30,
   );
+  private readonly tokenVerifier = new KeycloakTokenVerifier({
+    realmUrl: this.realmUrl,
+    jwksCacheTtlMs: this.jwksCacheTtlMs,
+    jwtClockSkewSeconds: this.jwtClockSkewSeconds,
+    logger: this.logger,
+  });
+  private readonly tokenClient = new KeycloakTokenClient({
+    realmUrl: this.realmUrl,
+    clientId: this.clientId,
+    clientSecret: this.clientSecret,
+    tokenEndpointAuthMethod: this.tokenEndpointAuthMethod,
+    defaultPostLogoutRedirectUri: this.defaultPostLogoutRedirectUri,
+    failureLogSuppressionMs: this.keycloakFailureLogSuppressionMs,
+    logger: this.logger,
+  });
 
   constructor(
     private readonly sessions: AuthSessionStoreService,
@@ -96,50 +108,14 @@ export class KeycloakAuthService {
   }
 
   async exchangeCodeForTokens(code: string, state?: AuthorizationState, redirectUri?: string): Promise<TokenResponse> {
-    const payload = new URLSearchParams();
-    payload.set('grant_type', 'authorization_code');
-    payload.set('code', code);
-    payload.set('redirect_uri', this.authorizationState.getAuthorizationRedirectUri(state) ?? redirectUri ?? '');
-    const headers = this.createFormHeaders();
-    this.addClientAuthentication(payload, headers);
-
-    try {
-      const { data } = await axios.post<TokenResponse>(
-        `${this.realmUrl}/protocol/openid-connect/token`,
-        payload.toString(),
-        { headers },
-      );
-
-      return data;
-    } catch (error) {
-      this.logKeycloakFailure(
-        'authorization code token exchange',
-        error,
-        this.getTokenExchangeFailureContext(this.authorizationState.getAuthorizationRedirectUri(state) ?? redirectUri ?? ''),
-      );
-      throw new UnauthorizedException('Could not exchange authorization code for tokens.');
-    }
+    return this.tokenClient.exchangeCodeForTokens(
+      code,
+      this.authorizationState.getAuthorizationRedirectUri(state) ?? redirectUri ?? '',
+    );
   }
 
   async refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
-    const payload = new URLSearchParams();
-    payload.set('grant_type', 'refresh_token');
-    payload.set('refresh_token', refreshToken);
-    const headers = this.createFormHeaders();
-    this.addClientAuthentication(payload, headers);
-
-    try {
-      const { data } = await axios.post<TokenResponse>(
-        `${this.realmUrl}/protocol/openid-connect/token`,
-        payload.toString(),
-        { headers },
-      );
-
-      return data;
-    } catch (error) {
-      this.logKeycloakFailure('refresh token exchange', error);
-      throw new UnauthorizedException('Could not refresh access token.');
-    }
+    return this.tokenClient.refreshAccessToken(refreshToken);
   }
 
   async createSession(tokenResponse: TokenResponse): Promise<{
@@ -270,37 +246,17 @@ export class KeycloakAuthService {
     idTokenHint?: string;
     postLogoutRedirectUri?: string;
   }): Promise<{ refreshTokenRevoked: boolean; logoutUrl: string }> {
-    let refreshTokenRevoked = false;
+    const refreshTokenRevoked = input.refreshToken
+      ? await this.tokenClient.revokeRefreshToken(input.refreshToken)
+      : false;
 
-    if (input.refreshToken && this.clientSecret) {
-      const payload = new URLSearchParams();
-      payload.set('token', input.refreshToken);
-      payload.set('token_type_hint', 'refresh_token');
-      const headers = this.createFormHeaders();
-      this.addClientAuthentication(payload, headers);
-
-      try {
-        await axios.post(`${this.realmUrl}/protocol/openid-connect/revoke`, payload.toString(), {
-          headers,
-        });
-        refreshTokenRevoked = true;
-      } catch (error) {
-        this.logKeycloakFailure('refresh token revocation', error);
-      }
-    }
-
-    const logoutUrl = new URL(`${this.realmUrl}/protocol/openid-connect/logout`);
-    logoutUrl.searchParams.set('client_id', this.clientId);
-    if (input.idTokenHint) {
-      logoutUrl.searchParams.set('id_token_hint', input.idTokenHint);
-    }
-
-    const postLogoutRedirectUri = input.postLogoutRedirectUri ?? this.defaultPostLogoutRedirectUri;
-    if (postLogoutRedirectUri) {
-      logoutUrl.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
-    }
-
-    return { refreshTokenRevoked, logoutUrl: logoutUrl.toString() };
+    return {
+      refreshTokenRevoked,
+      logoutUrl: this.tokenClient.createLogoutUrl({
+        idTokenHint: input.idTokenHint,
+        postLogoutRedirectUri: input.postLogoutRedirectUri,
+      }),
+    };
   }
 
   getPostLoginRedirectUri(state?: AuthorizationState): string {
@@ -388,7 +344,7 @@ export class KeycloakAuthService {
       return cachedUser.user;
     }
 
-    const mergedClaims = await this.verifyAccessTokenClaims(accessToken);
+    const mergedClaims = await this.tokenVerifier.verifyAccessTokenClaims(accessToken);
 
     const roles = extractRoles(mergedClaims);
     const permissions = extractPermissions(mergedClaims);
@@ -418,212 +374,6 @@ export class KeycloakAuthService {
     });
 
     return principal;
-  }
-
-  private async verifyAccessTokenClaims(accessToken: string): Promise<TokenClaims> {
-    const segments = accessToken.split('.');
-    if (
-      segments.length !== 3 ||
-      segments.some((segment) => segment.length === 0)
-    ) {
-      throw new UnauthorizedException('Invalid token format.');
-    }
-
-    const [encodedHeader, encodedPayload, encodedSignature] = segments;
-    const header = this.decodeJwtJsonSegment(encodedHeader, 'header');
-    const alg = readStringClaim(header, 'alg');
-    const kid = readStringClaim(header, 'kid');
-
-    if (alg !== 'RS256') {
-      throw new UnauthorizedException('Unsupported token signature algorithm.');
-    }
-
-    if (!kid) {
-      throw new UnauthorizedException('Token signing key id is missing.');
-    }
-
-    const claims = this.decodeJwtJsonSegment(encodedPayload, 'payload');
-    await this.assertJwtSignature(kid, encodedHeader, encodedPayload, encodedSignature);
-    this.assertJwtIssuer(claims);
-    this.assertJwtTimeClaims(claims);
-
-    return {
-      ...claims,
-      active: true,
-    };
-  }
-
-  private async assertJwtSignature(
-    kid: string,
-    encodedHeader: string,
-    encodedPayload: string,
-    encodedSignature: string,
-  ): Promise<void> {
-    const signingInput = Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8');
-    const signature = this.decodeBase64UrlSegment(encodedSignature);
-    const signingKey = await this.getSigningKey(kid);
-
-    if (verifySignature('RSA-SHA256', signingInput, signingKey, signature)) {
-      return;
-    }
-
-    const refreshedSigningKey = await this.getSigningKey(kid, true);
-    if (verifySignature('RSA-SHA256', signingInput, refreshedSigningKey, signature)) {
-      return;
-    }
-
-    throw new UnauthorizedException('Invalid token signature.');
-  }
-
-  private async getSigningKey(kid: string, forceRefresh = false): Promise<KeyObject> {
-    const keys = await this.getJwksKeys(forceRefresh);
-    const key = keys.get(kid);
-    if (key) {
-      return key;
-    }
-
-    if (!forceRefresh) {
-      const refreshedKeys = await this.getJwksKeys(true);
-      const refreshedKey = refreshedKeys.get(kid);
-      if (refreshedKey) {
-        return refreshedKey;
-      }
-    }
-
-    throw new UnauthorizedException('Unable to verify token signature.');
-  }
-
-  private async getJwksKeys(forceRefresh = false): Promise<Map<string, KeyObject>> {
-    const now = Date.now();
-    if (!forceRefresh && this.jwksCache && this.jwksCache.expiresAt > now) {
-      return this.jwksCache.keys;
-    }
-
-    const jwksUrl = `${this.realmUrl}/protocol/openid-connect/certs`;
-
-    try {
-      const response = await fetch(jwksUrl, {
-        headers: {
-          accept: 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        this.logger.warn(`Keycloak JWKS lookup failed. status=${response.status} ${response.statusText}.`);
-        throw new UnauthorizedException('Unable to load Keycloak signing keys.');
-      }
-
-      const body: unknown = await response.json();
-      const keys = this.parseJwks(body);
-      if (keys.size === 0) {
-        this.logger.warn('Keycloak JWKS response did not include usable RS256 signing keys.');
-        throw new UnauthorizedException('Unable to load Keycloak signing keys.');
-      }
-
-      this.jwksCache = {
-        keys,
-        expiresAt: now + this.jwksCacheTtlMs,
-      };
-
-      return keys;
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-
-      this.logger.warn(
-        `Keycloak JWKS lookup failed. ${error instanceof Error ? `message=${error.message}.` : 'unknown error.'}`,
-      );
-      throw new UnauthorizedException('Unable to load Keycloak signing keys.');
-    }
-  }
-
-  private parseJwks(body: unknown): Map<string, KeyObject> {
-    const keys = new Map<string, KeyObject>();
-    if (!isRecord(body) || !Array.isArray(body['keys'])) {
-      return keys;
-    }
-
-    for (const rawKey of body['keys']) {
-      if (!isRecord(rawKey)) {
-        continue;
-      }
-
-      const kid = readStringClaim(rawKey, 'kid');
-      const kty = readStringClaim(rawKey, 'kty');
-      const use = readStringClaim(rawKey, 'use');
-      const alg = readStringClaim(rawKey, 'alg');
-      if (!kid || kty !== 'RSA' || (use && use !== 'sig') || (alg && alg !== 'RS256')) {
-        continue;
-      }
-
-      try {
-        keys.set(
-          kid,
-          createPublicKey({
-            key: { ...rawKey } as JsonWebKey,
-            format: 'jwk',
-          }),
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Ignoring unusable Keycloak JWKS key. kid=${kid}; ${
-            error instanceof Error ? `message=${error.message}.` : 'unknown error.'
-          }`,
-        );
-      }
-    }
-
-    return keys;
-  }
-
-  private decodeJwtJsonSegment(segment: string, description: string): Record<string, unknown> {
-    try {
-      const parsed: unknown = JSON.parse(this.decodeBase64UrlSegment(segment).toString('utf8'));
-      if (isRecord(parsed)) {
-        return parsed;
-      }
-    } catch {
-      // Fall through to a stable UnauthorizedException below.
-    }
-
-    throw new UnauthorizedException(`Invalid token ${description}.`);
-  }
-
-  private decodeBase64UrlSegment(segment: string): Buffer {
-    try {
-      return Buffer.from(segment, 'base64url');
-    } catch {
-      throw new UnauthorizedException('Invalid token encoding.');
-    }
-  }
-
-  private assertJwtIssuer(claims: Record<string, unknown>): void {
-    if (readStringClaim(claims, 'iss') !== this.realmUrl) {
-      throw new UnauthorizedException('Invalid token issuer.');
-    }
-  }
-
-  private assertJwtTimeClaims(claims: Record<string, unknown>): void {
-    const now = Math.floor(Date.now() / 1000);
-    const exp = readNumberClaim(claims, 'exp');
-    if (!exp) {
-      throw new UnauthorizedException('Token missing expiration.');
-    }
-
-    if (exp < now - this.jwtClockSkewSeconds) {
-      throw new UnauthorizedException('Token expired.');
-    }
-
-    const nbf = readNumberClaim(claims, 'nbf');
-    if (nbf && nbf > now + this.jwtClockSkewSeconds) {
-      throw new UnauthorizedException('Token is not active yet.');
-    }
-
-    const iat = readNumberClaim(claims, 'iat');
-    if (iat && iat > now + this.jwtClockSkewSeconds) {
-      throw new UnauthorizedException('Token issued in the future.');
-    }
   }
 
   private async evaluatePermissions(accessToken: string, requiredPermissions: string[]): Promise<string[]> {
@@ -734,92 +484,6 @@ export class KeycloakAuthService {
     }
 
     return Math.max(fallbackExpiresAt, now + 60 * 60 * 1000);
-  }
-
-  private logKeycloakFailure(operation: string, error: unknown, continuation?: string): void {
-    const summary = summarizeKeycloakFailure(error);
-    const logKey = `${operation}|${summary.dedupeKey}`;
-    const now = Date.now();
-    const previousLog = this.keycloakFailureLogs.get(logKey);
-
-    if (previousLog && now - previousLog.loggedAt < this.keycloakFailureLogSuppressionMs) {
-      previousLog.suppressed += 1;
-      return;
-    }
-
-    const suppressedCount = previousLog?.suppressed ?? 0;
-    this.keycloakFailureLogs.set(logKey, {
-      loggedAt: now,
-      suppressed: 0,
-    });
-
-    const continuationMessage = continuation ? ` ${continuation}` : '';
-    const suppressionMessage =
-      suppressedCount > 0
-        ? ` Suppressed ${suppressedCount} similar Keycloak failure log${
-            suppressedCount === 1 ? '' : 's'
-          } in the last ${Math.round(this.keycloakFailureLogSuppressionMs / 1000)} seconds.`
-        : '';
-
-    this.logger.warn(`Keycloak ${operation} failed. ${summary.message}.${continuationMessage}${suppressionMessage}`);
-  }
-
-  private getTokenExchangeFailureContext(redirectUri: string): string {
-    return `clientId=${this.clientId}; redirectUri=${this.formatRedirectUriForLog(
-      redirectUri,
-    )}; clientSecretConfigured=${this.clientSecret ? 'true' : 'false'}; tokenEndpointAuthMethod=${
-      this.clientSecret ? this.tokenEndpointAuthMethod : 'none'
-    }.`;
-  }
-
-  private createFormHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
-    return {
-      'content-type': 'application/x-www-form-urlencoded',
-      ...extraHeaders,
-    };
-  }
-
-  private addClientAuthentication(payload: URLSearchParams, headers: Record<string, string>): void {
-    if (!this.clientSecret) {
-      payload.set('client_id', this.clientId);
-      return;
-    }
-
-    if (this.tokenEndpointAuthMethod === 'client_secret_post') {
-      payload.set('client_id', this.clientId);
-      payload.set('client_secret', this.clientSecret);
-      return;
-    }
-
-    headers.Authorization = `Basic ${this.getClientSecretBasicCredentials()}`;
-  }
-
-  private getClientSecretBasicCredentials(): string {
-    const clientSecret = this.clientSecret;
-    if (!clientSecret) {
-      return '';
-    }
-
-    return Buffer.from(`${this.formEncode(this.clientId)}:${this.formEncode(clientSecret)}`, 'utf8').toString('base64');
-  }
-
-  private formEncode(value: string): string {
-    const params = new URLSearchParams();
-    params.set('value', value);
-    return params.toString().slice('value='.length);
-  }
-
-  private formatRedirectUriForLog(redirectUri: string): string {
-    try {
-      const url = new URL(redirectUri);
-      url.username = '';
-      url.password = '';
-      url.search = '';
-      url.hash = '';
-      return url.toString();
-    } catch {
-      return '[invalid-url]';
-    }
   }
 
   private parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {

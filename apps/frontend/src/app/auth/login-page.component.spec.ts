@@ -1,3 +1,4 @@
+import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
@@ -6,12 +7,14 @@ import { LoginPageComponent } from './login-page.component';
 
 describe('LoginPageComponent', () => {
   let fixture: ComponentFixture<LoginPageComponent>;
-  let auth: Partial<AuthService>;
-  let router: Partial<Router>;
+  let auth: Pick<AuthService, 'isAuthenticated' | 'login'>;
+  let isAuthenticated: WritableSignal<boolean>;
+  let router: Pick<Router, 'navigateByUrl'>;
 
   beforeEach(async () => {
+    isAuthenticated = signal(false);
     auth = {
-      isAuthenticated: vi.fn().mockReturnValue(false),
+      isAuthenticated,
       login: vi.fn().mockResolvedValue(undefined),
     };
     router = {
@@ -41,7 +44,7 @@ describe('LoginPageComponent', () => {
   });
 
   it('should redirect authenticated users to the menu', async () => {
-    vi.mocked(auth.isAuthenticated).mockReturnValue(true);
+    isAuthenticated.set(true);
 
     await fixture.componentInstance.login();
 
