@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   displayName: 'backend-e2e',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',

@@ -94,13 +94,14 @@ describeKeycloak('Keycloak-backed authentication', () => {
     expect(meResponse.data).toEqual(
       expect.objectContaining({
         email: 'voto-admin@unesp.br',
+        preferredUsername: 'voto-admin@unesp.br',
         roles: expect.arrayContaining(['voting-admin']),
-        claims: expect.objectContaining({
-          identity_document: '11111111111',
-          enrollment_number: '24123456',
-        }),
+        permissions: [],
+        scopes: expect.arrayContaining(['openid', 'email', 'profile']),
+        oidcScopes: expect.arrayContaining(['openid', 'email', 'profile']),
       }),
     );
+    expect(meResponse.data).not.toHaveProperty('claims');
 
     const permissionsResponse = await axios.post(
       `${backendBaseUrl}/api/auth/permissions/evaluate`,
