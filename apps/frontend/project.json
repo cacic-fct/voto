@@ -48,6 +48,28 @@
           ],
           "outputHashing": "all"
         },
+        "e2e": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all",
+          "security": {
+            "allowedHosts": [
+              "localhost",
+              "127.0.0.1",
+              "::1"
+            ]
+          }
+        },
         "development": {
           "optimization": false,
           "extractLicenses": false,
@@ -132,6 +154,13 @@
         "port": 4200,
         "staticFilePath": "dist/apps/frontend/browser",
         "spa": true
+      }
+    },
+    "serve-e2e": {
+      "continuous": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bunx nx run frontend:build:e2e && PORT=${PORT:-4200} node dist/apps/frontend/server/server.mjs"
       }
     }
   }

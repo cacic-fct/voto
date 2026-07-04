@@ -2,7 +2,6 @@
 import { readdirSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import angular from '@analogjs/vite-plugin-angular';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const hasProjectRootMarkdown = readdirSync(__dirname).some((entry) => entry.endsWith('.md'));
@@ -10,19 +9,17 @@ const hasProjectRootMarkdown = readdirSync(__dirname).some((entry) => entry.ends
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/frontend',
+  resolve: {
+    tsconfigPaths: true,
+  },
   plugins: [
     angular(),
-    tsconfigPaths(),
     ...(hasProjectRootMarkdown
       ? viteStaticCopy({
           targets: [{ src: '*.md', dest: '.' }],
         })
       : []),
   ],
-  // Uncomment this if you are using workers.
-  // worker: {
-  //   plugins: () => [ tsconfigPaths() ],
-  // },
   test: {
     name: 'frontend',
     watch: false,

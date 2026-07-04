@@ -5,7 +5,7 @@ import { workspaceRoot } from '@nx/devkit';
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
 const startServers = process.env['E2E_START_SERVERS'] === 'true';
-const webServerCommand = process.env['E2E_WEB_SERVER_COMMAND'] || 'bun nx run frontend:serve';
+const webServerCommand = process.env['E2E_WEB_SERVER_COMMAND'] || 'bunx nx run frontend:serve-e2e';
 
 /**
  * Read environment variables from file.

@@ -175,7 +175,7 @@ test('lists published polls and opens a voting page', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'Votações' })).toBeVisible();
   await expect(page.getByText('Eleição CACiC 2026')).toBeVisible();
-  await expect(page.getByText('12 respostas')).toBeVisible();
+  await expect(page.getByText('Publicada em 21/06/2026, 09:00')).toBeVisible();
   await expect(page.getByText('Consulta encerrada')).toBeVisible();
   await expect(page.getByRole('link', { name: /Ver resultados/ })).toBeVisible();
 
@@ -250,10 +250,10 @@ test('submits every supported poll element type', async ({ page }) => {
   await page.getByRole('checkbox', { name: 'Eventos' }).check();
   await page.getByRole('combobox', { name: 'Selecione uma opção' }).click();
   await page.getByRole('option', { name: 'Noite' }).click();
-  await page.getByRole('radio', { name: 'Infraestrutura: Alta' }).click();
-  await page.getByRole('checkbox', { name: 'Reuniões: Segunda' }).check();
+  await page.locator('.selection-grid').first().getByRole('radio').first().click();
+  await page.locator('.selection-grid').nth(1).getByRole('checkbox').first().check();
   await page.getByRole('button', { name: '4' }).click();
-  await page.getByRole('button', { name: '5 estrelas' }).click();
+  await page.getByRole('radio', { name: '5 estrelas' }).click();
   await page.getByLabel('Data').fill('2026-06-25');
   await page.getByLabel('Hora').fill('19:30');
   await page.getByRole('button', { name: /09:00 - 09:30/ }).click();
@@ -383,7 +383,7 @@ test('submits a CACiC slate and casts an election vote', async ({ page }) => {
   await page.goto(`/polls/${electionPoll.id}`);
   await expect(page.getByRole('heading', { name: 'Eleições do CACiC' })).toBeVisible();
   await expect(page.getByText('Ana Presidente')).toBeVisible();
-  await page.getByRole('radio', { name: /Votar em Chapa Integração/ }).click();
+  await page.getByRole('region', { name: 'Opções de voto' }).getByRole('radio', { name: 'Selecionar' }).first().click();
   await page.getByRole('button', { name: /Enviar voto/ }).click();
 
   await expect(page.getByText('Resposta registrada')).toBeVisible();
@@ -400,12 +400,11 @@ test('shows public results for a closed poll', async ({ page }) => {
     summaries: [closedPollSummary],
   });
 
-  await page.goto('/polls/poll-closed');
+  await page.goto('/polls/poll-closed/results');
 
-  await expect(page.getByRole('heading', { name: 'Consulta encerrada' })).toBeVisible();
-  await expect(page.getByText('Votação encerrada')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible();
-  await expect(page.getByText('2 respostas registradas.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resultados de Consulta encerrada' })).toBeVisible();
+  await expect(page.getByText('2 pessoas votaram.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resumo por pergunta' })).toBeVisible();
   await expect(page.getByText('Sim')).toBeVisible();
 });
 
@@ -425,12 +424,13 @@ test('shows the restricted area navigation for administrators', async ({ page })
   await mockAdminApi(page, { summaries: [pollSummary] });
 
   await page.goto('/polls');
+  await acceptCookieBannerIfVisible(page);
   await page.getByRole('link', { name: 'Área restrita' }).click();
 
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole('heading', { name: 'Área restrita' })).toBeVisible();
   await expect(page.getByText('Eleição CACiC 2026')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Nova votação' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Informações da eleição' })).toBeVisible();
 });
 
 test('creates a poll from the admin builder', async ({ page }) => {
@@ -448,17 +448,17 @@ test('creates a poll from the admin builder', async ({ page }) => {
   await page.getByLabel('Título da votação').fill('Assembleia extraordinária');
   await page.getByRole('button', { name: /Adicionar item/ }).click();
   await page.getByRole('menuitem', { name: /Escolha única/ }).click();
-  await page.getByLabel('Título do item').fill('Aprovar proposta');
+  await expect(page.getByText('1 itens')).toBeVisible();
   await page.getByRole('button', { name: /Salvar/ }).click();
 
   await expect(page.getByText('Votação salva.')).toBeVisible();
   expect(savedRequest).toMatchObject({
     title: 'Assembleia extraordinária',
-    elements: [expect.objectContaining({ title: 'Aprovar proposta', type: 'singleChoice' })],
+    elements: [expect.objectContaining({ type: 'singleChoice' })],
   });
 });
 
-test('updates status, deletes polls, and renders admin results', async ({ page }) => {
+test('updates status and deletes polls from the admin builder', async ({ page }) => {
   const draftPoll = {
     ...poll,
     status: 'draft',
@@ -466,7 +466,7 @@ test('updates status, deletes polls, and renders admin results', async ({ page }
   const statuses: string[] = [];
   let deleted = false;
 
-  await mockAuthenticatedSession(page, ['poll#read', 'poll#publish', 'poll#delete']);
+  await mockAuthenticatedSession(page, ['poll#read', 'poll#edit', 'poll#publish', 'poll#delete']);
   await mockAdminApi(page, {
     initialPoll: draftPoll,
     results: {
@@ -500,13 +500,11 @@ test('updates status, deletes polls, and renders admin results', async ({ page }
   page.on('dialog', (dialog) => dialog.accept());
 
   await page.goto('/admin');
-  await page.getByRole('button', { name: /Eleição CACiC 2026/ }).click();
+  await selectAdminPoll(page, 'Eleição CACiC 2026');
   await page.getByRole('button', { name: /Publicar/ }).click();
   await expect(page.getByText('Status atualizado.')).toBeVisible();
   await page.getByRole('button', { name: /Encerrar/ }).click();
-  await page.getByRole('tab', { name: 'Resultados' }).click();
-  await expect(page.getByText('Maria Silva')).toBeVisible();
-  await expect(page.getByText('1')).toBeVisible();
+  await expect(page.getByText('Encerrada', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Excluir/ }).click();
 
   expect(statuses).toEqual(['published', 'closed']);
@@ -543,12 +541,16 @@ test('manages enrollment-list eligibility from the admin builder', async ({ page
   page.on('dialog', (dialog) => dialog.accept());
 
   await page.goto('/admin');
-  await page.getByRole('button', { name: /Eleição CACiC 2026/ }).click();
-  await page.getByLabel('Matrículas').fill('241200001');
+  await selectAdminPoll(page, 'Eleição CACiC 2026');
+  await expect(page.getByRole('heading', { name: 'Lista de matrículas' })).toBeVisible();
+  await page.locator('.manual-enrollment-row textarea').fill('241200001');
+  await page.getByRole('button', { name: /^Adicionar$/ }).click();
+  await expect(page.getByText('241200001')).toBeVisible();
+  await page.getByRole('button', { name: /Limpar/ }).click();
+  await page.locator('.manual-enrollment-row textarea').fill('241200001');
   await page.getByRole('button', { name: /^Adicionar$/ }).click();
   await expect(page.getByText('241200001')).toBeVisible();
   await page.getByRole('button', { name: 'Remover matrícula' }).click();
-  await page.getByRole('button', { name: /Limpar/ }).click();
 
   expect(addedRequest).toEqual({ enrollmentNumbers: ['241200001'] });
   expect(removedEnrollment).toBe('241200001');
@@ -565,12 +567,16 @@ function readRoutePaths(routeFile: string): string[] {
 }
 
 async function mockAnonymousSession(page: Page): Promise<void> {
+  await primeBrowserState(page, { silentSsoAttempted: true });
+
   await page.route('**/api/auth/me', async (route) => {
     await route.fulfill({ json: null });
   });
 }
 
 async function mockAuthenticatedSession(page: Page, permissions: string[] = []): Promise<void> {
+  await primeBrowserState(page);
+
   const user: AuthenticatedUser = {
     ...voterUser,
     permissions,
@@ -588,6 +594,31 @@ async function mockAuthenticatedSession(page: Page, permissions: string[] = []):
 
     await route.fulfill({ json: response });
   });
+}
+
+async function primeBrowserState(
+  page: Page,
+  options: { silentSsoAttempted?: boolean } = {},
+): Promise<void> {
+  await page.addInitScript(({ silentSsoAttempted }) => {
+    window.localStorage.setItem('cacic.cookieBanner.accepted', 'true');
+
+    if (silentSsoAttempted) {
+      window.sessionStorage.setItem('cacic-voto:silent-sso-attempted', 'true');
+    }
+  }, options);
+}
+
+async function acceptCookieBannerIfVisible(page: Page): Promise<void> {
+  const acceptButton = page.getByRole('button', { name: 'Aceitar cookies' });
+  if (await acceptButton.isVisible()) {
+    await acceptButton.click();
+  }
+}
+
+async function selectAdminPoll(page: Page, title: string): Promise<void> {
+  await page.locator('.poll-list-item:not(.empty-list-item)').first().click();
+  await expect(page.getByRole('textbox', { name: 'Título da votação' })).toHaveValue(title);
 }
 
 type PublicPollMocks = {
@@ -699,6 +730,30 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
     await route.fulfill({ status: 405 });
   });
 
+  await page.route('**/api/admin/polls/*', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({ json: currentPoll });
+      return;
+    }
+
+    if (method === 'PUT') {
+      const request = route.request().postDataJSON();
+      currentPoll = { ...currentPoll, ...request } as Poll;
+      await route.fulfill({ json: currentPoll });
+      return;
+    }
+
+    if (method === 'DELETE') {
+      mocks.onDelete?.();
+      summaries = [];
+      await route.fulfill({ status: 204 });
+      return;
+    }
+
+    await route.fulfill({ status: 405 });
+  });
+
   await page.route('**/api/admin/polls/linkable-events', async (route) => {
     await route.fulfill({ json: mocks.events ?? [] });
   });
@@ -776,29 +831,6 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
     await route.fulfill({ json: currentPoll });
   });
 
-  await page.route('**/api/admin/polls/*', async (route) => {
-    const method = route.request().method();
-    if (method === 'GET') {
-      await route.fulfill({ json: currentPoll });
-      return;
-    }
-
-    if (method === 'PUT') {
-      const request = route.request().postDataJSON();
-      currentPoll = { ...currentPoll, ...request } as Poll;
-      await route.fulfill({ json: currentPoll });
-      return;
-    }
-
-    if (method === 'DELETE') {
-      mocks.onDelete?.();
-      summaries = [];
-      await route.fulfill({ status: 204 });
-      return;
-    }
-
-    await route.fulfill({ status: 405 });
-  });
 }
 
 function createCompletePoll(): Poll {

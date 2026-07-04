@@ -252,7 +252,6 @@ jobs:
         run: bunx nx e2e frontend-e2e -- --project=chromium
         env:
           E2E_START_SERVERS: 'true'
-          E2E_WEB_SERVER_COMMAND: bunx nx run frontend:serve-static
 
   prepare-untrusted-pr:
     name: Prepare untrusted PR dependencies
@@ -488,4 +487,3 @@ jobs:
         run: bunx nx e2e frontend-e2e -- --project=chromium
         env:
           E2E_START_SERVERS: 'true'
-          E2E_WEB_SERVER_COMMAND: bunx nx run frontend:serve-static
