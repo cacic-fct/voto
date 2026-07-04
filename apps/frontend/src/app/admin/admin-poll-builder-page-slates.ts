@@ -9,6 +9,10 @@ import { AdminPollBuilderPageEligibility } from './admin-poll-builder-page-eligi
 
 export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEligibility {
   protected async saveSlate(request: SubmitCacicElectionSlateRequest | UpdateCacicElectionSlateRequest): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       this.snackBar.open('Salve a eleição antes de cadastrar chapas.', 'OK', { duration: 3000 });
@@ -42,18 +46,34 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
   }
 
   protected editSlate(slate: AdminCacicElectionSlate): void {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     this.editingSlate.set(slate);
   }
 
   protected cancelSlateEdit(): void {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     this.editingSlate.set(null);
   }
 
   protected async approveSlate(slate: AdminCacicElectionSlate): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     await this.updateSlate(slate, { status: 'approved', enabled: true });
   }
 
   protected async updateSlateEnabled(slate: AdminCacicElectionSlate, enabled: boolean): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       return;
@@ -73,6 +93,10 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
   }
 
   protected async rejectSlate(slate: AdminCacicElectionSlate): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       return;
@@ -101,6 +125,10 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
   }
 
   protected async deleteSlate(slate: AdminCacicElectionSlate): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId || !globalThis.confirm(`Excluir a chapa "${slate.name}"?`)) {
       return;

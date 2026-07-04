@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   AdminCacicElectionSlate,
+  ELECTIONS_OBSERVER_ROLE,
   PollUserResponseState,
 } from '@org/voting-contracts';
 import {
@@ -148,9 +149,13 @@ type PollsInternals = {
   }): { id: string }[];
   subscribeToPollResults(
     pollId: string,
-    listener: (event: { admin: unknown; public: unknown }) => void,
+    listener: (event: { admin: unknown; observer: unknown; public: unknown }) => void,
   ): () => void;
-  publishPollResults(event: { admin: { pollId: string; responseCount?: number; responses?: unknown[] }; public: unknown }): void;
+  publishPollResults(event: {
+    admin: { pollId: string; responseCount?: number; responses?: unknown[] };
+    observer: unknown;
+    public: unknown;
+  }): void;
   resultSubscribers: Map<string, Set<unknown>>;
   toContractPoll(poll: unknown): unknown;
   toContractElement(element: ElementRecord): unknown;
@@ -352,6 +357,8 @@ function pollResultsMetadata(overrides: Record<string, unknown> = {}) {
     visibleFrom: null,
     votingStartsAt: null,
     votingEndsAt: null,
+    publishedAt,
+    createdAt,
     ...overrides,
   };
 }
@@ -632,6 +639,70 @@ describe('PollsService', () => {
         publishedAt: undefined,
       }),
     ]);
+  });
+
+  it('limits election observers to CACiC elections from the previous or current month', async () => {
+    const observer = createUser({
+      roles: [ELECTIONS_OBSERVER_ROLE],
+      roleSet: new Set([ELECTIONS_OBSERVER_ROLE]),
+    });
+    prisma.poll.findMany.mockResolvedValueOnce([
+      pollRecord({
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        votingStartsAt: new Date('2026-05-31T23:00:00.000Z'),
+      }),
+    ]);
+
+    await expect(service.listAdminPolls(observer)).resolves.toHaveLength(1);
+    expect(prisma.poll.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          mode: DbPollMode.CACIC_ELECTION,
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              votingStartsAt: {
+                gte: expect.any(Date),
+                lt: expect.any(Date),
+              },
+            }),
+          ]),
+        }),
+      }),
+    );
+
+    prisma.poll.findUnique.mockResolvedValueOnce(
+      pollRecord({
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        votingStartsAt: new Date('2026-05-31T23:00:00.000Z'),
+      }),
+    );
+    await expect(service.getAdminPoll('poll-1', observer)).resolves.toMatchObject({ id: 'poll-1' });
+
+    prisma.poll.findUnique
+      .mockResolvedValueOnce(
+        pollRecord({
+          mode: DbPollMode.CACIC_ELECTION,
+          cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+          votingStartsAt: new Date('2026-05-31T23:00:00.000Z'),
+        }),
+      )
+      .mockResolvedValueOnce({ id: 'poll-1' });
+    prisma.pollEligibilityEnrollment.findMany.mockResolvedValueOnce([]);
+    await expect(service.listEligibilityEnrollments('poll-1', observer, { includePeople: false })).resolves.toEqual({
+      entries: [],
+      totalCount: 0,
+    });
+
+    prisma.poll.findUnique.mockResolvedValueOnce(
+      pollRecord({
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        votingStartsAt: new Date('2026-04-30T23:00:00.000Z'),
+      }),
+    );
+    await expect(service.getAdminPoll('old-poll', observer)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('reads admin and published polls or rejects missing polls', async () => {
@@ -1043,6 +1114,49 @@ describe('PollsService', () => {
           id: 'response-1',
           submittedAt: undefined,
           voter: undefined,
+          answers: [{ elementId: 'question-1', value: 'answer' }],
+        },
+      ],
+    });
+  });
+
+  it('redacts observer result voters to enrollment numbers only', async () => {
+    const observer = createUser({
+      roles: [ELECTIONS_OBSERVER_ROLE],
+      roleSet: new Set([ELECTIONS_OBSERVER_ROLE]),
+    });
+    prisma.poll.findUnique.mockResolvedValue(
+      pollResultsMetadata({
+        status: DbPollStatus.CLOSED,
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        votingStartsAt: new Date('2026-06-01T12:00:00.000Z'),
+      }),
+    );
+    prisma.pollResponse.findMany.mockResolvedValue([responseRecord()]);
+    prisma.pollResponse.count.mockResolvedValue(1);
+    prisma.pollVoter.findMany.mockResolvedValue([pollVoterRecord()]);
+
+    await expect(service.getAdminPollResults('poll-1', observer)).resolves.toEqual({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 1,
+      voterCount: 1,
+      voters: [
+        {
+          userId: 'enrollment:24123456',
+          enrollmentNumber: '24123456',
+        },
+      ],
+      responses: [
+        {
+          id: 'response-1',
+          submittedAt: '2026-06-21T12:00:00.000Z',
+          voter: {
+            userId: 'enrollment:24123456',
+            enrollmentNumber: '24123456',
+          },
           answers: [{ elementId: 'question-1', value: 'answer' }],
         },
       ],
@@ -3022,6 +3136,7 @@ describe('PollsService', () => {
 
     internals.publishPollResults({
       admin: { pollId: 'poll-1', responseCount: 1, responses: [] },
+      observer: { pollId: 'poll-1', responseCount: 1, responses: [] },
       public: { pollId: 'poll-1', responseCount: 1, responses: [] },
     });
 
@@ -3031,6 +3146,7 @@ describe('PollsService', () => {
     unsubscribeFirst();
     internals.publishPollResults({
       admin: { pollId: 'poll-1', responseCount: 2, responses: [] },
+      observer: { pollId: 'poll-1', responseCount: 2, responses: [] },
       public: { pollId: 'poll-1', responseCount: 2, responses: [] },
     });
     expect(firstListener).toHaveBeenCalledTimes(1);
@@ -3039,6 +3155,7 @@ describe('PollsService', () => {
     unsubscribeSecond();
     internals.publishPollResults({
       admin: { pollId: 'poll-1', responseCount: 3, responses: [] },
+      observer: { pollId: 'poll-1', responseCount: 3, responses: [] },
       public: { pollId: 'poll-1', responseCount: 3, responses: [] },
     });
     expect(secondListener).toHaveBeenCalledTimes(2);
@@ -3064,6 +3181,23 @@ describe('PollsService', () => {
         voterCount: 0,
         voters: [],
         responses: [expect.objectContaining({ id: 'response-1', submittedAt: '2026-06-21T12:00:00.000Z' })],
+      },
+      observer: {
+        pollId: 'poll-1',
+        answersReleased: true,
+        responseCount: 1,
+        voterCount: 0,
+        voters: [],
+        responses: [
+          expect.objectContaining({
+            id: 'response-1',
+            submittedAt: '2026-06-21T12:00:00.000Z',
+            voter: {
+              userId: 'enrollment:24123456',
+              enrollmentNumber: '24123456',
+            },
+          }),
+        ],
       },
       public: {
         pollId: 'poll-1',
@@ -3316,6 +3450,7 @@ describe('PollsService', () => {
     expect(internals.resultSubscribers.has('poll-1')).toBe(true);
     internals.publishPollResults({
       admin: { pollId: 'poll-1', responseCount: 1, responses: [{ id: 'response-1' }] },
+      observer: { pollId: 'poll-1', responseCount: 1, responses: [{ id: 'response-1' }] },
       public: { pollId: 'poll-1', responseCount: 1, responses: [] },
     });
 
@@ -3362,6 +3497,7 @@ describe('PollsService', () => {
 
     internals.publishPollResults({
       admin: { pollId: 'poll-1', responseCount: 1, responses: [{ id: 'response-1' }] },
+      observer: { pollId: 'poll-1', responseCount: 1, responses: [{ id: 'response-1' }] },
       public: { pollId: 'poll-1', responseCount: 1, responses: [] },
     });
     for (let index = 0; index < 10 && errors.length === 0; index += 1) {

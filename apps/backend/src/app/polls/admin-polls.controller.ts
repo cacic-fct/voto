@@ -39,6 +39,7 @@ import {
   PollImage,
   PollResults,
   PollSummary,
+  hasVotingAdminRole,
 } from '@org/voting-contracts';
 import { Response } from 'express';
 import { Observable } from 'rxjs';
@@ -83,8 +84,8 @@ export class AdminPollsController {
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'List all polls for administrators' })
   @ApiOkResponse({ description: 'Poll summaries ordered by last update.' })
-  listPolls(): Promise<PollSummary[]> {
-    return this.polls.listAdminPolls();
+  listPolls(@Req() request: AuthenticatedRequest): Promise<PollSummary[]> {
+    return this.polls.listAdminPolls(this.getUser(request));
   }
 
   @Get('linkable-events')
@@ -99,8 +100,14 @@ export class AdminPollsController {
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'List enrollment numbers allowed to vote in a poll' })
   @ApiOkResponse({ description: 'Enrollment numbers enriched with Event Manager display data when available.' })
-  listEligibilityEnrollments(@Param('id') id: string): Promise<PollEligibilityEnrollmentList> {
-    return this.polls.listEligibilityEnrollments(id);
+  listEligibilityEnrollments(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PollEligibilityEnrollmentList> {
+    const user = this.getUser(request);
+    return this.polls.listEligibilityEnrollments(id, user, {
+      includePeople: hasVotingAdminRole(user.roles) || user.permissionSet.has('poll#read'),
+    });
   }
 
   @Post(':id/eligibility-enrollments')
@@ -152,8 +159,8 @@ export class AdminPollsController {
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'Read poll responses and voter metadata for administrators' })
   @ApiOkResponse({ description: 'Poll results with response answers and identity data when available.' })
-  getPollResults(@Param('id') id: string): Promise<PollResults> {
-    return this.polls.getAdminPollResults(id);
+  getPollResults(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<PollResults> {
+    return this.polls.getAdminPollResults(id, this.getUser(request));
   }
 
   @Get(':id/cacic-election/voter-enrollments.txt')
@@ -162,9 +169,10 @@ export class AdminPollsController {
   @ApiOkResponse({ description: 'Plain text with one enrollment number per line.' })
   async exportCacicElectionVoterEnrollments(
     @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
-    const content = await this.polls.exportCacicElectionVoterEnrollments(id);
+    const content = await this.polls.exportCacicElectionVoterEnrollments(id, this.getUser(request));
     response
       .type('text/plain; charset=utf-8')
       .attachment(`cacic-election-${id}-voters.txt`)
@@ -174,16 +182,23 @@ export class AdminPollsController {
   @Sse(':id/results/events')
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'Stream new poll result responses for administrators' })
-  streamPollResults(@Param('id') id: string, @Query('after') after?: string): Observable<MessageEvent> {
-    return this.polls.streamAdminPollResults(id, this.parseResultCursor(after));
+  streamPollResults(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Query('after') after?: string,
+  ): Observable<MessageEvent> {
+    return this.polls.streamAdminPollResults(id, this.parseResultCursor(after), this.getUser(request));
   }
 
   @Get(':id/cacic-election/slates')
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'List CACiC election slate submissions for administrator review' })
   @ApiOkResponse({ description: 'Slate submissions including private identifier fields for administrator review.' })
-  listCacicElectionSlates(@Param('id') id: string): Promise<AdminCacicElectionSlate[]> {
-    return this.polls.listAdminCacicElectionSlates(id);
+  listCacicElectionSlates(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AdminCacicElectionSlate[]> {
+    return this.polls.listAdminCacicElectionSlates(id, this.getUser(request));
   }
 
   @Post(':id/cacic-election/slates')
@@ -255,8 +270,8 @@ export class AdminPollsController {
   @RequirePermissions('poll#read')
   @ApiOperation({ summary: 'Read a poll draft or published poll for administrators' })
   @ApiOkResponse({ description: 'Full poll definition.' })
-  getPoll(@Param('id') id: string): Promise<Poll> {
-    return this.polls.getAdminPoll(id);
+  getPoll(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<Poll> {
+    return this.polls.getAdminPoll(id, this.getUser(request));
   }
 
   @Post(':id/images')

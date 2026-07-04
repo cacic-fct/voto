@@ -89,6 +89,7 @@ import {
   validatePollResponse,
 } from './poll-response.validator';
 import { PollResultsService } from './poll-results.service';
+import { resolveAdminPollAudience } from './poll-admin-access';
 import { parseStringList, toPollResultsVoter } from './poll-user-claims';
 
 @Injectable()
@@ -157,16 +158,16 @@ export class PollsService {
     return this.query.listLinkableEvents();
   }
 
-  listAdminPolls(): Promise<PollSummary[]> {
-    return this.query.listAdminPolls();
+  listAdminPolls(user?: AuthenticatedPrincipal): Promise<PollSummary[]> {
+    return this.query.listAdminPolls(user);
   }
 
   listPublicPolls(): Promise<PollSummary[]> {
     return this.query.listPublicPolls();
   }
 
-  getAdminPoll(id: string): Promise<Poll> {
-    return this.query.getAdminPoll(id);
+  getAdminPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+    return this.query.getAdminPoll(id, user);
   }
 
   getPublishedPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
@@ -188,12 +189,12 @@ export class PollsService {
     return this.query.assertPublishedDirectLinkPollReadable(directLinkToken, user);
   }
 
-  getAdminPollResults(id: string): Promise<PollResults> {
-    return this.results.getAdminPollResults(id);
+  getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+    return this.results.getAdminPollResults(id, user);
   }
 
-  exportCacicElectionVoterEnrollments(id: string): Promise<string> {
-    return this.results.exportCacicElectionVoterEnrollments(id);
+  exportCacicElectionVoterEnrollments(id: string, user?: AuthenticatedPrincipal): Promise<string> {
+    return this.results.exportCacicElectionVoterEnrollments(id, user);
   }
 
   getPublicPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
@@ -207,8 +208,8 @@ export class PollsService {
     return this.results.getDirectLinkPublicPollResults(directLinkToken, user);
   }
 
-  streamAdminPollResults(id: string, after: number): Observable<MessageEvent> {
-    return this.results.streamAdminPollResults(id, after);
+  streamAdminPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+    return this.results.streamAdminPollResults(id, after, user);
   }
 
   streamPublicPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
@@ -247,8 +248,18 @@ export class PollsService {
     return this.mutations.deletePoll(id);
   }
 
-  listEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
-    return this.eligibility.listEligibilityEnrollments(pollId);
+  listEligibilityEnrollments(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+    options?: { includePeople?: boolean },
+  ): Promise<PollEligibilityEnrollmentList> {
+    if (user && resolveAdminPollAudience(user) === 'observer') {
+      return this.query
+        .getAdminPoll(pollId, user)
+        .then(() => this.eligibility.listEligibilityEnrollments(pollId, options));
+    }
+
+    return this.eligibility.listEligibilityEnrollments(pollId, options);
   }
 
   addEligibilityEnrollments(
@@ -294,8 +305,11 @@ export class PollsService {
     return this.cacicElection.submitCacicElectionSlate(pollId, input, user);
   }
 
-  listAdminCacicElectionSlates(pollId: string): Promise<AdminCacicElectionSlate[]> {
-    return this.cacicElection.listAdminCacicElectionSlates(pollId);
+  listAdminCacicElectionSlates(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<AdminCacicElectionSlate[]> {
+    return this.cacicElection.listAdminCacicElectionSlates(pollId, user);
   }
 
   createAdminCacicElectionSlate(

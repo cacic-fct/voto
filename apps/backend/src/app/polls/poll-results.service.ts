@@ -6,10 +6,15 @@ import {
   PollResultsResponse,
   PollResultsVoter,
 } from '@org/voting-contracts';
-import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle } from '@prisma/client';
+import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle, Prisma } from '@prisma/client';
 import { Observable, Subscriber } from 'rxjs';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  AdminPollAudience,
+  assertObserverCanReadElectionPoll,
+  resolveAdminPollAudience,
+} from './poll-admin-access';
 import { requireAuthenticatedVoter } from './poll-auth';
 import { PollEligibilityService } from './poll-eligibility.service';
 import { normalizeDirectLinkToken } from './poll-identifiers';
@@ -34,17 +39,27 @@ export class PollResultsService {
     private readonly eligibility: PollEligibilityService,
   ) {}
 
-  async getAdminPollResults(id: string): Promise<PollResults> {
+  async getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const poll = await this.getPollResultsMetadata(id);
-    const responses = this.areAnswersReleased(poll, 'admin') ? await this.listPollResultResponses(id) : [];
-    const responseCount = await this.countPollResponses(id);
-    const voters = await this.listPollResultVoters(id);
+    if (audience === 'observer') {
+      assertObserverCanReadElectionPoll(poll);
+    }
 
-    return this.toPollResults(poll, responses, 'admin', { responseCount, voters });
+    const responses = this.areAnswersReleased(poll, audience) ? await this.listPollResultResponses(id) : [];
+    const responseCount = await this.countPollResponses(id);
+    const voters = await this.listPollResultVoters(id, audience);
+
+    return this.toPollResults(poll, responses, audience, { responseCount, voters });
   }
 
-  async exportCacicElectionVoterEnrollments(id: string): Promise<string> {
+  async exportCacicElectionVoterEnrollments(id: string, user?: AuthenticatedPrincipal): Promise<string> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const poll = await this.getPollResultsMetadata(id);
+    if (audience === 'observer') {
+      assertObserverCanReadElectionPoll(poll);
+    }
+
     if (!isCacicElectionVotingPoll(poll)) {
       throw new BadRequestException('Only CACiC election polls can export voter enrollments.');
     }
@@ -53,7 +68,7 @@ export class PollResultsService {
       throw new ForbiddenException('CACiC election voter enrollments are available only after the election is closed.');
     }
 
-    const voters = await this.listPollResultVoters(id);
+    const voters = await this.listPollResultVoters(id, audience);
     return voters
       .map((voter) => voter.enrollmentNumber?.trim() ?? '')
       .filter(Boolean)
@@ -81,8 +96,9 @@ export class PollResultsService {
     return this.toPollResults(poll, responses, 'public', { responseCount: responses.length });
   }
 
-  streamAdminPollResults(id: string, after: number): Observable<MessageEvent> {
-    return this.streamPollResults(id, after, 'admin');
+  streamAdminPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
+    return this.streamPollResults(id, after, audience, user);
   }
 
   streamPublicPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
@@ -129,6 +145,7 @@ export class PollResultsService {
     const responseCount = await this.countPollResponses(pollId);
     this.publishPollResults({
       admin: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'admin'),
+      observer: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'observer'),
       public: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'public'),
     });
   }
@@ -150,6 +167,8 @@ export class PollResultsService {
         visibleFrom: true,
         votingStartsAt: true,
         votingEndsAt: true,
+        publishedAt: true,
+        createdAt: true,
       },
     });
 
@@ -183,6 +202,8 @@ export class PollResultsService {
         visibleFrom: true,
         votingStartsAt: true,
         votingEndsAt: true,
+        publishedAt: true,
+        createdAt: true,
       },
     });
 
@@ -222,7 +243,10 @@ export class PollResultsService {
     return this.prisma.pollResponse.count({ where: { pollId } });
   }
 
-  async listPollResultVoters(pollId: string): Promise<PollResultsVoter[]> {
+  async listPollResultVoters(
+    pollId: string,
+    audience: AdminPollAudience = 'admin',
+  ): Promise<PollResultsVoter[]> {
     const voters = await this.prisma.pollVoter.findMany({
       where: { pollId },
       orderBy: {
@@ -241,19 +265,23 @@ export class PollResultsService {
       },
     });
 
-    return voters.flatMap((voter) => (voter.user ? [toPollResultsVoter(voter.user)] : []));
+    return voters.flatMap((voter) =>
+      voter.user ? [this.toPollResultsVoter(voter.user, audience)] : [],
+    );
   }
 
   async getPollResultsDelta(
     poll: PollResultsMetadata,
     after: number,
-    audience: 'admin' | 'public',
+    audience: AdminPollAudience | 'public',
   ): Promise<PollResultsDelta> {
     const responseCount = await this.countPollResponses(poll.id);
     const normalizedAfter = Math.min(Math.max(0, after), responseCount);
     const answersReleased = this.areAnswersReleased(poll, audience);
     const responses = answersReleased ? await this.listPollResultResponses(poll.id, normalizedAfter) : [];
-    const voters = audience === 'admin' ? await this.listPollResultVoters(poll.id) : undefined;
+    const voters = audience === 'admin' || audience === 'observer'
+      ? await this.listPollResultVoters(poll.id, audience)
+      : undefined;
 
     return {
       pollId: poll.id,
@@ -267,7 +295,7 @@ export class PollResultsService {
   toPollResults(
     poll: PollResultsMetadata,
     responses: PollResultResponseRecord[],
-    audience: 'admin' | 'public',
+    audience: AdminPollAudience | 'public',
     options: {
       responseCount: number;
       voters?: PollResultsVoter[];
@@ -279,7 +307,7 @@ export class PollResultsService {
       anonymous: poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
       answersReleased,
       responseCount: options.responseCount,
-      ...(audience === 'admin' && options.voters
+      ...((audience === 'admin' || audience === 'observer') && options.voters
         ? { voterCount: options.voters.length, voters: options.voters }
         : {}),
       responses: answersReleased ? responses.map((response) => this.toPollResultsResponse(response, audience)) : [],
@@ -288,12 +316,15 @@ export class PollResultsService {
 
   toPollResultsResponse(
     response: PollResultResponseRecord,
-    audience: 'admin' | 'public',
+    audience: AdminPollAudience | 'public',
   ): PollResultsResponse {
     return {
       id: response.id,
-      submittedAt: audience === 'admin' ? response.submittedAt?.toISOString() : undefined,
-      voter: audience === 'admin' && response.user ? toPollResultsVoter(response.user) : undefined,
+      submittedAt: audience === 'admin' || audience === 'observer' ? response.submittedAt?.toISOString() : undefined,
+      voter:
+        (audience === 'admin' || audience === 'observer') && response.user
+          ? this.toPollResultsVoter(response.user, audience)
+          : undefined,
       answers: response.answers.map((answer) => ({
         elementId: answer.elementId,
         value: answer.value as PollResponseAnswer['value'],
@@ -331,7 +362,7 @@ export class PollResultsService {
 
   areAnswersReleased(
     poll: Pick<PollResultsMetadata, 'mode' | 'cacicElectionPhase' | 'status' | 'votingStyle'>,
-    audience: 'admin' | 'public' = 'public',
+    audience: AdminPollAudience | 'public' = 'public',
   ): boolean {
     if (isCacicElectionVotingPoll(poll)) {
       return poll.status === DbPollStatus.CLOSED;
@@ -371,7 +402,7 @@ export class PollResultsService {
   private streamPollResults(
     id: string,
     after: number,
-    audience: 'admin' | 'public',
+    audience: AdminPollAudience | 'public',
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
     return new Observable<MessageEvent>((subscriber) => {
@@ -379,6 +410,9 @@ export class PollResultsService {
 
       void (async () => {
         const poll = await this.getPollResultsMetadata(id);
+        if (audience === 'observer') {
+          assertObserverCanReadElectionPoll(poll);
+        }
         if (audience === 'public') {
           this.assertPublicResultsVisible(poll);
           await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
@@ -392,6 +426,11 @@ export class PollResultsService {
         unsubscribe = this.subscribeToPollResults(id, (event) => {
           if (audience === 'admin') {
             subscriber.next({ data: event.admin });
+            return;
+          }
+
+          if (audience === 'observer') {
+            subscriber.next({ data: event.observer });
             return;
           }
 
@@ -455,5 +494,26 @@ export class PollResultsService {
         subscriber.error(error);
       }
     }
+  }
+
+  private toPollResultsVoter(
+    user: {
+      id: string;
+      name: string | null;
+      preferredUsername: string | null;
+      email: string | null;
+      claims: Prisma.JsonValue | null;
+    },
+    audience: AdminPollAudience,
+  ): PollResultsVoter {
+    const voter = toPollResultsVoter(user);
+    if (audience === 'admin') {
+      return voter;
+    }
+
+    return {
+      userId: voter.enrollmentNumber ? `enrollment:${voter.enrollmentNumber}` : 'redacted',
+      ...(voter.enrollmentNumber ? { enrollmentNumber: voter.enrollmentNumber } : {}),
+    };
   }
 }

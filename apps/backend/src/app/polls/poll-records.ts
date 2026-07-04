@@ -145,6 +145,8 @@ export type PollResultsMetadata = {
   visibleFrom: Date | null;
   votingStartsAt: Date | null;
   votingEndsAt: Date | null;
+  publishedAt?: Date | null;
+  createdAt?: Date;
 };
 
 export type PollEligibilityRecord = Pick<
@@ -192,6 +194,7 @@ export type PollResultResponseRecord = Prisma.PollResponseGetPayload<{
 
 export type PollResultStreamEvent = {
   admin: PollResultsDelta;
+  observer: PollResultsDelta;
   public: PollResultsDelta;
 };
 

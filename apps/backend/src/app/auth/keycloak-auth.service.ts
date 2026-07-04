@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { hasVotingAdminRole, normalizePermissions } from '@org/voting-contracts';
+import { hasElectionsObserverRole, hasVotingAdminRole, normalizePermissions } from '@org/voting-contracts';
 import { Prisma } from '@prisma/client';
 import axios from 'axios';
 import { randomBytes } from 'node:crypto';
@@ -192,7 +192,11 @@ export class KeycloakAuthService {
     }
 
     const stillMissing = requiredPermissions.filter((permission) => !principal.permissionSet.has(permission));
-    if (stillMissing.length > 0 && !hasVotingAdminRole(principal.roles)) {
+    if (
+      stillMissing.length > 0 &&
+      !hasVotingAdminRole(principal.roles) &&
+      !this.isObserverReadOnlyGrant(principal, stillMissing)
+    ) {
       throw new ForbiddenException(`Missing permissions: ${stillMissing.join(', ')}.`);
     }
 
@@ -222,7 +226,11 @@ export class KeycloakAuthService {
       await this.syncUser(principal);
     }
 
-    return normalized.filter((permission) => principal.permissionSet.has(permission));
+    return normalized.filter(
+      (permission) =>
+        principal.permissionSet.has(permission) ||
+        (permission === 'poll#read' && hasElectionsObserverRole(principal.roles)),
+    );
   }
 
   async clearSession(sessionId: string): Promise<void> {
@@ -411,6 +419,10 @@ export class KeycloakAuthService {
       this.logger.warn('Keycloak authorization permission evaluation failed.');
       return [];
     }
+  }
+
+  private isObserverReadOnlyGrant(principal: AuthenticatedPrincipal, missingPermissions: readonly string[]): boolean {
+    return hasElectionsObserverRole(principal.roles) && missingPermissions.every((permission) => permission === 'poll#read');
   }
 
   private async syncUser(principal: AuthenticatedPrincipal): Promise<void> {

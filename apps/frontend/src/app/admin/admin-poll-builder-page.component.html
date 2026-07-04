@@ -5,10 +5,12 @@
         <h1>Área restrita</h1>
         <p>Gerencie votações, elegibilidade e publicação.</p>
       </div>
-      <button mat-stroked-button type="button" (click)="newPoll()">
-        <mat-icon>add</mat-icon>
-        Nova
-      </button>
+      @if (!isReadOnlyAdmin()) {
+        <button mat-stroked-button type="button" (click)="newPoll()">
+          <mat-icon>add</mat-icon>
+          Nova
+        </button>
+      }
     </div>
 
     @if (loadingList()) {
@@ -48,8 +50,8 @@
 
     <header class="panel builder-header">
       <div class="builder-title">
-        <span class="eyebrow">Editor</span>
-        <h2>{{ builder.draft().id ? 'Editar votação' : 'Nova votação' }}</h2>
+        <span class="eyebrow">{{ isReadOnlyAdmin() ? 'Visualização' : 'Editor' }}</span>
+        <h2>{{ isReadOnlyAdmin() ? 'Informações da eleição' : builder.draft().id ? 'Editar votação' : 'Nova votação' }}</h2>
         <div class="status-row" aria-label="Resumo da votação">
           <span class="status-pill">{{ builder.statusLabel(builder.draft().status) }}</span>
           <span>{{ builder.draft().elements.length }} itens</span>
@@ -57,13 +59,13 @@
       </div>
 
       <div class="builder-actions">
-        @if (builder.draft().id && builder.draft().status !== 'published') {
+        @if (!isReadOnlyAdmin() && builder.draft().id && builder.draft().status !== 'published') {
           <button mat-stroked-button type="button" [disabled]="saving()" (click)="setStatus('published')">
             <mat-icon>publish</mat-icon>
             Publicar
           </button>
         }
-        @if (builder.draft().id && builder.draft().status === 'published') {
+        @if (!isReadOnlyAdmin() && builder.draft().id && builder.draft().status === 'published') {
           <button mat-stroked-button type="button" [disabled]="saving()" (click)="setStatus('closed')">
             <mat-icon>lock</mat-icon>
             Encerrar
@@ -74,15 +76,19 @@
             <mat-icon>content_copy</mat-icon>
             Copiar link
           </button>
-          <button mat-button type="button" color="warn" [disabled]="saving()" (click)="deletePoll()">
-            <mat-icon>delete</mat-icon>
-            Excluir
+          @if (!isReadOnlyAdmin()) {
+            <button mat-button type="button" color="warn" [disabled]="saving()" (click)="deletePoll()">
+              <mat-icon>delete</mat-icon>
+              Excluir
+            </button>
+          }
+        }
+        @if (!isReadOnlyAdmin()) {
+          <button mat-flat-button type="button" [disabled]="saving()" (click)="save()">
+            <mat-icon>save</mat-icon>
+            Salvar
           </button>
         }
-        <button mat-flat-button type="button" [disabled]="saving()" (click)="save()">
-          <mat-icon>save</mat-icon>
-          Salvar
-        </button>
       </div>
     </header>
 
@@ -100,7 +106,11 @@
       <div class="field-grid">
         <mat-form-field appearance="outline">
           <mat-label>Título da votação</mat-label>
-          <input matInput [value]="builder.draft().title" (input)="builder.updatePollTitle($event)" />
+          <input
+            matInput
+            [readonly]="isReadOnlyAdmin()"
+            [value]="builder.draft().title"
+            (input)="builder.updatePollTitle($event)" />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="span-2">
@@ -108,6 +118,7 @@
           <textarea
             matInput
             rows="3"
+            [readonly]="isReadOnlyAdmin()"
             [value]="builder.draft().description || ''"
             (input)="builder.updatePollDescription($event)"></textarea>
         </mat-form-field>
@@ -419,7 +430,7 @@
             <h3 id="eligibility-title">Lista de matrículas</h3>
             <p>{{ eligibilityEntries().length }} matrículas habilitadas</p>
           </div>
-          @if (builder.draft().id) {
+          @if (builder.draft().id && !isReadOnlyAdmin()) {
             <div class="panel-actions">
               <input
                 #appendEligibilityInput
@@ -468,31 +479,33 @@
           }
         </div>
 
-        @if (!builder.draft().id) {
-          <p class="empty-note">Salve a votação para cadastrar matrículas.</p>
-        } @else {
+          @if (!builder.draft().id) {
+            <p class="empty-note">Salve a votação para cadastrar matrículas.</p>
+          } @else {
           @if (loadingEligibility() || importingEligibility()) {
             <mat-progress-bar mode="indeterminate"></mat-progress-bar>
           }
 
-          <div class="manual-enrollment-row">
-            <mat-form-field appearance="outline">
-              <mat-label>Matrículas</mat-label>
-              <textarea
-                matInput
-                rows="2"
-                [value]="manualEnrollmentNumbers()"
-                (input)="updateManualEnrollmentNumbers($event)"></textarea>
-            </mat-form-field>
-            <button
-              mat-flat-button
-              type="button"
-              [disabled]="importingEligibility() || !manualEnrollmentNumbers().trim()"
-              (click)="addManualEnrollmentNumbers()">
-              <mat-icon>add</mat-icon>
-              Adicionar
-            </button>
-          </div>
+          @if (!isReadOnlyAdmin()) {
+            <div class="manual-enrollment-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Matrículas</mat-label>
+                <textarea
+                  matInput
+                  rows="2"
+                  [value]="manualEnrollmentNumbers()"
+                  (input)="updateManualEnrollmentNumbers($event)"></textarea>
+              </mat-form-field>
+              <button
+                mat-flat-button
+                type="button"
+                [disabled]="importingEligibility() || !manualEnrollmentNumbers().trim()"
+                (click)="addManualEnrollmentNumbers()">
+                <mat-icon>add</mat-icon>
+                Adicionar
+              </button>
+            </div>
+          }
 
           <div class="event-manager-source">
             <mat-icon>badge</mat-icon>
@@ -506,15 +519,17 @@
                   <strong>{{ entry.enrollmentNumber }}</strong>
                   <span>{{ peopleLabel(entry) }}</span>
                 </div>
-                <button
-                  matIconButton
-                  type="button"
-                  matTooltip="Remover matrícula"
-                  aria-label="Remover matrícula"
-                  [disabled]="importingEligibility()"
-                  (click)="deleteEligibilityEnrollment(entry.enrollmentNumber)">
-                  <mat-icon>close</mat-icon>
-                </button>
+                @if (!isReadOnlyAdmin()) {
+                  <button
+                    matIconButton
+                    type="button"
+                    matTooltip="Remover matrícula"
+                    aria-label="Remover matrícula"
+                    [disabled]="importingEligibility()"
+                    (click)="deleteEligibilityEnrollment(entry.enrollmentNumber)">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                }
               </div>
             } @empty {
               <p class="empty-note">Nenhuma matrícula cadastrada.</p>
@@ -524,13 +539,37 @@
       </section>
     }
 
-    <app-admin-poll-elements-editor
-      [builder]="builder"
-      [imageAccept]="imageAccept"
-      [saving]="saving()"
-      [uploadingImageTarget]="uploadingImageTarget()"
-      (uploadImage)="uploadElementDescriptionImage($event.elementId, $event.file)"
-      (removeImage)="removeElementDescriptionImage($event.elementId, $event.image)" />
+    @if (isReadOnlyAdmin()) {
+      <section class="surface field-group" aria-labelledby="elements-title">
+        <div class="surface-heading">
+          <div>
+            <h3 id="elements-title">Itens da votação</h3>
+            <p>{{ builder.draft().elements.length }} itens cadastrados.</p>
+          </div>
+        </div>
+
+        <div class="eligibility-list">
+          @for (element of builder.draft().elements; track element.id; let index = $index) {
+            <div class="eligibility-row">
+              <div>
+                <strong>{{ index + 1 }}. {{ element.title || builder.elementTypeLabel(element.type) }}</strong>
+                <span>{{ builder.elementTypeLabel(element.type) }}</span>
+              </div>
+            </div>
+          } @empty {
+            <p class="empty-note">Nenhum item cadastrado.</p>
+          }
+        </div>
+      </section>
+    } @else {
+      <app-admin-poll-elements-editor
+        [builder]="builder"
+        [imageAccept]="imageAccept"
+        [saving]="saving()"
+        [uploadingImageTarget]="uploadingImageTarget()"
+        (uploadImage)="uploadElementDescriptionImage($event.elementId, $event.file)"
+        (removeImage)="removeElementDescriptionImage($event.elementId, $event.image)" />
+    }
         </div>
       </mat-tab>
 
@@ -551,6 +590,7 @@
                 <mat-progress-bar mode="indeterminate"></mat-progress-bar>
               }
 
+              @if (!isReadOnlyAdmin()) {
               <section class="surface field-group">
                 <div class="surface-heading">
                   <div>
@@ -572,6 +612,7 @@
                   [submitLabel]="editingSlate() ? 'Salvar chapa' : 'Cadastrar chapa'"
                   (submitted)="saveSlate($event)" />
               </section>
+              }
 
               <section class="surface field-group">
                 <div class="surface-heading">
@@ -623,6 +664,7 @@
                           }
                         </div>
                       </mat-card-content>
+                      @if (!isReadOnlyAdmin()) {
                       <mat-card-actions align="end">
                         <button mat-button type="button" [disabled]="savingSlate()" (click)="editSlate(slate)">
                           <mat-icon>edit</mat-icon>
@@ -653,6 +695,7 @@
                           Excluir
                         </button>
                       </mat-card-actions>
+                      }
                     </mat-card>
                   } @empty {
                     <mat-card appearance="outlined" class="empty-card">

@@ -47,7 +47,10 @@ export class PollEligibilityService {
     private readonly accountManager?: AccountManagerIntegrationService,
   ) {}
 
-  async listEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
+  async listEligibilityEnrollments(
+    pollId: string,
+    options: { includePeople?: boolean } = {},
+  ): Promise<PollEligibilityEnrollmentList> {
     await this.assertPollExists(pollId);
     const records = await this.prisma.pollEligibilityEnrollment.findMany({
       where: { pollId },
@@ -61,7 +64,7 @@ export class PollEligibilityService {
       },
     });
 
-    return this.toEligibilityEnrollmentList(records);
+    return this.toEligibilityEnrollmentList(records, { includePeople: options.includePeople ?? true });
   }
 
   async addEligibilityEnrollments(
@@ -210,7 +213,7 @@ export class PollEligibilityService {
       };
     });
 
-    const entries = await this.listEligibilityEnrollments(pollId);
+      const entries = await this.listEligibilityEnrollments(pollId);
 
     return {
       ...entries,
@@ -340,10 +343,11 @@ export class PollEligibilityService {
 
   private async toEligibilityEnrollmentList(
     records: EligibilityEnrollmentRecord[],
+    options: { includePeople: boolean },
   ): Promise<PollEligibilityEnrollmentList> {
-    const peopleByEnrollmentNumber = await this.lookupEventManagerPeople(
-      records.map((record) => record.enrollmentNumber),
-    );
+    const peopleByEnrollmentNumber = options.includePeople
+      ? await this.lookupEventManagerPeople(records.map((record) => record.enrollmentNumber))
+      : new Map<string, AccountManagerPerson[]>();
 
     return {
       totalCount: records.length,

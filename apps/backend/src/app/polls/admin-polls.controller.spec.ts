@@ -88,30 +88,35 @@ describe('AdminPollsController', () => {
   });
 
   it('delegates read operations to PollsService', async () => {
-    await expect(controller.listPolls()).resolves.toEqual(['poll-summary']);
+    const request = { user: createUser() } as AuthenticatedRequest;
+
+    await expect(controller.listPolls(request)).resolves.toEqual(['poll-summary']);
     await expect(controller.listLinkableEvents()).resolves.toEqual(['event']);
-    await expect(controller.listEligibilityEnrollments('poll-1')).resolves.toEqual({ entries: [], totalCount: 0 });
-    await expect(controller.getPollResults('poll-1')).resolves.toEqual({ pollId: 'poll-1' });
-    await expect(controller.listCacicElectionSlates('poll-1')).resolves.toEqual([{ id: 'slate-1' }]);
-    await expect(controller.getPoll('poll-1')).resolves.toEqual({ id: 'poll-1' });
+    await expect(controller.listEligibilityEnrollments('poll-1', request)).resolves.toEqual({
+      entries: [],
+      totalCount: 0,
+    });
+    await expect(controller.getPollResults('poll-1', request)).resolves.toEqual({ pollId: 'poll-1' });
+    await expect(controller.listCacicElectionSlates('poll-1', request)).resolves.toEqual([{ id: 'slate-1' }]);
+    await expect(controller.getPoll('poll-1', request)).resolves.toEqual({ id: 'poll-1' });
 
     const response = {
       attachment: jest.fn().mockReturnThis(),
       send: jest.fn().mockReturnThis(),
       type: jest.fn().mockReturnThis(),
     };
-    await controller.exportCacicElectionVoterEnrollments('poll-1', response as never);
-    expect(polls.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith('poll-1');
+    await controller.exportCacicElectionVoterEnrollments('poll-1', request, response as never);
+    expect(polls.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith('poll-1', request.user);
     expect(response.type).toHaveBeenCalledWith('text/plain; charset=utf-8');
     expect(response.attachment).toHaveBeenCalledWith('cacic-election-poll-1-voters.txt');
     expect(response.send).toHaveBeenCalledWith('24123456\n25123456');
 
-    const events = controller.streamPollResults('poll-1', '3');
-    expect(polls.streamAdminPollResults).toHaveBeenCalledWith('poll-1', 3);
+    const events = controller.streamPollResults('poll-1', request, '3');
+    expect(polls.streamAdminPollResults).toHaveBeenCalledWith('poll-1', 3, request.user);
     await expect(new Promise((resolve) => events.subscribe(resolve))).resolves.toEqual({ data: { pollId: 'poll-1' } });
 
-    controller.streamPollResults('poll-1', 'bad');
-    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith('poll-1', 0);
+    controller.streamPollResults('poll-1', request, 'bad');
+    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith('poll-1', 0, request.user);
   });
 
   it('delegates write operations with the authenticated user', async () => {

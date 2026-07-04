@@ -20,6 +20,10 @@ import { AccountManagerIntegrationService } from '../account-manager/account-man
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  assertObserverCanReadElectionPoll,
+  resolveAdminPollAudience,
+} from './poll-admin-access';
+import {
   RejectCacicElectionSlateDto,
   SavePollDto,
   SubmitCacicElectionSlateDto,
@@ -184,15 +188,24 @@ export class PollCacicElectionService {
     }
   }
 
-  async listAdminCacicElectionSlates(pollId: string): Promise<AdminCacicElectionSlate[]> {
-    await this.assertCacicElectionPollExists(pollId);
+  async listAdminCacicElectionSlates(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<AdminCacicElectionSlate[]> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
+    await this.assertCacicElectionPollExists(pollId, audience);
     const slates = await this.prisma.cacicElectionSlate.findMany({
       where: { pollId },
       orderBy: [{ status: 'asc' }, { submittedAt: 'asc' }, { name: 'asc' }],
       include: cacicElectionSlateInclude(),
     });
 
-    return slates.map((slate) => toContractCacicElectionSlate(slate, { includePrivateIdentifiers: true }));
+    return slates.map((slate) =>
+      toContractCacicElectionSlate(slate, {
+        includePrivateIdentifiers: true,
+        redactIdentities: audience === 'observer',
+      }),
+    );
   }
 
   async createAdminCacicElectionSlate(
@@ -381,12 +394,19 @@ export class PollCacicElectionService {
     }
   }
 
-  private async assertCacicElectionPollExists(pollId: string): Promise<void> {
+  private async assertCacicElectionPollExists(
+    pollId: string,
+    audience: 'admin' | 'observer' = 'admin',
+  ): Promise<void> {
     const poll = await this.prisma.poll.findUnique({
       where: { id: pollId },
       select: {
         id: true,
         mode: true,
+        createdAt: true,
+        publishedAt: true,
+        visibleFrom: true,
+        votingStartsAt: true,
       },
     });
 
@@ -396,6 +416,10 @@ export class PollCacicElectionService {
 
     if (poll.mode !== DbPollMode.CACIC_ELECTION) {
       throw new BadRequestException('This poll is not a CACiC election.');
+    }
+
+    if (audience === 'observer') {
+      assertObserverCanReadElectionPoll(poll);
     }
   }
 

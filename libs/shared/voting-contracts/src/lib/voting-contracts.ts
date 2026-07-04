@@ -20,7 +20,10 @@ import type {
   FormStarRatingSettings,
   SubmitFormResponseRequest,
 } from '@cacic-fct/form-contracts';
-import { FORM_ELEMENT_TYPES, FORM_SCHEDULING_INVITEE_MODES } from '@cacic-fct/form-contracts';
+import {
+  FORM_ELEMENT_TYPES,
+  FORM_SCHEDULING_INVITEE_MODES,
+} from '@cacic-fct/form-contracts';
 
 export const VOTING_ADMIN_PERMISSIONS = [
   'poll#read',
@@ -31,6 +34,8 @@ export const VOTING_ADMIN_PERMISSIONS = [
 ] as const;
 
 export type VotingAdminPermission = (typeof VOTING_ADMIN_PERMISSIONS)[number];
+
+export const ELECTIONS_OBSERVER_ROLE = 'election-observer';
 
 export type AuthenticatedUser = {
   sub?: string;
@@ -80,9 +85,15 @@ export const CACIC_ELECTION_BLANK_OPTION_ID = 'cacic-election-blank';
 
 export const CACIC_ELECTION_NULL_OPTION_ID = 'cacic-election-null';
 
-export type PollVotingStyle = 'public' | 'partiallySecret' | 'secret' | 'anonymous';
+export type PollVotingStyle =
+  'public' | 'partiallySecret' | 'secret' | 'anonymous';
 
-export const POLL_VOTING_STYLES = ['public', 'partiallySecret', 'secret', 'anonymous'] as const;
+export const POLL_VOTING_STYLES = [
+  'public',
+  'partiallySecret',
+  'secret',
+  'anonymous',
+] as const;
 
 export type PollVoterEligibilitySource =
   | 'authenticatedUsers'
@@ -133,7 +144,10 @@ export type PollElement = FormElement;
 
 export type EventManagerEvent = EventManagerVotingEvent;
 
-export type PollLinkedEvent = Pick<EventManagerEvent, 'id' | 'name' | 'startDate' | 'endDate' | 'locationDescription'>;
+export type PollLinkedEvent = Pick<
+  EventManagerEvent,
+  'id' | 'name' | 'startDate' | 'endDate' | 'locationDescription'
+>;
 
 export type Poll = {
   id: string;
@@ -318,21 +332,29 @@ export type ImportPollEligibilityEnrollmentsRequest = {
   fileName?: string;
 };
 
-export type PollEligibilityEnrollmentImportResult = PollEligibilityEnrollmentList & {
-  createdCount: number;
-  duplicateCount: number;
-  existingCount: number;
-  invalidCount: number;
-  replacedCount: number;
-};
+export type PollEligibilityEnrollmentImportResult =
+  PollEligibilityEnrollmentList & {
+    createdCount: number;
+    duplicateCount: number;
+    existingCount: number;
+    invalidCount: number;
+    replacedCount: number;
+  };
 
 export type CacicElectionSlateStatus = 'pending' | 'approved' | 'rejected';
 
-export const CACIC_ELECTION_SLATE_STATUSES = ['pending', 'approved', 'rejected'] as const;
+export const CACIC_ELECTION_SLATE_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+] as const;
 
 export type CacicElectionSlateSubmissionSource = 'public' | 'admin';
 
-export const CACIC_ELECTION_SLATE_SUBMISSION_SOURCES = ['public', 'admin'] as const;
+export const CACIC_ELECTION_SLATE_SUBMISSION_SOURCES = [
+  'public',
+  'admin',
+] as const;
 
 export type CacicElectionSlateMemberRole =
   | 'president'
@@ -355,7 +377,11 @@ export const CACIC_ELECTION_SLATE_MEMBER_ROLES = [
 
 export type CacicElectionSlateMemberIdentifierType = 'cpf' | 'phone' | 'email';
 
-export const CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES = ['cpf', 'phone', 'email'] as const;
+export const CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES = [
+  'cpf',
+  'phone',
+  'email',
+] as const;
 
 export type CacicElectionSlateMember = {
   id: string;
@@ -366,11 +392,12 @@ export type CacicElectionSlateMember = {
   isRepresentative: boolean;
 };
 
-export type CacicElectionSlateMemberWithIdentifier = CacicElectionSlateMember & {
-  enrollmentNumber?: string;
-  identifierType: CacicElectionSlateMemberIdentifierType;
-  identifierValue: string;
-};
+export type CacicElectionSlateMemberWithIdentifier =
+  CacicElectionSlateMember & {
+    enrollmentNumber?: string;
+    identifierType: CacicElectionSlateMemberIdentifierType;
+    identifierValue: string;
+  };
 
 export type CacicElectionSlate = {
   id: string;
@@ -395,17 +422,21 @@ export type AdminCacicElectionSlate = Omit<CacicElectionSlate, 'members'> & {
   members: CacicElectionSlateMemberWithIdentifier[];
 };
 
-export type SubmitCacicElectionSlateMemberRequest = Omit<CacicElectionSlateMemberWithIdentifier, 'id'>;
+export type SubmitCacicElectionSlateMemberRequest = Omit<
+  CacicElectionSlateMemberWithIdentifier,
+  'id'
+>;
 
 export type SubmitCacicElectionSlateRequest = {
   name: string;
   members: SubmitCacicElectionSlateMemberRequest[];
 };
 
-export type UpdateCacicElectionSlateRequest = SubmitCacicElectionSlateRequest & {
-  status?: CacicElectionSlateStatus;
-  enabled?: boolean;
-};
+export type UpdateCacicElectionSlateRequest =
+  SubmitCacicElectionSlateRequest & {
+    status?: CacicElectionSlateStatus;
+    enabled?: boolean;
+  };
 
 export type RejectCacicElectionSlateRequest = {
   reason: string;
@@ -416,18 +447,47 @@ export type UpdateCacicElectionSlateEnabledRequest = {
 };
 
 export function normalizePermissions(permissions: readonly string[]): string[] {
-  return [...new Set(permissions.map((permission) => permission.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      permissions.map((permission) => permission.trim()).filter(Boolean),
+    ),
+  ];
 }
 
 export function hasVotingAdminRole(roles: readonly string[] = []): boolean {
-  return roles.some((role) => ['admin', 'administrator', 'voting-admin'].includes(role));
+  return roles.some((role) =>
+    ['admin', 'administrator', 'voting-admin'].includes(role),
+  );
 }
 
-export function hasVotingAdminPermission(permissions: readonly string[], roles: readonly string[] = []): boolean {
-  if (hasVotingAdminRole(roles)) {
+export function hasElectionsObserverRole(
+  roles: readonly string[] = [],
+): boolean {
+  return roles.includes(ELECTIONS_OBSERVER_ROLE);
+}
+
+export function hasVotingAdminPermission(
+  permissions: readonly string[],
+  roles: readonly string[] = [],
+): boolean {
+  if (hasVotingAdminRole(roles) || hasElectionsObserverRole(roles)) {
     return true;
   }
 
   const granted = new Set(normalizePermissions(permissions));
   return VOTING_ADMIN_PERMISSIONS.some((permission) => granted.has(permission));
+}
+
+export function hasVotingAdminWritePermission(
+  permissions: readonly string[],
+  roles: readonly string[] = [],
+): boolean {
+  if (hasVotingAdminRole(roles)) {
+    return true;
+  }
+
+  const granted = new Set(normalizePermissions(permissions));
+  return ['poll#create', 'poll#edit', 'poll#delete', 'poll#publish'].some(
+    (permission) => granted.has(permission),
+  );
 }

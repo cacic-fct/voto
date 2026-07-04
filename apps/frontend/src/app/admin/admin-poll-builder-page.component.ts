@@ -51,7 +51,9 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
   constructor() {
     super();
     void this.loadPolls();
-    void this.loadLinkableEvents();
+    if (!this.isReadOnlyAdmin()) {
+      void this.loadLinkableEvents();
+    }
   }
 
   ngOnDestroy(): void {
@@ -74,6 +76,10 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
   }
 
   protected async save(): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     if (!this.builder.canSave()) {
       this.snackBar.open('Informe o título da votação.', 'OK', { duration: 3000 });
       return;
@@ -100,6 +106,10 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
   }
 
   protected async setStatus(status: PollStatus): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const id = this.builder.draft().id;
     if (!id) {
       return;
@@ -119,6 +129,10 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
   }
 
   protected async deletePoll(): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const id = this.builder.draft().id;
     if (!id || !globalThis.confirm('Excluir esta votação e todas as respostas?')) {
       return;

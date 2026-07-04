@@ -4,6 +4,10 @@ import { AdminPollBuilderPageResults } from './admin-poll-builder-page-results';
 
 export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageResults {
   protected async uploadPollDescriptionImage(file: File | null): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     if (!file) {
       return;
     }
@@ -27,6 +31,10 @@ export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageRes
   }
 
   protected async uploadElementDescriptionImage(elementId: string, file: File | null): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     if (!file) {
       return;
     }
@@ -50,6 +58,10 @@ export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageRes
   }
 
   protected async removePollDescriptionImage(image: PollImage): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       this.builder.removePollDescriptionImage(image.id);
@@ -69,6 +81,10 @@ export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageRes
   }
 
   protected async removeElementDescriptionImage(elementId: string, image: PollImage): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       this.builder.removeElementDescriptionImage(elementId, image.id);

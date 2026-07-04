@@ -35,29 +35,33 @@ export function cacicElectionSlateInclude(): Prisma.CacicElectionSlateInclude {
 
 export function toContractCacicElectionSlate(
   slate: CacicElectionSlateRecord,
-  options: { includePrivateIdentifiers: true },
+  options: { includePrivateIdentifiers: true; redactIdentities?: boolean },
 ): AdminCacicElectionSlate;
 export function toContractCacicElectionSlate(
   slate: CacicElectionSlateRecord,
-  options: { includePrivateIdentifiers: false },
+  options: { includePrivateIdentifiers: false; redactIdentities?: boolean },
 ): CacicElectionSlate;
 export function toContractCacicElectionSlate(
   slate: CacicElectionSlateRecord,
-  options: CacicElectionSlateListOptions,
+  options: CacicElectionSlateListOptions & { redactIdentities?: boolean },
 ): AdminCacicElectionSlate | CacicElectionSlate {
   const submittedBy = slate.submittedBy
     ? {
         userId: slate.submittedBy.id,
-        ...(slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
-        ...(slate.submittedBy.preferredUsername ? { preferredUsername: slate.submittedBy.preferredUsername } : {}),
-        ...(slate.submittedBy.email ? { email: slate.submittedBy.email } : {}),
+        ...(!options.redactIdentities && slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
+        ...(!options.redactIdentities && slate.submittedBy.preferredUsername
+          ? { preferredUsername: slate.submittedBy.preferredUsername }
+          : {}),
+        ...(!options.redactIdentities && slate.submittedBy.email ? { email: slate.submittedBy.email } : {}),
       }
     : undefined;
   const members = slate.members.map((member) => {
     const baseMember: CacicElectionSlateMember = {
       id: member.id,
-      fullName: member.fullName,
-      ...(member.enrollmentNumber ? { enrollmentYear: deriveEnrollmentYear(member.enrollmentNumber) } : {}),
+      fullName: options.redactIdentities ? 'Nome oculto' : member.fullName,
+      ...(!options.redactIdentities && member.enrollmentNumber
+        ? { enrollmentYear: deriveEnrollmentYear(member.enrollmentNumber) }
+        : {}),
       role: toContractCacicElectionSlateMemberRole(member.role),
       ...(member.customRole ? { customRole: member.customRole } : {}),
       isRepresentative: member.isRepresentative,
@@ -69,9 +73,9 @@ export function toContractCacicElectionSlate(
 
     return {
       ...baseMember,
-      ...(member.enrollmentNumber ? { enrollmentNumber: member.enrollmentNumber } : {}),
+      ...(!options.redactIdentities && member.enrollmentNumber ? { enrollmentNumber: member.enrollmentNumber } : {}),
       identifierType: toContractCacicElectionSlateMemberIdentifierType(member.identifierType),
-      identifierValue: member.identifierValue,
+      identifierValue: options.redactIdentities ? 'oculto' : member.identifierValue,
     };
   });
 

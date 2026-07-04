@@ -6,6 +6,10 @@ import { AdminPollBuilderPageImages } from './admin-poll-builder-page-images';
 
 export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPageImages {
   protected async addManualEnrollmentNumbers(): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       this.snackBar.open('Salve a votação antes de adicionar matrículas.', 'OK', { duration: 3000 });
@@ -35,6 +39,10 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
   }
 
   protected async importEligibilityFile(file: File | null, mode: PollEligibilityMutationMode): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!file || !pollId) {
       if (!pollId) {
@@ -73,6 +81,10 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
   }
 
   protected async deleteEligibilityEnrollment(enrollmentNumber: string): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId) {
       return;
@@ -93,6 +105,10 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
   }
 
   protected async clearEligibilityEnrollments(): Promise<void> {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     const pollId = this.builder.draft().id;
     if (!pollId || !globalThis.confirm('Remover todas as matrículas habilitadas nesta votação?')) {
       return;

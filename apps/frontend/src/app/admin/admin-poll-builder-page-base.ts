@@ -20,6 +20,7 @@ import {
 } from './admin-poll-results';
 import { firstValueFrom } from 'rxjs';
 import { PollApiService } from '../polls/poll-api.service';
+import { PermissionsService } from '../auth/permissions.service';
 import { isAnswerElement } from '../polls/poll-result-formatting';
 import {
   VOTER_ELIGIBILITY_METADATA,
@@ -32,6 +33,7 @@ export abstract class AdminPollBuilderPageBase {
   protected readonly api = inject(PollApiService);
   protected readonly dialog = inject(MatDialog);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  protected readonly permissions = inject(PermissionsService);
   protected readonly snackBar = inject(MatSnackBar);
   private readonly dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -150,11 +152,16 @@ export abstract class AdminPollBuilderPageBase {
       draft.id && draft.mode === 'cacicElection' && draft.cacicElectionPhase === 'election' && draft.status === 'closed',
     );
   });
+  protected readonly isReadOnlyAdmin = computed(() => this.permissions.isAdmin() && !this.permissions.canManageAdmin());
 
   protected abstract loadEligibilityEnrollments(showLoading?: boolean): Promise<void>;
   protected abstract resetResults(): void;
 
   protected newPoll(): void {
+    if (this.isReadOnlyAdmin()) {
+      return;
+    }
+
     this.builder.newPoll();
     this.eligibilityEntries.set([]);
     this.slates.set([]);

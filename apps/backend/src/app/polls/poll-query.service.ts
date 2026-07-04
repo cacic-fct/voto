@@ -3,6 +3,11 @@ import { EventManagerEvent, Poll, PollSummary } from '@org/voting-contracts';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  assertObserverCanReadElectionPoll,
+  observerElectionPollWhere,
+  resolveAdminPollAudience,
+} from './poll-admin-access';
 import { requireAuthenticatedVoter } from './poll-auth';
 import {
   toContractCacicElectionPhase,
@@ -30,8 +35,10 @@ export class PollQueryService {
     return this.eventManager.listLinkableEvents();
   }
 
-  async listAdminPolls(): Promise<PollSummary[]> {
+  async listAdminPolls(user?: AuthenticatedPrincipal): Promise<PollSummary[]> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const polls = await this.prisma.poll.findMany({
+      where: audience === 'observer' ? observerElectionPollWhere() : undefined,
       orderBy: { updatedAt: 'desc' },
       include: {
         _count: {
@@ -64,7 +71,8 @@ export class PollQueryService {
     return polls.map((poll) => this.toPollSummary(poll));
   }
 
-  async getAdminPoll(id: string): Promise<Poll> {
+  async getAdminPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+    const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const poll = await this.prisma.poll.findUnique({
       where: { id },
       include: pollInclude,
@@ -72,6 +80,10 @@ export class PollQueryService {
 
     if (!poll) {
       throw new NotFoundException('Poll not found.');
+    }
+
+    if (audience === 'observer') {
+      assertObserverCanReadElectionPoll(poll);
     }
 
     return toContractPoll(poll, { includeDirectLinkToken: true });
