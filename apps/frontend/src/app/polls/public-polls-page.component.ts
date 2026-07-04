@@ -21,6 +21,7 @@ export class PublicPollsPageComponent {
   private readonly api = inject(PollApiService);
   private readonly dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
     timeStyle: 'short',
   });
 

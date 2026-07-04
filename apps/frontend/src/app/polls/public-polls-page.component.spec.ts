@@ -99,7 +99,7 @@ describe('PublicPollsPageComponent', () => {
 
     expect(component.pollStatusLabel({ ...polls[0], status: 'closed' })).toBe('Encerrada');
     expect(component.pollStatusLabel({ ...polls[0], publishedAt: undefined })).toBe('Publicada');
-    expect(component.pollStatusLabel(polls[0])).toContain('Publicada em');
+    expect(component.pollStatusLabel(polls[0])).toBe('Publicada em 01/06/2026, 07:00');
     expect(component.canShowResults({ ...polls[0], resultsPublic: true, resultsLive: true })).toBe(true);
     expect(
       component.canShowResults({
