@@ -20,6 +20,9 @@
       "@org/backend/app/*": [
         "./apps/backend/src/app/*"
       ],
+      "@org/backend/http-app": [
+        "./apps/backend/src/app/bootstrap/backend-http-app.ts"
+      ],
       "@org/voting-contracts": [
         "./libs/shared/voting-contracts/src/index.ts"
       ],

@@ -12,6 +12,8 @@ import {
   POLL_STATUSES,
   POLL_VOTER_ELIGIBILITY_SOURCES,
   POLL_VOTING_STYLES,
+} from '@org/voting-contracts';
+import type {
   CacicElectionPhase,
   CacicElectionSlateMemberIdentifierType,
   CacicElectionSlateMemberRole,

@@ -13,7 +13,6 @@ const describeKeycloak = process.env.KEYCLOAK_BACKED_E2E === 'true' ? describe :
 const keycloakRealmUrl = process.env.KEYCLOAK_REALM_URL ?? 'http://localhost:18080/realms/cacic-sso';
 const backendHost = process.env.HOST ?? 'localhost';
 const backendPort = process.env.PORT ?? '3000';
-const backendBaseUrl = `http://${backendHost}:${backendPort}`;
 const sessionPrefix = process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ?? 'cacic-voto:auth:session:';
 
 describeKeycloak('Keycloak-backed authentication', () => {
@@ -41,7 +40,11 @@ describeKeycloak('Keycloak-backed authentication', () => {
   });
 
   it('redirects OAuth login to the imported CACiC Voto realm', async () => {
-    const response = await axios.get(`${backendBaseUrl}/api/auth/login/redirect`, {
+    const response = await axios.get('/api/auth/login/redirect', {
+      headers: {
+        'x-forwarded-host': `${backendHost}:${backendPort}`,
+        'x-forwarded-proto': 'http',
+      },
       maxRedirects: 0,
       params: {
         returnTo: '/polls',
@@ -83,7 +86,7 @@ describeKeycloak('Keycloak-backed authentication', () => {
     );
 
     const cookie = `cacic_voto_session=${encodeURIComponent(sessionId)}`;
-    const meResponse = await axios.get(`${backendBaseUrl}/api/auth/me`, {
+    const meResponse = await axios.get('/api/auth/me', {
       headers: {
         Cookie: cookie,
       },
@@ -104,7 +107,7 @@ describeKeycloak('Keycloak-backed authentication', () => {
     expect(meResponse.data).not.toHaveProperty('claims');
 
     const permissionsResponse = await axios.post(
-      `${backendBaseUrl}/api/auth/permissions/evaluate`,
+      '/api/auth/permissions/evaluate',
       {
         permissions: ['poll#read', 'poll#edit'],
       },
@@ -118,7 +121,7 @@ describeKeycloak('Keycloak-backed authentication', () => {
     expect(permissionsResponse.status).toBe(201);
     expect(permissionsResponse.data).toEqual({ permissions: ['poll#read', 'poll#edit'] });
 
-    const adminPollsResponse = await axios.get(`${backendBaseUrl}/api/admin/polls`, {
+    const adminPollsResponse = await axios.get('/api/admin/polls', {
       headers: {
         Cookie: cookie,
       },

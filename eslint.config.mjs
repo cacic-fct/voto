@@ -23,6 +23,7 @@ export default [
           allow: [
             '^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$',
             '^@org/backend/app/.*$',
+            '^@org/backend/http-app$',
             '^@cacic-fct/account-manager-m2m-contracts$',
             '^@cacic-fct/event-manager-m2m-contracts$',
           ],

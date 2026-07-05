@@ -1,12 +1,12 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const rootDir = new URL('..', import.meta.url).pathname;
 const composeFile = 'docker/docker-compose.keycloak.test.yml';
 const keycloakPort = process.env.KEYCLOAK_TEST_PORT || '18080';
 const keycloakUrl = `http://localhost:${keycloakPort}`;
-const backendPort = process.env.PORT || '3000';
 const backendHost = process.env.HOST || 'localhost';
+const backendPort = process.env.PORT || '3000';
 const keepContainer = process.env.KEYCLOAK_TEST_KEEPALIVE === 'true';
 const nxE2eArgs = process.argv.slice(2);
 
@@ -88,35 +88,13 @@ async function main() {
 
   await waitForUrl(`${keycloakUrl}/realms/cacic-sso/.well-known/openid-configuration`, 'test Keycloak');
 
-  const backend = spawn(process.platform === 'win32' ? 'bunx.cmd' : 'bunx', ['nx', 'serve', 'backend'], {
-    cwd: rootDir,
-    env: testEnv,
-    stdio: 'inherit',
-  });
-  const backendExited = new Promise((resolve) => {
-    backend.once('exit', (code, signal) => resolve({ code, signal }));
-  });
-
-  try {
-    await Promise.race([
-      waitForUrl(`http://${backendHost}:${backendPort}/api`, 'backend'),
-      backendExited.then(({ code, signal }) => {
-        throw new Error(`Backend exited before e2e tests started. code=${code} signal=${signal}`);
-      }),
-    ]);
-    run(
-      process.platform === 'win32' ? 'bunx.cmd' : 'bunx',
-      ['nx', 'e2e', 'backend-e2e', '--runInBand', ...nxE2eArgs],
-      {
-        env: testEnv,
-      },
-    );
-  } finally {
-    if (backend.exitCode === null) {
-      backend.kill();
-    }
-    await backendExited;
-  }
+  run(
+    process.platform === 'win32' ? 'bunx.cmd' : 'bunx',
+    ['nx', 'e2e', 'backend-e2e', '--runInBand', ...nxE2eArgs],
+    {
+      env: testEnv,
+    },
+  );
 }
 
 try {

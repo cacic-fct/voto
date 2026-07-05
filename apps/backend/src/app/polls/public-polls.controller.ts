@@ -1,6 +1,7 @@
-import { Body, Controller, Get, MessageEvent, Param, Post, Put, Query, Req, Res, Sse } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req, Res, Sse } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
 import { ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
+import type {
   AdminCacicElectionSlate,
   CacicElectionSlate,
   Poll,
@@ -9,9 +10,9 @@ import {
   PollSummary,
   PollUserResponseState,
 } from '@org/voting-contracts';
-import { Response } from 'express';
-import { Observable } from 'rxjs';
-import { AuthenticatedRequest } from '../auth/auth.types';
+import type { Response } from 'express';
+import type { Observable } from 'rxjs';
+import type { AuthenticatedRequest } from '../auth/auth.types';
 import { SubmitCacicElectionSlateDto, SubmitPollResponseDto } from './dto/poll.dto';
 import { PollImagesService } from './poll-images.service';
 import { PollsService } from './polls.service';

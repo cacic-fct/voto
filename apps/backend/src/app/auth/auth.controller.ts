@@ -22,11 +22,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { IsArray, IsOptional, IsString } from 'class-validator';
-import { Request, Response } from 'express';
-import { PermissionEvaluationResponse } from '@org/voting-contracts';
+import type { Request, Response } from 'express';
+import type { PermissionEvaluationResponse } from '@org/voting-contracts';
 import { AUTH_SESSION_COOKIE_NAME, AUTH_STATE_COOKIE_NAME } from './auth.constants';
 import { Public } from './decorators/public.decorator';
-import { AuthenticatedPrincipal, AuthenticatedRequest, AuthorizationState } from './auth.types';
+import type { AuthenticatedPrincipal, AuthenticatedRequest, AuthorizationState } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
 
 type RequestWithCookies = Request & {

@@ -4,7 +4,6 @@ import {
   Controller,
   Delete,
   Get,
-  MessageEvent,
   Param,
   Patch,
   Post,
@@ -17,6 +16,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBody,
@@ -30,20 +30,20 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import {
-  EventManagerEvent,
+import { hasVotingAdminRole } from '@org/voting-contracts';
+import type {
   AdminCacicElectionSlate,
+  EventManagerEvent,
   Poll,
   PollEligibilityEnrollmentImportResult,
   PollEligibilityEnrollmentList,
   PollImage,
   PollResults,
   PollSummary,
-  hasVotingAdminRole,
 } from '@org/voting-contracts';
-import { Response } from 'express';
-import { Observable } from 'rxjs';
-import { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
+import type { Response } from 'express';
+import type { Observable } from 'rxjs';
+import type { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import {
   AddPollEligibilityEnrollmentsDto,
@@ -57,9 +57,9 @@ import {
 import { PollsService } from './polls.service';
 import {
   MAX_POLL_IMAGE_FILE_SIZE_BYTES,
-  UploadedPollImageFile,
   isAllowedPollImageMimeType,
 } from './poll-image.utils';
+import type { UploadedPollImageFile } from './poll-image.utils';
 import { PollImagesService } from './poll-images.service';
 
 class PollImageUploadBodyDto {
