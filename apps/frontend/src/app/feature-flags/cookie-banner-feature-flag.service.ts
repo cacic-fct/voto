@@ -1,10 +1,17 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Injectable, PLATFORM_ID, computed, inject, isDevMode, signal } from '@angular/core';
+import {
+  Injectable,
+  PLATFORM_ID,
+  computed,
+  inject,
+  isDevMode,
+  signal,
+} from '@angular/core';
 import { UnleashClient, type IToggle } from 'unleash-proxy-client';
 
 const COOKIE_BANNER_FEATURE_FLAG = 'cookie-banner-enabled';
 const DEVELOPMENT_STORAGE_KEY = 'cacic.cookieBanner.enabled';
-const UNLEASH_URL = 'https://unleash.cacic.dev.br/api/frontend';
+const UNLEASH_URL = 'https://unleash.cacic.com.br/api/frontend';
 const PRODUCTION_CLIENT_KEY =
   'default:production.h8sn3hzUSF07msdHkuXubAVRxSgtAdGsBCXiXXhcs8I4boeXozEue0Tx0lwq';
 
@@ -29,9 +36,13 @@ export class CookieBannerFeatureFlagService {
 
     const client = new UnleashClient({
       url: UNLEASH_URL,
-      clientKey: this.readRuntimeConfigValue('cacic-unleash-client-key') || PRODUCTION_CLIENT_KEY,
+      clientKey:
+        this.readRuntimeConfigValue('cacic-unleash-client-key') ||
+        PRODUCTION_CLIENT_KEY,
       appName: 'cacic-voto-frontend',
-      environment: this.readRuntimeConfigValue('cacic-unleash-environment') || 'production',
+      environment:
+        this.readRuntimeConfigValue('cacic-unleash-environment') ||
+        'production',
       refreshInterval: 60,
       disableMetrics: true,
       bootstrap: [this.createBootstrapToggle()],
@@ -68,7 +79,8 @@ export class CookieBannerFeatureFlagService {
     }
 
     try {
-      const value = globalThis.localStorage?.getItem(DEVELOPMENT_STORAGE_KEY) ?? null;
+      const value =
+        globalThis.localStorage?.getItem(DEVELOPMENT_STORAGE_KEY) ?? null;
       if (value === null) {
         globalThis.localStorage?.setItem(DEVELOPMENT_STORAGE_KEY, 'true');
         return true;
@@ -81,7 +93,10 @@ export class CookieBannerFeatureFlagService {
   }
 
   private readRuntimeConfigValue(metaName: string): string {
-    return document.querySelector<HTMLMetaElement>(`meta[name="${metaName}"]`)?.content ?? '';
+    return (
+      document.querySelector<HTMLMetaElement>(`meta[name="${metaName}"]`)
+        ?.content ?? ''
+    );
   }
 
   private createBootstrapToggle(): IToggle {
@@ -97,10 +112,15 @@ export class CookieBannerFeatureFlagService {
     };
   }
 
-  private readonly fetchWithoutConsoleNoise: typeof fetch = async (input, init) => {
+  private readonly fetchWithoutConsoleNoise: typeof fetch = async (
+    input,
+    init,
+  ) => {
     try {
       const response = await fetch(input, init);
-      return response.status === 401 || response.status === 403 ? this.createNotModifiedResponse() : response;
+      return response.status === 401 || response.status === 403
+        ? this.createNotModifiedResponse()
+        : response;
     } catch {
       return this.createNotModifiedResponse();
     }

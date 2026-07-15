@@ -22,7 +22,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('reads the global undergraduate verification disable flag from Unleash', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -47,7 +50,7 @@ describe('FeatureFlagService', () => {
     ).resolves.toBe(true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://unleash.cacic.dev.br/api/frontend',
+      'https://unleash.cacic.com.br/api/frontend',
       expect.any(Object),
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
@@ -59,7 +62,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('fails closed when Unleash cannot be reached', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock.mockRejectedValue(new Error('offline'));
     global.fetch = fetchMock;
     process.env.UNLEASH_FRONTEND_CLIENT_KEY = 'client-key';
@@ -71,7 +77,10 @@ describe('FeatureFlagService', () => {
   });
 
   it('uses cached values until the configured TTL expires', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock
       .mockResolvedValueOnce(
         new Response(JSON.stringify([{ name: 'flag-a', enabled: true }]), {
@@ -100,19 +109,30 @@ describe('FeatureFlagService', () => {
   });
 
   it('falls back when the flag is missing, malformed, or returned in an error response', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ features: [{ name: 'other-flag', enabled: true }] }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ features: [{ name: 'other-flag', enabled: true }] }),
+          {
+            status: 200,
+          },
+        ),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ toggles: [{ name: 'flag-a', enabled: 'yes' }] }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ toggles: [{ name: 'flag-a', enabled: 'yes' }] }),
+          {
+            status: 200,
+          },
+        ),
       )
-      .mockResolvedValueOnce(new Response('nope', { status: 503, statusText: 'Unavailable' }));
+      .mockResolvedValueOnce(
+        new Response('nope', { status: 503, statusText: 'Unavailable' }),
+      );
     global.fetch = fetchMock;
     process.env.UNLEASH_FRONTEND_CLIENT_KEY = 'client-key';
     const service = new FeatureFlagService();
@@ -123,11 +143,17 @@ describe('FeatureFlagService', () => {
   });
 
   it('uses URL, environment, app name, and timeout defaults defensively', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ toggles: [{ name: 'flag-a', enabled: true }] }), {
-        status: 200,
-      }),
+      new Response(
+        JSON.stringify({ toggles: [{ name: 'flag-a', enabled: true }] }),
+        {
+          status: 200,
+        },
+      ),
     );
     global.fetch = fetchMock;
     process.env.NODE_ENV = 'production';
@@ -143,7 +169,10 @@ describe('FeatureFlagService', () => {
 
     await expect(service.isEnabled('flag-a', false)).resolves.toBe(true);
 
-    expect(fetchMock).toHaveBeenCalledWith('https://flags.example/frontend', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://flags.example/frontend',
+      expect.any(Object),
+    );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.headers).toMatchObject({
       Authorization: expect.stringContaining('default:production.'),
@@ -154,25 +183,42 @@ describe('FeatureFlagService', () => {
   });
 
   it('handles defensive private parsing branches without contacting Unleash unnecessarily', async () => {
-    const service = new FeatureFlagService() as unknown as FeatureFlagServiceInternals;
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const service =
+      new FeatureFlagService() as unknown as FeatureFlagServiceInternals;
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     global.fetch = fetchMock;
     jest.spyOn(service, 'readClientKey').mockReturnValue('');
 
     await expect(service.fetchFlagValue('flag-a', true)).resolves.toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(service.readToggleValue([null, { name: 'flag-a', enabled: false }], 'flag-a')).toBe(false);
+    expect(
+      service.readToggleValue(
+        [null, { name: 'flag-a', enabled: false }],
+        'flag-a',
+      ),
+    ).toBe(false);
     expect(service.readToggleList('not-an-object')).toEqual([]);
-    expect(service.readToggleList({ toggles: 'bad', features: 'bad' })).toEqual([]);
+    expect(service.readToggleList({ toggles: 'bad', features: 'bad' })).toEqual(
+      [],
+    );
   });
 
   it('prefers legacy Unleash client keys when no frontend key is configured', async () => {
-    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
+    const fetchMock = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ features: [{ name: 'flag-a', enabled: true }] }), {
-        status: 200,
-      }),
+      new Response(
+        JSON.stringify({ features: [{ name: 'flag-a', enabled: true }] }),
+        {
+          status: 200,
+        },
+      ),
     );
     global.fetch = fetchMock;
     process.env.UNLEASH_CLIENT_KEY = 'legacy-client-key';

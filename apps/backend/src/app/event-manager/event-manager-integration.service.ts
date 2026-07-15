@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { EventManagerEvent } from '@org/voting-contracts';
 import axios from 'axios';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
@@ -18,7 +22,7 @@ const EVENT_MANAGER_M2M_VOTING_ROUTES = {
 export class EventManagerIntegrationService {
   private readonly logger = new Logger(EventManagerIntegrationService.name);
   private readonly eventManagerOrigin = this.resolveEventManagerOrigin(
-    process.env.EVENT_MANAGER_API_URL ?? 'https://eventos.cacic.dev.br/api',
+    process.env.EVENT_MANAGER_API_URL ?? 'https://eventos.cacic.com.br/api',
   );
   private readonly audience = process.env.EVENT_MANAGER_M2M_AUDIENCE;
   private readonly scope = process.env.EVENT_MANAGER_M2M_SCOPE;
@@ -39,7 +43,9 @@ export class EventManagerIntegrationService {
       );
 
       if (!Array.isArray(data)) {
-        throw new ServiceUnavailableException('Event Manager returned an invalid event list.');
+        throw new ServiceUnavailableException(
+          'Event Manager returned an invalid event list.',
+        );
       }
 
       return data.map((item) => this.parseEvent(item));
@@ -49,7 +55,9 @@ export class EventManagerIntegrationService {
       }
 
       this.logAxiosWarning(error, 'Could not list Event Manager events.');
-      throw new ServiceUnavailableException('Could not list Event Manager events.');
+      throw new ServiceUnavailableException(
+        'Could not list Event Manager events.',
+      );
     }
   }
 
@@ -57,20 +65,25 @@ export class EventManagerIntegrationService {
     const accessToken = await this.getAccessToken();
 
     try {
-      const { data } = await axios.post<EventManagerVotingAttendanceCheckResponse>(
-        this.eventManagerUrl(EVENT_MANAGER_M2M_VOTING_ROUTES.attendanceCheck(eventId)),
-        { userId },
-        {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
+      const { data } =
+        await axios.post<EventManagerVotingAttendanceCheckResponse>(
+          this.eventManagerUrl(
+            EVENT_MANAGER_M2M_VOTING_ROUTES.attendanceCheck(eventId),
+          ),
+          { userId },
+          {
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+            },
           },
-        },
-      );
+        );
 
       return data.attended === true;
     } catch (error) {
       this.logAxiosWarning(error, 'Could not verify Event Manager attendance.');
-      throw new ServiceUnavailableException('Could not verify Event Manager attendance.');
+      throw new ServiceUnavailableException(
+        'Could not verify Event Manager attendance.',
+      );
     }
   }
 
@@ -83,7 +96,9 @@ export class EventManagerIntegrationService {
 
   private parseEvent(value: unknown): EventManagerEvent {
     if (!this.isRecord(value)) {
-      throw new ServiceUnavailableException('Event Manager returned an invalid event item.');
+      throw new ServiceUnavailableException(
+        'Event Manager returned an invalid event item.',
+      );
     }
 
     const id = this.readRequiredString(value, 'id');
@@ -91,7 +106,8 @@ export class EventManagerIntegrationService {
     const startDate = this.readRequiredString(value, 'startDate');
     const endDate = this.readRequiredString(value, 'endDate');
     const locationDescription =
-      typeof value['locationDescription'] === 'string' && value['locationDescription'].trim()
+      typeof value['locationDescription'] === 'string' &&
+      value['locationDescription'].trim()
         ? value['locationDescription'].trim()
         : undefined;
 
@@ -105,10 +121,15 @@ export class EventManagerIntegrationService {
     };
   }
 
-  private readRequiredString(value: Record<string, unknown>, key: string): string {
+  private readRequiredString(
+    value: Record<string, unknown>,
+    key: string,
+  ): string {
     const rawValue = value[key];
     if (typeof rawValue !== 'string' || !rawValue.trim()) {
-      throw new ServiceUnavailableException(`Event Manager returned an invalid ${key}.`);
+      throw new ServiceUnavailableException(
+        `Event Manager returned an invalid ${key}.`,
+      );
     }
 
     return rawValue.trim();
@@ -128,7 +149,9 @@ export class EventManagerIntegrationService {
 
   private logAxiosWarning(error: unknown, message: string): void {
     if (axios.isAxiosError(error)) {
-      this.logger.warn(`${message} Status=${error.response?.status ?? 'none'}.`);
+      this.logger.warn(
+        `${message} Status=${error.response?.status ?? 'none'}.`,
+      );
       return;
     }
 

@@ -30,43 +30,73 @@ describe('KeycloakM2mTokenService', () => {
   });
 
   it('requests and caches client credentials tokens', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { access_token: 'token-1', expires_in: 120 } });
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: 'token-1', expires_in: 120 },
+    });
     const service = new KeycloakM2mTokenService();
 
     await expect(
-      service.getClientCredentialsToken({ audience: 'event-manager', scope: 'events:read' }),
+      service.getClientCredentialsToken({
+        audience: 'event-manager',
+        scope: 'events:read',
+      }),
     ).resolves.toBe('token-1');
     await expect(
-      service.getClientCredentialsToken({ audience: 'event-manager', scope: 'events:read' }),
+      service.getClientCredentialsToken({
+        audience: 'event-manager',
+        scope: 'events:read',
+      }),
     ).resolves.toBe('token-1');
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
-    expect(mockedAxios.post.mock.calls[0][0]).toBe('https://sso.example/realms/cacic/protocol/openid-connect/token');
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('grant_type=client_credentials');
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('audience=event-manager');
+    expect(mockedAxios.post.mock.calls[0][0]).toBe(
+      'https://sso.example/realms/cacic/protocol/openid-connect/token',
+    );
+    expect(mockedAxios.post.mock.calls[0][1]).toContain(
+      'grant_type=client_credentials',
+    );
+    expect(mockedAxios.post.mock.calls[0][1]).toContain(
+      'audience=event-manager',
+    );
     expect(mockedAxios.post.mock.calls[0][1]).toContain('scope=events%3Aread');
   });
 
   it('refreshes cached tokens inside the refresh skew and supports option credentials', async () => {
     mockedAxios.post
-      .mockResolvedValueOnce({ data: { access_token: 'token-1', expires_in: 30 } })
-      .mockResolvedValueOnce({ data: { access_token: 'token-2', expires_in: 300 } });
+      .mockResolvedValueOnce({
+        data: { access_token: 'token-1', expires_in: 30 },
+      })
+      .mockResolvedValueOnce({
+        data: { access_token: 'token-2', expires_in: 300 },
+      });
     const service = new KeycloakM2mTokenService();
 
     await expect(
-      service.getClientCredentialsToken({ clientId: 'override-client', clientSecret: 'override-secret' }),
+      service.getClientCredentialsToken({
+        clientId: 'override-client',
+        clientSecret: 'override-secret',
+      }),
     ).resolves.toBe('token-1');
     await expect(
-      service.getClientCredentialsToken({ clientId: 'override-client', clientSecret: 'override-secret' }),
+      service.getClientCredentialsToken({
+        clientId: 'override-client',
+        clientSecret: 'override-secret',
+      }),
     ).resolves.toBe('token-2');
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('client_id=override-client');
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=override-secret');
+    expect(mockedAxios.post.mock.calls[0][1]).toContain(
+      'client_id=override-client',
+    );
+    expect(mockedAxios.post.mock.calls[0][1]).toContain(
+      'client_secret=override-secret',
+    );
   });
 
   it('uses a default token lifetime when Keycloak omits a positive expiry', async () => {
-    mockedAxios.post.mockResolvedValue({ data: { access_token: 'token-1', expires_in: 0 } });
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: 'token-1', expires_in: 0 },
+    });
     const service = new KeycloakM2mTokenService();
 
     await expect(service.getClientCredentialsToken()).resolves.toBe('token-1');
@@ -78,13 +108,15 @@ describe('KeycloakM2mTokenService', () => {
 
   it('uses the default realm URL when none is configured', async () => {
     delete process.env.KEYCLOAK_REALM_URL;
-    mockedAxios.post.mockResolvedValue({ data: { access_token: 'token-1', expires_in: 120 } });
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: 'token-1', expires_in: 120 },
+    });
     const service = new KeycloakM2mTokenService();
 
     await service.getClientCredentialsToken();
 
     expect(mockedAxios.post.mock.calls[0][0]).toBe(
-      'https://sso.cacic.dev.br/realms/cacic-sso/protocol/openid-connect/token',
+      'https://sso.cacic.com.br/realms/cacic-sso/protocol/openid-connect/token',
     );
   });
 
@@ -93,13 +125,17 @@ describe('KeycloakM2mTokenService', () => {
     delete process.env.KEYCLOAK_M2M_CLIENT_SECRET;
     const service = new KeycloakM2mTokenService();
 
-    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
 
     process.env.KEYCLOAK_M2M_CLIENT_ID = 'client';
     process.env.KEYCLOAK_M2M_CLIENT_SECRET = 'secret';
     mockedAxios.post.mockResolvedValue({ data: { expires_in: 10 } });
 
-    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('wraps Keycloak request failures', async () => {
@@ -107,18 +143,20 @@ describe('KeycloakM2mTokenService', () => {
     mockedAxios.post.mockRejectedValue({ response: { status: 503 } });
     const service = new KeycloakM2mTokenService();
 
-    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.getClientCredentialsToken()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
 
     mockedAxios.isAxiosError.mockReturnValue(true);
     mockedAxios.post.mockRejectedValue({});
-    await expect(service.getClientCredentialsToken({ audience: 'missing-status' })).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      service.getClientCredentialsToken({ audience: 'missing-status' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValue(new Error('network'));
-    await expect(service.getClientCredentialsToken({ audience: 'new-cache-key' })).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      service.getClientCredentialsToken({ audience: 'new-cache-key' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

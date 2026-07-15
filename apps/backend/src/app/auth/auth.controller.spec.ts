@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { AUTH_SESSION_COOKIE_NAME, AUTH_STATE_COOKIE_NAME } from './auth.constants';
+import {
+  AUTH_SESSION_COOKIE_NAME,
+  AUTH_STATE_COOKIE_NAME,
+} from './auth.constants';
 import { AuthController } from './auth.controller';
 import { AuthenticatedPrincipal, AuthenticatedRequest } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
@@ -47,7 +50,9 @@ function createRequest(overrides: Partial<Request> = {}): Request {
     headers: {
       host: 'localhost:3000',
     },
-    get: jest.fn((name: string) => (name.toLowerCase() === 'host' ? 'localhost:3000' : undefined)),
+    get: jest.fn((name: string) =>
+      name.toLowerCase() === 'host' ? 'localhost:3000' : undefined,
+    ),
     ...overrides,
   } as Request;
 }
@@ -77,7 +82,8 @@ describe('AuthController', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
     process.env = {
       ...originalEnv,
-      KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS: 'https://api.example, bad-origin',
+      KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS:
+        'https://api.example, bad-origin',
       KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS: 'https://app.example',
       KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS: 'https://app.example',
     };
@@ -90,20 +96,34 @@ describe('AuthController', () => {
         redirectUri: 'https://api.example/api/auth/callback',
         returnTo: 'https://app.example/polls',
       }),
-      exchangeCodeForTokens: jest.fn().mockResolvedValue({ access_token: 'access' }),
+      exchangeCodeForTokens: jest
+        .fn()
+        .mockResolvedValue({ access_token: 'access' }),
       createSession: jest.fn().mockResolvedValue({
         sessionId: 'session-1',
         expiresAt: Date.now() + 1000,
         sessionExpiresAt: Date.now() + 2000,
       }),
-      getPostLoginRedirectUri: jest.fn().mockReturnValue('https://app.example/polls'),
+      getPostLoginRedirectUri: jest
+        .fn()
+        .mockReturnValue('https://app.example/polls'),
       refreshSession: jest.fn().mockResolvedValue({
         expiresAt: Date.now() + 1000,
         sessionExpiresAt: Date.now() + 2000,
       }),
-      getSessionLogoutInput: jest.fn().mockResolvedValue({ refreshToken: 'refresh', idTokenHint: 'id-token' }),
+      getSessionLogoutInput: jest
+        .fn()
+        .mockResolvedValue({
+          refreshToken: 'refresh',
+          idTokenHint: 'id-token',
+        }),
       clearSession: jest.fn().mockResolvedValue(undefined),
-      logout: jest.fn().mockResolvedValue({ refreshTokenRevoked: true, logoutUrl: 'https://sso.example/logout' }),
+      logout: jest
+        .fn()
+        .mockResolvedValue({
+          refreshTokenRevoked: true,
+          logoutUrl: 'https://sso.example/logout',
+        }),
       evaluateSessionPermissions: jest.fn().mockResolvedValue(['poll#read']),
     };
     controller = new AuthController(auth as unknown as KeycloakAuthService);
@@ -125,7 +145,13 @@ describe('AuthController', () => {
     });
 
     await expect(
-      controller.getLoginUrl(request, response as unknown as Response, '/polls', 'openid email', 'login'),
+      controller.getLoginUrl(
+        request,
+        response as unknown as Response,
+        '/polls',
+        'openid email',
+        'login',
+      ),
     ).resolves.toEqual({
       authorizationUrl: 'https://sso.example/auth',
     });
@@ -139,7 +165,11 @@ describe('AuthController', () => {
     expect(response.cookie).toHaveBeenCalledWith(
       AUTH_STATE_COOKIE_NAME,
       'state-1',
-      expect.objectContaining({ httpOnly: true, secure: true, path: '/api/auth/callback' }),
+      expect.objectContaining({
+        httpOnly: true,
+        secure: true,
+        path: '/api/auth/callback',
+      }),
     );
   });
 
@@ -153,7 +183,11 @@ describe('AuthController', () => {
       },
     });
 
-    await controller.redirectToLogin(request, response as unknown as Response, 'https://app.example/dashboard');
+    await controller.redirectToLogin(
+      request,
+      response as unknown as Response,
+      'https://app.example/dashboard',
+    );
 
     expect(auth.buildAuthorizationUrl).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -173,7 +207,13 @@ describe('AuthController', () => {
       },
     });
 
-    await controller.callback(request, response as unknown as Response, 'code-1', undefined, 'state-1');
+    await controller.callback(
+      request,
+      response as unknown as Response,
+      'code-1',
+      undefined,
+      'state-1',
+    );
 
     expect(response.clearCookie).toHaveBeenCalledWith(
       AUTH_STATE_COOKIE_NAME,
@@ -187,7 +227,10 @@ describe('AuthController', () => {
     expect(response.cookie).toHaveBeenCalledWith(
       AUTH_SESSION_COOKIE_NAME,
       'session-1',
-      expect.objectContaining({ expires: new Date(Date.now() + 2000), maxAge: 2000 }),
+      expect.objectContaining({
+        expires: new Date(Date.now() + 2000),
+        maxAge: 2000,
+      }),
     );
     expect(response.redirect).toHaveBeenCalledWith('https://app.example/polls');
   });
@@ -200,10 +243,19 @@ describe('AuthController', () => {
         cookie: `${AUTH_STATE_COOKIE_NAME}=state-1`,
       },
     });
-    auth.consumeAuthorizationState.mockResolvedValueOnce({ returnTo: '/polls', prompt: 'none' });
+    auth.consumeAuthorizationState.mockResolvedValueOnce({
+      returnTo: '/polls',
+      prompt: 'none',
+    });
     auth.getPostLoginRedirectUri.mockReturnValueOnce('/polls');
 
-    await controller.callback(request, response as unknown as Response, undefined, 'login_required', 'state-1');
+    await controller.callback(
+      request,
+      response as unknown as Response,
+      undefined,
+      'login_required',
+      'state-1',
+    );
 
     expect(response.redirect).toHaveBeenCalledWith('/polls?sso=none');
   });
@@ -216,10 +268,19 @@ describe('AuthController', () => {
         cookie: `${AUTH_STATE_COOKIE_NAME}=state-1`,
       },
     });
-    auth.consumeAuthorizationState.mockResolvedValueOnce({ returnTo: 'not a url', prompt: 'login' });
+    auth.consumeAuthorizationState.mockResolvedValueOnce({
+      returnTo: 'not a url',
+      prompt: 'login',
+    });
     auth.getPostLoginRedirectUri.mockReturnValueOnce('not a url');
 
-    await controller.callback(request, response as unknown as Response, undefined, 'access_denied', 'state-1');
+    await controller.callback(
+      request,
+      response as unknown as Response,
+      undefined,
+      'access_denied',
+      'state-1',
+    );
 
     expect(response.redirect).toHaveBeenCalledWith('not a url');
   });
@@ -228,12 +289,23 @@ describe('AuthController', () => {
     const response = createResponse();
 
     await expect(
-      controller.callback(createRequest(), response as unknown as Response, 'code-1', undefined, 'state-1'),
+      controller.callback(
+        createRequest(),
+        response as unknown as Response,
+        'code-1',
+        undefined,
+        'state-1',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     await expect(
       controller.callback(
-        createRequest({ headers: { host: 'localhost:3000', cookie: `${AUTH_STATE_COOKIE_NAME}=state-1` } }),
+        createRequest({
+          headers: {
+            host: 'localhost:3000',
+            cookie: `${AUTH_STATE_COOKIE_NAME}=state-1`,
+          },
+        }),
         response as unknown as Response,
         undefined,
         undefined,
@@ -244,7 +316,12 @@ describe('AuthController', () => {
     auth.consumeAuthorizationState.mockResolvedValueOnce(undefined);
     await expect(
       controller.callback(
-        createRequest({ headers: { host: 'localhost:3000', cookie: `${AUTH_STATE_COOKIE_NAME}=state-1` } }),
+        createRequest({
+          headers: {
+            host: 'localhost:3000',
+            cookie: `${AUTH_STATE_COOKIE_NAME}=state-1`,
+          },
+        }),
         response as unknown as Response,
         'code',
         undefined,
@@ -254,7 +331,9 @@ describe('AuthController', () => {
   });
 
   it('returns public user data or null', () => {
-    expect(controller.getMe({ user: createUser() } as AuthenticatedRequest)).toEqual({
+    expect(
+      controller.getMe({ user: createUser() } as AuthenticatedRequest),
+    ).toEqual({
       sub: 'user-1',
       preferredUsername: 'ada',
       email: 'ada@example.com',
@@ -275,7 +354,9 @@ describe('AuthController', () => {
       },
     });
 
-    await expect(controller.refresh(request, response as unknown as Response)).resolves.toMatchObject({
+    await expect(
+      controller.refresh(request, response as unknown as Response),
+    ).resolves.toMatchObject({
       sessionExpiresAt: Date.now() + 2000,
     });
     expect(auth.refreshSession).toHaveBeenCalledWith('session=1');
@@ -285,9 +366,9 @@ describe('AuthController', () => {
       expect.objectContaining({ path: '/', maxAge: 2000 }),
     );
 
-    await expect(controller.refresh(createRequest(), response as unknown as Response)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      controller.refresh(createRequest(), response as unknown as Response),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('prefers parsed cookies and scans raw cookie headers safely', async () => {
@@ -320,7 +401,9 @@ describe('AuthController', () => {
 
     await expect(
       controller.refresh(
-        createRequest({ headers: { host: 'localhost:3000', cookie: 'theme=dark' } }),
+        createRequest({
+          headers: { host: 'localhost:3000', cookie: 'theme=dark' },
+        }),
         response as unknown as Response,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -337,8 +420,13 @@ describe('AuthController', () => {
     });
 
     await expect(
-      controller.logout(request, response as unknown as Response, { postLogoutRedirectUri: 'https://app.example/login' }),
-    ).resolves.toEqual({ refreshTokenRevoked: true, logoutUrl: 'https://sso.example/logout' });
+      controller.logout(request, response as unknown as Response, {
+        postLogoutRedirectUri: 'https://app.example/login',
+      }),
+    ).resolves.toEqual({
+      refreshTokenRevoked: true,
+      logoutUrl: 'https://sso.example/logout',
+    });
 
     expect(auth.getSessionLogoutInput).toHaveBeenCalledWith('session-1');
     expect(auth.clearSession).toHaveBeenCalledWith('session-1');
@@ -369,13 +457,18 @@ describe('AuthController', () => {
 
   it('evaluates permissions for authenticated requests', async () => {
     await expect(
-      controller.evaluatePermissions({ sessionId: 'session-1' } as AuthenticatedRequest, {
-        permissions: ['poll#read'],
-      }),
+      controller.evaluatePermissions(
+        { sessionId: 'session-1' } as AuthenticatedRequest,
+        {
+          permissions: ['poll#read'],
+        },
+      ),
     ).resolves.toEqual({ permissions: ['poll#read'] });
 
     await expect(
-      controller.evaluatePermissions({} as AuthenticatedRequest, { permissions: ['poll#read'] }),
+      controller.evaluatePermissions({} as AuthenticatedRequest, {
+        permissions: ['poll#read'],
+      }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -384,33 +477,48 @@ describe('AuthController', () => {
 
     process.env.KEYCLOAK_REDIRECT_URI = 'https://api.example/not-callback';
     controller = new AuthController(auth as unknown as KeycloakAuthService);
-    await expect(controller.getLoginUrl(createRequest(), response as unknown as Response)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      controller.getLoginUrl(createRequest(), response as unknown as Response),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
-    process.env.KEYCLOAK_REDIRECT_URI = 'https://evil.example/api/auth/callback';
+    process.env.KEYCLOAK_REDIRECT_URI =
+      'https://evil.example/api/auth/callback';
     controller = new AuthController(auth as unknown as KeycloakAuthService);
-    await expect(controller.getLoginUrl(createRequest(), response as unknown as Response)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      controller.getLoginUrl(createRequest(), response as unknown as Response),
+    ).rejects.toBeInstanceOf(BadRequestException);
 
     delete process.env.KEYCLOAK_REDIRECT_URI;
     controller = new AuthController(auth as unknown as KeycloakAuthService);
     await expect(
-      controller.getLoginUrl(createRequest(), response as unknown as Response, 'ftp://app.example/path'),
+      controller.getLoginUrl(
+        createRequest(),
+        response as unknown as Response,
+        'ftp://app.example/path',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      controller.getLoginUrl(createRequest(), response as unknown as Response, 'https://evil.example/path'),
+      controller.getLoginUrl(
+        createRequest(),
+        response as unknown as Response,
+        'https://evil.example/path',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      controller.logout(createRequest(), response as unknown as Response, { postLogoutRedirectUri: 'https://evil.example' }),
+      controller.logout(createRequest(), response as unknown as Response, {
+        postLogoutRedirectUri: 'https://evil.example',
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('normalizes empty redirect inputs and rejects malformed URLs', async () => {
     const response = createResponse();
 
-    await controller.getLoginUrl(createRequest(), response as unknown as Response, '   ');
+    await controller.getLoginUrl(
+      createRequest(),
+      response as unknown as Response,
+      '   ',
+    );
     expect(auth.buildAuthorizationUrl).toHaveBeenLastCalledWith(
       expect.objectContaining({
         returnTo: undefined,
@@ -418,14 +526,21 @@ describe('AuthController', () => {
     );
 
     await expect(
-      controller.getLoginUrl(createRequest(), response as unknown as Response, 'http://[::1'),
+      controller.getLoginUrl(
+        createRequest(),
+        response as unknown as Response,
+        'http://[::1',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('ignores blank allowed-origin entries and falls back to raw silent-login redirects when they cannot be parsed', async () => {
-    process.env.KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS = ' , https://api.example';
-    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS = ' , https://app.example';
-    process.env.KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS = ' , https://app.example';
+    process.env.KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS =
+      ' , https://api.example';
+    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS =
+      ' , https://app.example';
+    process.env.KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS =
+      ' , https://app.example';
     controller = new AuthController(auth as unknown as KeycloakAuthService);
 
     const response = createResponse();
@@ -435,10 +550,19 @@ describe('AuthController', () => {
         cookie: `${AUTH_STATE_COOKIE_NAME}=state-1`,
       },
     });
-    auth.consumeAuthorizationState.mockResolvedValueOnce({ returnTo: 'http://[::1', prompt: 'none' });
+    auth.consumeAuthorizationState.mockResolvedValueOnce({
+      returnTo: 'http://[::1',
+      prompt: 'none',
+    });
     auth.getPostLoginRedirectUri.mockReturnValueOnce('http://[::1');
 
-    await controller.callback(request, response as unknown as Response, undefined, 'login_required', 'state-1');
+    await controller.callback(
+      request,
+      response as unknown as Response,
+      undefined,
+      'login_required',
+      'state-1',
+    );
 
     expect(response.redirect).toHaveBeenCalledWith('http://[::1');
   });
@@ -455,7 +579,7 @@ describe('AuthController', () => {
         headers: {
           host: 'internal.local',
           'x-forwarded-proto': ['https'],
-          'x-forwarded-host': ['voto.cacic.dev.br'],
+          'x-forwarded-host': ['voto.cacic.com.br'],
         },
       }),
       loginResponse as unknown as Response,
@@ -463,12 +587,14 @@ describe('AuthController', () => {
     );
     expect(auth.buildAuthorizationUrl).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        redirectUri: 'https://voto.cacic.dev.br/api/auth/callback',
+        redirectUri: 'https://voto.cacic.com.br/api/auth/callback',
       }),
     );
 
     const interactiveCallbackResponse = createResponse();
-    auth.consumeAuthorizationState.mockResolvedValueOnce({ returnTo: '/polls' });
+    auth.consumeAuthorizationState.mockResolvedValueOnce({
+      returnTo: '/polls',
+    });
     auth.getPostLoginRedirectUri.mockReturnValueOnce('/polls');
 
     await controller.callback(
@@ -486,8 +612,13 @@ describe('AuthController', () => {
     expect(interactiveCallbackResponse.redirect).toHaveBeenCalledWith('/polls');
 
     const callbackResponse = createResponse();
-    auth.consumeAuthorizationState.mockResolvedValueOnce({ returnTo: 'https://voto.cacic.dev.br/polls', prompt: 'none' });
-    auth.getPostLoginRedirectUri.mockReturnValueOnce('https://voto.cacic.dev.br/polls');
+    auth.consumeAuthorizationState.mockResolvedValueOnce({
+      returnTo: 'https://voto.cacic.com.br/polls',
+      prompt: 'none',
+    });
+    auth.getPostLoginRedirectUri.mockReturnValueOnce(
+      'https://voto.cacic.com.br/polls',
+    );
 
     await controller.callback(
       createRequest({
@@ -502,14 +633,19 @@ describe('AuthController', () => {
       'state-1',
     );
 
-    expect(callbackResponse.redirect).toHaveBeenCalledWith('https://voto.cacic.dev.br/polls?sso=none');
+    expect(callbackResponse.redirect).toHaveBeenCalledWith(
+      'https://voto.cacic.com.br/polls?sso=none',
+    );
   });
 
   it('covers internal redirect fallbacks used by controller decorators', () => {
-    const controllerInternals = controller as unknown as AuthControllerInternals;
+    const controllerInternals =
+      controller as unknown as AuthControllerInternals;
     auth.getPostLoginRedirectUri.mockReturnValueOnce('/login');
 
     expect(controllerInternals.resolveReturnTo()).toBeUndefined();
-    expect(controllerInternals.getFailedAuthorizationRedirectUri()).toBe('/login');
+    expect(controllerInternals.getFailedAuthorizationRedirectUri()).toBe(
+      '/login',
+    );
   });
 });

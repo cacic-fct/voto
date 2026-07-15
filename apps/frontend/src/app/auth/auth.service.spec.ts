@@ -1,9 +1,16 @@
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { AuthenticatedUser, AuthRefreshResult, LoginOptions } from '@org/voting-contracts';
+import {
+  AuthenticatedUser,
+  AuthRefreshResult,
+  LoginOptions,
+} from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
@@ -58,16 +65,21 @@ describe('AuthService', () => {
     expect(service.roles()).toEqual(['authenticated-user']);
     expect(service.permissions()).toEqual(['polls:read']);
     expect(service.isAuthenticated()).toBe(true);
-    expect(fetch).toHaveBeenCalledWith('https://account.cacic.dev.br/api/tracking/session', {
-      credentials: 'include',
-      method: 'GET',
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://account.cacic.com.br/api/tracking/session',
+      {
+        credentials: 'include',
+        method: 'GET',
+      },
+    );
   });
 
   it('marks initialization complete without loading a user on the server', async () => {
     TestBed.resetTestingModule();
     configure('server');
-    const internals = service as unknown as { resolveReturnTo(returnTo?: string): string };
+    const internals = service as unknown as {
+      resolveReturnTo(returnTo?: string): string;
+    };
 
     await service.initialize();
 
@@ -77,12 +89,18 @@ describe('AuthService', () => {
   });
 
   it('attempts silent SSO and keeps initialization successful for auth failures', async () => {
-    const internals = service as unknown as { buildLoginRedirectUrl(options?: LoginOptions): string };
-    const redirectSpy = vi.spyOn(internals, 'buildLoginRedirectUrl').mockReturnValue('#silent-login');
+    const internals = service as unknown as {
+      buildLoginRedirectUrl(options?: LoginOptions): string;
+    };
+    const redirectSpy = vi
+      .spyOn(internals, 'buildLoginRedirectUrl')
+      .mockReturnValue('#silent-login');
     service.user.set(user);
 
     const initialize = service.initialize();
-    http.expectOne('/api/auth/me').flush({}, { status: 401, statusText: 'Unauthorized' });
+    http
+      .expectOne('/api/auth/me')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
     await initialize;
 
     expect(service.initialized()).toBe(true);
@@ -98,7 +116,9 @@ describe('AuthService', () => {
   it('rethrows unexpected initialization failures after marking initialization complete', async () => {
     const initialize = service.initialize();
 
-    http.expectOne('/api/auth/me').flush({}, { status: 500, statusText: 'Server Error' });
+    http
+      .expectOne('/api/auth/me')
+      .flush({}, { status: 500, statusText: 'Server Error' });
 
     await expect(initialize).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(service.initialized()).toBe(true);
@@ -125,20 +145,29 @@ describe('AuthService', () => {
   });
 
   it('attempts browser login redirects with the resolved backend URL', async () => {
-    const internals = service as unknown as { buildLoginRedirectUrl(options?: LoginOptions): string };
-    const redirectSpy = vi.spyOn(internals, 'buildLoginRedirectUrl').mockReturnValue('#auth-login');
+    const internals = service as unknown as {
+      buildLoginRedirectUrl(options?: LoginOptions): string;
+    };
+    const redirectSpy = vi
+      .spyOn(internals, 'buildLoginRedirectUrl')
+      .mockReturnValue('#auth-login');
     window.location.hash = '';
 
     await service.login({ returnTo: '/admin', prompt: 'login' });
 
-    expect(redirectSpy).toHaveBeenCalledWith({ returnTo: '/admin', prompt: 'login' });
+    expect(redirectSpy).toHaveBeenCalledWith({
+      returnTo: '/admin',
+      prompt: 'login',
+    });
     expect(window.location.hash).toBe('#auth-login');
     redirectSpy.mockRestore();
   });
 
   it('posts the logout redirect and clears the session', async () => {
     const internals = service as unknown as { redirectTo(url: string): void };
-    const redirectSpy = vi.spyOn(internals, 'redirectTo').mockImplementation(() => undefined);
+    const redirectSpy = vi
+      .spyOn(internals, 'redirectTo')
+      .mockImplementation(() => undefined);
     const rootUrl = new URL('/', window.location.origin).toString();
     service.user.set(user);
 
@@ -154,10 +183,13 @@ describe('AuthService', () => {
     expect(service.user()).toBeNull();
     expect(service.consumePostLogoutRedirect()).toBe(true);
     expect(service.consumePostLogoutRedirect()).toBe(false);
-    expect(fetch).toHaveBeenCalledWith('https://account.cacic.dev.br/api/tracking/clear', {
-      credentials: 'include',
-      method: 'POST',
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://account.cacic.com.br/api/tracking/clear',
+      {
+        credentials: 'include',
+        method: 'POST',
+      },
+    );
     expect(redirectSpy).toHaveBeenCalledWith(rootUrl);
 
     redirectSpy.mockRestore();
@@ -165,7 +197,9 @@ describe('AuthService', () => {
 
   it('redirects to returned logout URLs and clears the session after logout failures', async () => {
     const internals = service as unknown as { redirectTo(url: string): void };
-    const redirectSpy = vi.spyOn(internals, 'redirectTo').mockImplementation(() => undefined);
+    const redirectSpy = vi
+      .spyOn(internals, 'redirectTo')
+      .mockImplementation(() => undefined);
     const rootUrl = new URL('/', window.location.origin).toString();
     service.user.set(user);
 
@@ -173,15 +207,20 @@ describe('AuthService', () => {
     http.expectOne('/api/auth/logout').flush({ logoutUrl: '#logged-out' });
     await redirectedLogout;
     expect(service.user()).toBeNull();
-    expect(fetch).toHaveBeenCalledWith('https://account.cacic.dev.br/api/tracking/clear', {
-      credentials: 'include',
-      method: 'POST',
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://account.cacic.com.br/api/tracking/clear',
+      {
+        credentials: 'include',
+        method: 'POST',
+      },
+    );
     expect(redirectSpy).toHaveBeenCalledWith('#logged-out');
 
     service.user.set(user);
     const failedLogout = service.logout();
-    http.expectOne('/api/auth/logout').flush({}, { status: 500, statusText: 'Server Error' });
+    http
+      .expectOne('/api/auth/logout')
+      .flush({}, { status: 500, statusText: 'Server Error' });
     await failedLogout;
     expect(service.user()).toBeNull();
     expect(redirectSpy).toHaveBeenLastCalledWith(rootUrl);
@@ -206,7 +245,9 @@ describe('AuthService', () => {
     service.user.set(user);
 
     const refresh = firstValueFrom(service.refreshTokenSilently());
-    http.expectOne('/api/auth/refresh').flush({}, { status: 401, statusText: 'Unauthorized' });
+    http
+      .expectOne('/api/auth/refresh')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
     await expect(refresh).rejects.toBeInstanceOf(HttpErrorResponse);
 
     expect(service.user()).toBeNull();
@@ -218,11 +259,15 @@ describe('AuthService', () => {
   });
 
   it('deduplicates permission evaluation requests', async () => {
-    const response = firstValueFrom(service.evaluatePermissions(['polls:read', 'polls:read', 'polls:write']));
+    const response = firstValueFrom(
+      service.evaluatePermissions(['polls:read', 'polls:read', 'polls:write']),
+    );
     const request = http.expectOne('/api/auth/permissions/evaluate');
 
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({ permissions: ['polls:read', 'polls:write'] });
+    expect(request.request.body).toEqual({
+      permissions: ['polls:read', 'polls:write'],
+    });
     request.flush({ permissions: ['polls:read'] });
 
     await expect(response).resolves.toEqual({ permissions: ['polls:read'] });
@@ -234,13 +279,20 @@ describe('AuthService', () => {
       resolveReturnTo(returnTo?: string): string;
     };
 
-    const redirect = internals.buildLoginRedirectUrl({ returnTo: '/admin', prompt: 'login' });
+    const redirect = internals.buildLoginRedirectUrl({
+      returnTo: '/admin',
+      prompt: 'login',
+    });
     const params = new URLSearchParams(redirect.split('?')[1]);
 
     expect(redirect.startsWith('/api/auth/login/redirect?')).toBe(true);
-    expect(params.get('returnTo')).toBe(new URL('/admin', TestBed.inject(DOCUMENT).location.origin).toString());
+    expect(params.get('returnTo')).toBe(
+      new URL('/admin', TestBed.inject(DOCUMENT).location.origin).toString(),
+    );
     expect(params.get('prompt')).toBe('login');
-    expect(internals.resolveReturnTo('http://[')).toBe(TestBed.inject(DOCUMENT).location.origin);
+    expect(internals.resolveReturnTo('http://[')).toBe(
+      TestBed.inject(DOCUMENT).location.origin,
+    );
   });
 
   it('does not attempt silent SSO twice or after SSO failure markers', () => {
@@ -248,7 +300,9 @@ describe('AuthService', () => {
       buildLoginRedirectUrl(options?: LoginOptions): string;
       loginWithExistingSsoSession(): void;
     };
-    const redirectSpy = vi.spyOn(internals, 'buildLoginRedirectUrl').mockReturnValue('#silent-login');
+    const redirectSpy = vi
+      .spyOn(internals, 'buildLoginRedirectUrl')
+      .mockReturnValue('#silent-login');
 
     window.history.replaceState({}, '', '/polls?sso=none');
     internals.loginWithExistingSsoSession();

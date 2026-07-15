@@ -24,9 +24,16 @@ import {
 import { IsArray, IsOptional, IsString } from 'class-validator';
 import type { Request, Response } from 'express';
 import type { PermissionEvaluationResponse } from '@org/voting-contracts';
-import { AUTH_SESSION_COOKIE_NAME, AUTH_STATE_COOKIE_NAME } from './auth.constants';
+import {
+  AUTH_SESSION_COOKIE_NAME,
+  AUTH_STATE_COOKIE_NAME,
+} from './auth.constants';
 import { Public } from './decorators/public.decorator';
-import type { AuthenticatedPrincipal, AuthenticatedRequest, AuthorizationState } from './auth.types';
+import type {
+  AuthenticatedPrincipal,
+  AuthenticatedRequest,
+  AuthorizationState,
+} from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
 
 type RequestWithCookies = Request & {
@@ -42,7 +49,8 @@ const CACIC_TRACKING_COOKIE_NAMES = [
 
 class LogoutDto {
   @ApiPropertyOptional({
-    description: 'Optional post-logout redirect URI. Must use an allowed origin.',
+    description:
+      'Optional post-logout redirect URI. Must use an allowed origin.',
     example: 'http://localhost:4200/login',
   })
   @IsOptional()
@@ -52,7 +60,8 @@ class LogoutDto {
 
 class PermissionEvaluationRequestDto {
   @ApiProperty({
-    description: 'Permission identifiers to evaluate against the current session.',
+    description:
+      'Permission identifiers to evaluate against the current session.',
     example: ['poll#read', 'poll#create'],
     type: [String],
   })
@@ -64,7 +73,8 @@ class PermissionEvaluationRequestDto {
 class LoginUrlResponseDto {
   @ApiProperty({
     description: 'Keycloak authorization URL.',
-    example: 'https://sso.cacic.dev.br/realms/cacic-sso/protocol/openid-connect/auth?...',
+    example:
+      'https://sso.cacic.com.br/realms/cacic-sso/protocol/openid-connect/auth?...',
   })
   authorizationUrl!: string;
 }
@@ -73,9 +83,12 @@ class LoginUrlResponseDto {
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
-  private readonly allowedCallbackRedirectOrigins = this.readAllowedCallbackRedirectOrigins();
-  private readonly allowedPostLoginRedirectOrigins = this.readAllowedPostLoginRedirectOrigins();
-  private readonly allowedPostLogoutRedirectOrigins = this.readAllowedPostLogoutRedirectOrigins();
+  private readonly allowedCallbackRedirectOrigins =
+    this.readAllowedCallbackRedirectOrigins();
+  private readonly allowedPostLoginRedirectOrigins =
+    this.readAllowedPostLoginRedirectOrigins();
+  private readonly allowedPostLogoutRedirectOrigins =
+    this.readAllowedPostLogoutRedirectOrigins();
 
   constructor(private readonly auth: KeycloakAuthService) {}
 
@@ -125,9 +138,16 @@ export class AuthController {
 
   @Get('callback')
   @Public()
-  @ApiOperation({ summary: 'Complete the Keycloak authorization-code callback' })
-  @ApiResponse({ status: 302, description: 'Session cookie set and browser redirected back to the app.' })
-  @ApiBadRequestResponse({ description: 'Returned when the authorization state or code is invalid.' })
+  @ApiOperation({
+    summary: 'Complete the Keycloak authorization-code callback',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Session cookie set and browser redirected back to the app.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Returned when the authorization state or code is invalid.',
+  })
   async callback(
     @Req() request: Request,
     @Res() response: Response,
@@ -135,9 +155,15 @@ export class AuthController {
     @Query('error') error?: string,
     @Query('state') state?: string,
   ): Promise<void> {
-    const authorizationState = await this.consumeAuthorizationState(request, response, state);
+    const authorizationState = await this.consumeAuthorizationState(
+      request,
+      response,
+      state,
+    );
     if (error) {
-      response.redirect(this.getFailedAuthorizationRedirectUri(authorizationState));
+      response.redirect(
+        this.getFailedAuthorizationRedirectUri(authorizationState),
+      );
       return;
     }
 
@@ -167,8 +193,12 @@ export class AuthController {
   @Get('me')
   @Public()
   @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
-  @ApiOperation({ summary: 'Read the authenticated identity for the current session' })
-  getMe(@Req() request: AuthenticatedRequest): ReturnType<AuthController['toPublicUser']> | null {
+  @ApiOperation({
+    summary: 'Read the authenticated identity for the current session',
+  })
+  getMe(
+    @Req() request: AuthenticatedRequest,
+  ): ReturnType<AuthController['toPublicUser']> | null {
     return request.user ? this.toPublicUser(request.user) : null;
   }
 
@@ -176,7 +206,10 @@ export class AuthController {
   @Public()
   @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
   @ApiOperation({ summary: 'Refresh the current session' })
-  async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const sessionId = this.readCookie(request, AUTH_SESSION_COOKIE_NAME);
     if (!sessionId) {
       throw new ForbiddenException('Missing session.');
@@ -199,11 +232,19 @@ export class AuthController {
   @Post('logout')
   @Public()
   @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
-  @ApiOperation({ summary: 'Clear the local session and return a Keycloak logout URL' })
+  @ApiOperation({
+    summary: 'Clear the local session and return a Keycloak logout URL',
+  })
   @ApiBody({ type: LogoutDto, required: false })
-  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Body() body?: LogoutDto) {
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body() body?: LogoutDto,
+  ) {
     const sessionId = this.readCookie(request, AUTH_SESSION_COOKIE_NAME);
-    const sessionLogoutInput = sessionId ? await this.auth.getSessionLogoutInput(sessionId) : null;
+    const sessionLogoutInput = sessionId
+      ? await this.auth.getSessionLogoutInput(sessionId)
+      : null;
 
     if (sessionId) {
       await this.auth.clearSession(sessionId);
@@ -220,7 +261,9 @@ export class AuthController {
     return this.auth.logout({
       refreshToken: sessionLogoutInput?.refreshToken,
       idTokenHint: sessionLogoutInput?.idTokenHint,
-      postLogoutRedirectUri: this.resolvePostLogoutRedirectUri(body?.postLogoutRedirectUri),
+      postLogoutRedirectUri: this.resolvePostLogoutRedirectUri(
+        body?.postLogoutRedirectUri,
+      ),
     });
   }
 
@@ -235,7 +278,10 @@ export class AuthController {
       throw new ForbiddenException('Missing session.');
     }
 
-    const permissions = await this.auth.evaluateSessionPermissions(request.sessionId, body.permissions);
+    const permissions = await this.auth.evaluateSessionPermissions(
+      request.sessionId,
+      body.permissions,
+    );
     return { permissions };
   }
 
@@ -295,7 +341,11 @@ export class AuthController {
     return authorizationState;
   }
 
-  private setAuthorizationStateCookie(response: Response, request: Request, state: string): void {
+  private setAuthorizationStateCookie(
+    response: Response,
+    request: Request,
+    state: string,
+  ): void {
     response.cookie(AUTH_STATE_COOKIE_NAME, state, {
       httpOnly: true,
       sameSite: 'lax',
@@ -305,7 +355,10 @@ export class AuthController {
     });
   }
 
-  private clearAuthorizationStateCookie(response: Response, request: Request): void {
+  private clearAuthorizationStateCookie(
+    response: Response,
+    request: Request,
+  ): void {
     response.clearCookie(AUTH_STATE_COOKIE_NAME, {
       httpOnly: true,
       sameSite: 'lax',
@@ -315,22 +368,35 @@ export class AuthController {
   }
 
   private getCallbackRedirectUri(request: Request): string {
-    const protocol = this.readForwardedHeader(request, 'x-forwarded-proto')?.split(',')[0]?.trim();
-    const host = this.readForwardedHeader(request, 'x-forwarded-host')?.split(',')[0]?.trim();
+    const protocol = this.readForwardedHeader(request, 'x-forwarded-proto')
+      ?.split(',')[0]
+      ?.trim();
+    const host = this.readForwardedHeader(request, 'x-forwarded-host')
+      ?.split(',')[0]
+      ?.trim();
     const origin = `${protocol || request.protocol}://${host || request.get('host')}`;
     return new URL('/api/auth/callback', origin).toString();
   }
 
   private resolveCallbackRedirectUri(request: Request): string {
-    const redirectUri = process.env.KEYCLOAK_REDIRECT_URI?.trim() || this.getCallbackRedirectUri(request);
-    const url = this.parseHttpUrl(redirectUri, 'Invalid callback redirect URI.');
+    const redirectUri =
+      process.env.KEYCLOAK_REDIRECT_URI?.trim() ||
+      this.getCallbackRedirectUri(request);
+    const url = this.parseHttpUrl(
+      redirectUri,
+      'Invalid callback redirect URI.',
+    );
 
     if (url.pathname !== '/api/auth/callback') {
-      throw new BadRequestException('Callback redirect URI path is not allowed.');
+      throw new BadRequestException(
+        'Callback redirect URI path is not allowed.',
+      );
     }
 
     if (!this.allowedCallbackRedirectOrigins.has(url.origin)) {
-      throw new BadRequestException('Callback redirect URI origin is not allowed.');
+      throw new BadRequestException(
+        'Callback redirect URI origin is not allowed.',
+      );
     }
 
     url.username = '';
@@ -350,9 +416,14 @@ export class AuthController {
       return redirectUri;
     }
 
-    const url = this.parseHttpUrl(redirectUri, 'Invalid post-login redirect URI.');
+    const url = this.parseHttpUrl(
+      redirectUri,
+      'Invalid post-login redirect URI.',
+    );
     if (!this.allowedPostLoginRedirectOrigins.has(url.origin)) {
-      throw new BadRequestException('Post-login redirect URI origin is not allowed.');
+      throw new BadRequestException(
+        'Post-login redirect URI origin is not allowed.',
+      );
     }
 
     url.username = '';
@@ -361,15 +432,22 @@ export class AuthController {
     return url.toString();
   }
 
-  private resolvePostLogoutRedirectUri(requestedRedirectUri?: string): string | undefined {
+  private resolvePostLogoutRedirectUri(
+    requestedRedirectUri?: string,
+  ): string | undefined {
     const redirectUri = requestedRedirectUri?.trim();
     if (!redirectUri) {
       return undefined;
     }
 
-    const url = this.parseHttpUrl(redirectUri, 'Invalid post-logout redirect URI.');
+    const url = this.parseHttpUrl(
+      redirectUri,
+      'Invalid post-logout redirect URI.',
+    );
     if (!this.allowedPostLogoutRedirectOrigins.has(url.origin)) {
-      throw new BadRequestException('Post-logout redirect URI origin is not allowed.');
+      throw new BadRequestException(
+        'Post-logout redirect URI origin is not allowed.',
+      );
     }
 
     url.username = '';
@@ -394,25 +472,28 @@ export class AuthController {
   }
 
   private readAllowedCallbackRedirectOrigins(): Set<string> {
-    return this.readAllowedOrigins('KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS', [
-      'http://localhost:3000',
-      'http://localhost:4200',
-      'https://voto.cacic.dev.br',
-    ]);
+    return this.readAllowedOrigins(
+      'KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS',
+      [
+        'http://localhost:3000',
+        'http://localhost:4200',
+        'https://voto.cacic.com.br',
+      ],
+    );
   }
 
   private readAllowedPostLoginRedirectOrigins(): Set<string> {
-    return this.readAllowedOrigins('KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS', [
-      'http://localhost:4200',
-      'https://voto.cacic.dev.br',
-    ]);
+    return this.readAllowedOrigins(
+      'KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS',
+      ['http://localhost:4200', 'https://voto.cacic.com.br'],
+    );
   }
 
   private readAllowedPostLogoutRedirectOrigins(): Set<string> {
-    return this.readAllowedOrigins('KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS', [
-      'http://localhost:4200',
-      'https://voto.cacic.dev.br',
-    ]);
+    return this.readAllowedOrigins(
+      'KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS',
+      ['http://localhost:4200', 'https://voto.cacic.com.br'],
+    );
   }
 
   private readAllowedOrigins(envName: string, defaults: string[]): Set<string> {
@@ -433,22 +514,30 @@ export class AuthController {
     return origins;
   }
 
-  private readForwardedHeader(request: Request, headerName: string): string | undefined {
+  private readForwardedHeader(
+    request: Request,
+    headerName: string,
+  ): string | undefined {
     const value = request.headers[headerName];
     return Array.isArray(value) ? value[0] : value;
   }
 
-  private getFailedAuthorizationRedirectUri(authorizationState?: AuthorizationState): string {
+  private getFailedAuthorizationRedirectUri(
+    authorizationState?: AuthorizationState,
+  ): string {
     const redirectUri = this.auth.getPostLoginRedirectUri(authorizationState);
     if (authorizationState?.prompt !== 'none') {
       return redirectUri;
     }
 
     try {
-      const isRelativePath = redirectUri.startsWith('/') && !redirectUri.startsWith('//');
+      const isRelativePath =
+        redirectUri.startsWith('/') && !redirectUri.startsWith('//');
       const url = new URL(redirectUri, 'https://voto.cacic.local');
       url.searchParams.set('sso', 'none');
-      return isRelativePath ? `${url.pathname}${url.search}${url.hash}` : url.toString();
+      return isRelativePath
+        ? `${url.pathname}${url.search}${url.hash}`
+        : url.toString();
     } catch {
       return redirectUri;
     }
@@ -458,12 +547,15 @@ export class AuthController {
     return Math.max(expiresAt - Date.now(), 0);
   }
 
-  private clearCacicTrackingCookies(response: Response, request: Request): void {
+  private clearCacicTrackingCookies(
+    response: Response,
+    request: Request,
+  ): void {
     const secure = this.isSecureRequest(request);
 
     for (const cookieName of CACIC_TRACKING_COOKIE_NAMES) {
       response.clearCookie(cookieName, {
-        domain: '.cacic.dev.br',
+        domain: '.cacic.com.br',
         sameSite: 'lax',
         secure,
         path: '/',

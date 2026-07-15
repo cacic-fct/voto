@@ -12,12 +12,14 @@ import { PackageCookieBannerComponent } from './privacy/package-cookie-banner.co
   styleUrl: './app.css',
 })
 export class App {
-  private readonly cookieBannerFeatureFlag = inject(CookieBannerFeatureFlagService);
+  private readonly cookieBannerFeatureFlag = inject(
+    CookieBannerFeatureFlagService,
+  );
 
   protected readonly title = 'CACiC Voto';
   protected readonly cookieBannerEnabled = this.cookieBannerFeatureFlag.enabled;
   protected readonly cookieBannerConfig: CookieBannerOptions = {
-    privacyPolicyUrl: 'https://cacic.dev.br/legal/privacy-policy',
+    privacyPolicyUrl: 'https://cacic.com.br/legal/privacy-policy',
     onAccept: () => {
       window.dispatchEvent(new Event('cookieBannerAccepted'));
     },

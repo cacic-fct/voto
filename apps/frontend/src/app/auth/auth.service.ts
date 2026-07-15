@@ -1,20 +1,38 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
+import {
+  Injectable,
+  PLATFORM_ID,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import {
   AuthRefreshResult,
   AuthenticatedUser,
   LoginOptions,
   PermissionEvaluationResponse,
 } from '@org/voting-contracts';
-import { Observable, catchError, finalize, firstValueFrom, shareReplay, tap, throwError } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  finalize,
+  firstValueFrom,
+  shareReplay,
+  tap,
+  throwError,
+} from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly accountTrackingClearUrl = 'https://account.cacic.dev.br/api/tracking/clear';
-  private readonly accountTrackingSessionUrl = 'https://account.cacic.dev.br/api/tracking/session';
-  private readonly silentSsoAttemptStorageKey = 'cacic-voto:silent-sso-attempted';
-  private readonly postLogoutRedirectStorageKey = 'cacic-voto:post-logout-redirect';
+  private readonly accountTrackingClearUrl =
+    'https://account.cacic.com.br/api/tracking/clear';
+  private readonly accountTrackingSessionUrl =
+    'https://account.cacic.com.br/api/tracking/session';
+  private readonly silentSsoAttemptStorageKey =
+    'cacic-voto:silent-sso-attempted';
+  private readonly postLogoutRedirectStorageKey =
+    'cacic-voto:post-logout-redirect';
 
   private readonly http = inject(HttpClient);
   private readonly document = inject(DOCUMENT);
@@ -110,27 +128,34 @@ export class AuthService {
       return this.refreshRequest$;
     }
 
-    this.refreshRequest$ = this.http.post<AuthRefreshResult>('/api/auth/refresh', {}).pipe(
-      tap(() => {
-        void this.loadCurrentUser();
-      }),
-      catchError((error) => {
-        this.clearSession();
-        return throwError(() => error);
-      }),
-      finalize(() => {
-        this.refreshRequest$ = null;
-      }),
-      shareReplay({ bufferSize: 1, refCount: true }),
-    );
+    this.refreshRequest$ = this.http
+      .post<AuthRefreshResult>('/api/auth/refresh', {})
+      .pipe(
+        tap(() => {
+          void this.loadCurrentUser();
+        }),
+        catchError((error) => {
+          this.clearSession();
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.refreshRequest$ = null;
+        }),
+        shareReplay({ bufferSize: 1, refCount: true }),
+      );
 
     return this.refreshRequest$;
   }
 
-  evaluatePermissions(permissions: readonly string[]): Observable<PermissionEvaluationResponse> {
-    return this.http.post<PermissionEvaluationResponse>('/api/auth/permissions/evaluate', {
-      permissions: [...new Set(permissions)],
-    });
+  evaluatePermissions(
+    permissions: readonly string[],
+  ): Observable<PermissionEvaluationResponse> {
+    return this.http.post<PermissionEvaluationResponse>(
+      '/api/auth/permissions/evaluate',
+      {
+        permissions: [...new Set(permissions)],
+      },
+    );
   }
 
   clearSession(): void {
@@ -152,7 +177,9 @@ export class AuthService {
 
   private async loadCurrentUser(): Promise<boolean> {
     try {
-      const user = await firstValueFrom(this.http.get<AuthenticatedUser | null>('/api/auth/me'));
+      const user = await firstValueFrom(
+        this.http.get<AuthenticatedUser | null>('/api/auth/me'),
+      );
       this.user.set(user);
       if (user) {
         this.removeSessionStorageItem(this.silentSsoAttemptStorageKey);
@@ -163,7 +190,10 @@ export class AuthService {
     } catch (error) {
       this.user.set(null);
 
-      if (error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403)) {
+      if (
+        error instanceof HttpErrorResponse &&
+        (error.status === 401 || error.status === 403)
+      ) {
         return false;
       }
 
@@ -196,11 +226,17 @@ export class AuthService {
   }
 
   private async refreshAccountTrackingCookies(): Promise<void> {
-    await this.callAccountTrackingEndpoint(this.accountTrackingSessionUrl, 'GET');
+    await this.callAccountTrackingEndpoint(
+      this.accountTrackingSessionUrl,
+      'GET',
+    );
   }
 
   private async clearAccountTrackingCookies(): Promise<void> {
-    await this.callAccountTrackingEndpoint(this.accountTrackingClearUrl, 'POST');
+    await this.callAccountTrackingEndpoint(
+      this.accountTrackingClearUrl,
+      'POST',
+    );
   }
 
   private async callAccountTrackingEndpoint(
@@ -267,9 +303,12 @@ export class AuthService {
   }
 
   private getApplicationRootUrl(): string {
-    const baseHref = this.document.querySelector('base')?.getAttribute('href') ?? '/';
+    const baseHref =
+      this.document.querySelector('base')?.getAttribute('href') ?? '/';
     const basePath = new URL(baseHref, window.location.origin).pathname;
-    const normalizedBasePath = basePath.endsWith('/') ? basePath : `${basePath}/`;
+    const normalizedBasePath = basePath.endsWith('/')
+      ? basePath
+      : `${basePath}/`;
 
     return new URL(normalizedBasePath, window.location.origin).toString();
   }

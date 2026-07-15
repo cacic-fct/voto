@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type {
   M2MUserEnrollmentLookupRequest,
   M2MUserIdentifierLookupRequest,
@@ -19,7 +23,7 @@ const ACCOUNT_MANAGER_M2M_USER_ROUTES = {
 export class AccountManagerIntegrationService {
   private readonly logger = new Logger(AccountManagerIntegrationService.name);
   private readonly accountManagerOrigin = this.resolveAccountManagerOrigin(
-    process.env.ACCOUNT_MANAGER_API_URL ?? 'https://account.cacic.dev.br/api',
+    process.env.ACCOUNT_MANAGER_API_URL ?? 'https://account.cacic.com.br/api',
   );
   private readonly audience = process.env.ACCOUNT_MANAGER_M2M_AUDIENCE;
   private readonly scope = process.env.ACCOUNT_MANAGER_M2M_SCOPE;
@@ -30,7 +34,9 @@ export class AccountManagerIntegrationService {
     enrollmentNumbers: readonly string[],
   ): Promise<AccountManagerPerson[]> {
     const uniqueEnrollmentNumbers = [
-      ...new Set(enrollmentNumbers.map((value) => value.trim()).filter(Boolean)),
+      ...new Set(
+        enrollmentNumbers.map((value) => value.trim()).filter(Boolean),
+      ),
     ];
     if (uniqueEnrollmentNumbers.length === 0) {
       return [];
@@ -39,8 +45,15 @@ export class AccountManagerIntegrationService {
     const accessToken = await this.getAccessToken();
     const people: AccountManagerPerson[] = [];
 
-    for (let index = 0; index < uniqueEnrollmentNumbers.length; index += ENROLLMENT_LOOKUP_BATCH_SIZE) {
-      const batch = uniqueEnrollmentNumbers.slice(index, index + ENROLLMENT_LOOKUP_BATCH_SIZE);
+    for (
+      let index = 0;
+      index < uniqueEnrollmentNumbers.length;
+      index += ENROLLMENT_LOOKUP_BATCH_SIZE
+    ) {
+      const batch = uniqueEnrollmentNumbers.slice(
+        index,
+        index + ENROLLMENT_LOOKUP_BATCH_SIZE,
+      );
       people.push(...(await this.lookupEnrollmentBatch(batch, accessToken)));
     }
 
@@ -60,15 +73,24 @@ export class AccountManagerIntegrationService {
         identifierType: identifier.identifierType,
         identifierValue: identifier.identifierValue.trim(),
       }))
-      .filter((identifier) => identifier.requestId && identifier.identifierValue);
+      .filter(
+        (identifier) => identifier.requestId && identifier.identifierValue,
+      );
     const peopleByRequestId = new Map<string, AccountManagerPerson[]>();
     if (normalizedIdentifiers.length === 0) {
       return peopleByRequestId;
     }
 
     const accessToken = await this.getAccessToken();
-    for (let index = 0; index < normalizedIdentifiers.length; index += IDENTIFIER_LOOKUP_BATCH_SIZE) {
-      const batch = normalizedIdentifiers.slice(index, index + IDENTIFIER_LOOKUP_BATCH_SIZE);
+    for (
+      let index = 0;
+      index < normalizedIdentifiers.length;
+      index += IDENTIFIER_LOOKUP_BATCH_SIZE
+    ) {
+      const batch = normalizedIdentifiers.slice(
+        index,
+        index + IDENTIFIER_LOOKUP_BATCH_SIZE,
+      );
       const users = await this.lookupIdentifierBatch(batch, accessToken);
       for (const user of users) {
         const existingPeople = peopleByRequestId.get(user.requestId) ?? [];
@@ -95,7 +117,9 @@ export class AccountManagerIntegrationService {
   ): Promise<AccountManagerPerson[]> {
     try {
       const { data } = await axios.post<unknown>(
-        this.accountManagerUrl(ACCOUNT_MANAGER_M2M_USER_ROUTES.enrollmentLookup()),
+        this.accountManagerUrl(
+          ACCOUNT_MANAGER_M2M_USER_ROUTES.enrollmentLookup(),
+        ),
         { enrollmentNumbers } satisfies M2MUserEnrollmentLookupRequest,
         {
           headers: {
@@ -110,8 +134,13 @@ export class AccountManagerIntegrationService {
         throw error;
       }
 
-      this.logAxiosWarning(error, 'Could not lookup Account Manager users by enrollment number.');
-      throw new ServiceUnavailableException('Could not lookup Account Manager users.');
+      this.logAxiosWarning(
+        error,
+        'Could not lookup Account Manager users by enrollment number.',
+      );
+      throw new ServiceUnavailableException(
+        'Could not lookup Account Manager users.',
+      );
     }
   }
 
@@ -121,7 +150,9 @@ export class AccountManagerIntegrationService {
   ): Promise<(AccountManagerPerson & { requestId: string })[]> {
     try {
       const { data } = await axios.post<unknown>(
-        this.accountManagerUrl(ACCOUNT_MANAGER_M2M_USER_ROUTES.identifierLookup()),
+        this.accountManagerUrl(
+          ACCOUNT_MANAGER_M2M_USER_ROUTES.identifierLookup(),
+        ),
         { identifiers } satisfies M2MUserIdentifierLookupRequest,
         {
           headers: {
@@ -136,14 +167,23 @@ export class AccountManagerIntegrationService {
         throw error;
       }
 
-      this.logAxiosWarning(error, 'Could not lookup Account Manager users by private identifier.');
-      throw new ServiceUnavailableException('Could not lookup Account Manager users.');
+      this.logAxiosWarning(
+        error,
+        'Could not lookup Account Manager users by private identifier.',
+      );
+      throw new ServiceUnavailableException(
+        'Could not lookup Account Manager users.',
+      );
     }
   }
 
-  private parseEnrollmentLookupResponse(value: unknown): AccountManagerPerson[] {
+  private parseEnrollmentLookupResponse(
+    value: unknown,
+  ): AccountManagerPerson[] {
     if (!this.isRecord(value) || !Array.isArray(value['users'])) {
-      throw new ServiceUnavailableException('Account Manager returned an invalid user lookup response.');
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid user lookup response.',
+      );
     }
 
     return value['users'].map((user) => this.parseUserProfile(user));
@@ -153,12 +193,16 @@ export class AccountManagerIntegrationService {
     value: unknown,
   ): (AccountManagerPerson & { requestId: string })[] {
     if (!this.isRecord(value) || !Array.isArray(value['users'])) {
-      throw new ServiceUnavailableException('Account Manager returned an invalid user identifier lookup response.');
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid user identifier lookup response.',
+      );
     }
 
     return value['users'].map((user) => {
       if (!this.isRecord(user)) {
-        throw new ServiceUnavailableException('Account Manager returned an invalid user item.');
+        throw new ServiceUnavailableException(
+          'Account Manager returned an invalid user item.',
+        );
       }
 
       return {
@@ -170,7 +214,9 @@ export class AccountManagerIntegrationService {
 
   private parseUserProfile(value: unknown): AccountManagerPerson {
     if (!this.isRecord(value)) {
-      throw new ServiceUnavailableException('Account Manager returned an invalid user item.');
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid user item.',
+      );
     }
 
     const userId = this.readOptionalString(value, 'userId');
@@ -191,24 +237,36 @@ export class AccountManagerIntegrationService {
   ): AccountManagerPerson {
     return {
       ...(user.userId ? { userId: user.userId } : {}),
-      ...(user.enrollmentNumber ? { enrollmentNumber: user.enrollmentNumber } : {}),
+      ...(user.enrollmentNumber
+        ? { enrollmentNumber: user.enrollmentNumber }
+        : {}),
       name: user.name,
       email: user.email ?? null,
     };
   }
 
-  private readRequiredString(value: Record<string, unknown>, key: string): string {
+  private readRequiredString(
+    value: Record<string, unknown>,
+    key: string,
+  ): string {
     const rawValue = value[key];
     if (typeof rawValue !== 'string' || !rawValue.trim()) {
-      throw new ServiceUnavailableException(`Account Manager returned an invalid ${key}.`);
+      throw new ServiceUnavailableException(
+        `Account Manager returned an invalid ${key}.`,
+      );
     }
 
     return rawValue.trim();
   }
 
-  private readOptionalString(value: Record<string, unknown>, key: string): string | undefined {
+  private readOptionalString(
+    value: Record<string, unknown>,
+    key: string,
+  ): string | undefined {
     const rawValue = value[key];
-    return typeof rawValue === 'string' && rawValue.trim() ? rawValue.trim() : undefined;
+    return typeof rawValue === 'string' && rawValue.trim()
+      ? rawValue.trim()
+      : undefined;
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
@@ -225,7 +283,9 @@ export class AccountManagerIntegrationService {
 
   private logAxiosWarning(error: unknown, message: string): void {
     if (axios.isAxiosError(error)) {
-      this.logger.warn(`${message} Status=${error.response?.status ?? 'none'}.`);
+      this.logger.warn(
+        `${message} Status=${error.response?.status ?? 'none'}.`,
+      );
       return;
     }
 

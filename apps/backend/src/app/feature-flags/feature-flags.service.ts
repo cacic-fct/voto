@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GLOBAL_FEATURE_FLAGS } from './feature-flags.constants';
 
 const DEFAULT_UNLEASH_FRONTEND_URL =
-  'https://unleash.cacic.dev.br/api/frontend';
+  'https://unleash.cacic.com.br/api/frontend';
 const DEFAULT_UNLEASH_CLIENT_KEYS = {
   development:
     'default:development.rUPorLb0LVO4VIBLZ5RX4TKvsvGuABYmpkmzpWa7QHXwqSZ20v0ppRGYCWAO',
@@ -88,7 +88,10 @@ export class FeatureFlagService {
         continue;
       }
 
-      if (toggle['name'] === flagName && typeof toggle['enabled'] === 'boolean') {
+      if (
+        toggle['name'] === flagName &&
+        typeof toggle['enabled'] === 'boolean'
+      ) {
         return toggle['enabled'];
       }
     }
@@ -154,4 +157,3 @@ export class FeatureFlagService {
     return typeof value === 'object' && value !== null;
   }
 }
-

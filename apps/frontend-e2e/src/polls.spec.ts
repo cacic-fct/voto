@@ -37,7 +37,7 @@ const coveredFrontendRoutes = [
 const voterUser: AuthenticatedUser = {
   sub: 'user-1',
   preferredUsername: 'maria',
-  email: 'maria@cacic.dev.br',
+  email: 'maria@cacic.com.br',
   roles: [],
   permissions: [],
   scopes: [],
@@ -130,8 +130,16 @@ const closedPollResults: PollResults = {
   answersReleased: true,
   responseCount: 2,
   responses: [
-    { id: 'response-1', submittedAt: now, answers: [{ elementId: 'choice', value: 'sim' }] },
-    { id: 'response-2', submittedAt: now, answers: [{ elementId: 'choice', value: 'sim' }] },
+    {
+      id: 'response-1',
+      submittedAt: now,
+      answers: [{ elementId: 'choice', value: 'sim' }],
+    },
+    {
+      id: 'response-2',
+      submittedAt: now,
+      answers: [{ elementId: 'choice', value: 'sim' }],
+    },
   ],
 };
 
@@ -143,7 +151,9 @@ const emptyResponseState: PollUserResponseState = {
 
 test('declares E2E coverage for every configured Angular route', () => {
   for (const routeFile of ['app.routes.ts', 'app.routes.server.ts']) {
-    expect(readRoutePaths(routeFile)).toEqual([...coveredFrontendRoutes].sort());
+    expect(readRoutePaths(routeFile)).toEqual(
+      [...coveredFrontendRoutes].sort(),
+    );
   }
 });
 
@@ -152,11 +162,15 @@ test('shows the login page for anonymous sessions', async ({ page }) => {
 
   await page.goto('/login');
 
-  await expect(page.getByRole('heading', { name: 'Entre para continuar' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Entre para continuar' }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: /Entrar/ })).toBeVisible();
 });
 
-test('redirects root and unknown authenticated routes to polls', async ({ page }) => {
+test('redirects root and unknown authenticated routes to polls', async ({
+  page,
+}) => {
   await mockAuthenticatedSession(page);
   await mockPublicPolls(page);
 
@@ -177,12 +191,16 @@ test('lists published polls and opens a voting page', async ({ page }) => {
   await expect(page.getByText('Eleição CACiC 2026')).toBeVisible();
   await expect(page.getByText('Publicada em 21/06/2026, 09:00')).toBeVisible();
   await expect(page.getByText('Consulta encerrada')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Ver resultados/ })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /Ver resultados/ }),
+  ).toBeVisible();
 
   await page.getByRole('link', { name: /Votar/ }).click();
 
   await expect(page).toHaveURL(/\/polls\/poll-1$/);
-  await expect(page.getByRole('heading', { name: 'Eleição CACiC 2026' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Eleição CACiC 2026' }),
+  ).toBeVisible();
   await expect(page.getByText('Escolha a chapa')).toBeVisible();
 });
 
@@ -208,7 +226,9 @@ test('submits a poll response through the voting page', async ({ page }) => {
 
   await page.goto('/polls/poll-1');
   await page.getByRole('radio', { name: 'Chapa Integração' }).click();
-  await page.getByLabel('Resposta curta').fill('Quero uma gestão participativa.');
+  await page
+    .getByLabel('Resposta curta')
+    .fill('Quero uma gestão participativa.');
   await page.getByRole('button', { name: /Enviar voto/ }).click();
 
   await expect(page.getByText('Resposta registrada')).toBeVisible();
@@ -229,29 +249,44 @@ test('submits every supported poll element type', async ({ page }) => {
     polls: { [completePoll.id]: completePoll },
     summaries: [pollToSummary(completePoll)],
   });
-  await page.route(`**/api/polls/${completePoll.id}/responses`, async (route) => {
-    submittedRequest = route.request().postDataJSON();
-    await route.fulfill({
-      status: 201,
-      json: {
-        id: 'complete-response',
-        pollId: completePoll.id,
-        submittedAt: now,
-        answers: [],
-      } satisfies PollResponse,
-    });
-  });
+  await page.route(
+    `**/api/polls/${completePoll.id}/responses`,
+    async (route) => {
+      submittedRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: 'complete-response',
+          pollId: completePoll.id,
+          submittedAt: now,
+          answers: [],
+        } satisfies PollResponse,
+      });
+    },
+  );
 
   await page.goto(`/polls/${completePoll.id}`);
   await page.getByLabel('Resposta curta').fill('Resumo objetivo');
-  await page.getByLabel('Resposta longa').fill('Resposta detalhada para a comissão.');
+  await page
+    .getByLabel('Resposta longa')
+    .fill('Resposta detalhada para a comissão.');
   await page.getByRole('radio', { name: 'Chapa Integração' }).click();
   await page.getByRole('checkbox', { name: 'Comunicação' }).check();
   await page.getByRole('checkbox', { name: 'Eventos' }).check();
   await page.getByRole('combobox', { name: 'Selecione uma opção' }).click();
   await page.getByRole('option', { name: 'Noite' }).click();
-  await page.locator('.selection-grid').first().getByRole('radio').first().click();
-  await page.locator('.selection-grid').nth(1).getByRole('checkbox').first().check();
+  await page
+    .locator('.selection-grid')
+    .first()
+    .getByRole('radio')
+    .first()
+    .click();
+  await page
+    .locator('.selection-grid')
+    .nth(1)
+    .getByRole('checkbox')
+    .first()
+    .check();
   await page.getByRole('button', { name: '4' }).click();
   await page.getByRole('radio', { name: '5 estrelas' }).click();
   await page.getByLabel('Data').fill('2026-06-25');
@@ -288,25 +323,30 @@ test('submits every supported poll element type', async ({ page }) => {
   });
 });
 
-test('opens a direct-link poll route and submits through the direct-link API', async ({ page }) => {
+test('opens a direct-link poll route and submits through the direct-link API', async ({
+  page,
+}) => {
   let submittedRequest: unknown;
 
   await mockAuthenticatedSession(page);
   await mockPublicPolls(page, {
     directPolls: { 'direct-token': directLinkPoll },
   });
-  await page.route('**/api/polls/direct/direct-token/responses', async (route) => {
-    submittedRequest = route.request().postDataJSON();
-    await route.fulfill({
-      status: 201,
-      json: {
-        id: 'direct-response',
-        pollId: directLinkPoll.id,
-        submittedAt: now,
-        answers: [{ elementId: 'choice', value: 'renovacao' }],
-      } satisfies PollResponse,
-    });
-  });
+  await page.route(
+    '**/api/polls/direct/direct-token/responses',
+    async (route) => {
+      submittedRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: 'direct-response',
+          pollId: directLinkPoll.id,
+          submittedAt: now,
+          answers: [{ elementId: 'choice', value: 'renovacao' }],
+        } satisfies PollResponse,
+      });
+    },
+  );
 
   await page.goto('/polls/direct/direct-token');
   await page.getByRole('radio', { name: 'Chapa Renovação' }).click();
@@ -334,44 +374,64 @@ test('submits a CACiC slate and casts an election vote', async ({ page }) => {
       [slateSubmissionPoll.id]: slateSubmissionPoll,
       [electionPoll.id]: electionPoll,
     },
-    summaries: [pollToE2eSummary(slateSubmissionPoll), pollToE2eSummary(electionPoll)],
+    summaries: [
+      pollToE2eSummary(slateSubmissionPoll),
+      pollToE2eSummary(electionPoll),
+    ],
   });
-  await page.route(`**/api/polls/${slateSubmissionPoll.id}/cacic-election/slates/me`, async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ json: null });
-      return;
-    }
+  await page.route(
+    `**/api/polls/${slateSubmissionPoll.id}/cacic-election/slates/me`,
+    async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: null });
+        return;
+      }
 
-    submittedSlate = route.request().postDataJSON();
-    await route.fulfill({
-      json: createAdminSlate({
-        ...createSlate({ pollId: slateSubmissionPoll.id, status: 'pending' }),
-        members: createAdminSlate().members,
-      }),
-    });
-  });
-  await page.route(`**/api/polls/${electionPoll.id}/cacic-election/slates`, async (route) => {
-    await route.fulfill({ json: [approvedSlate] });
-  });
-  await page.route(`**/api/polls/${electionPoll.id}/responses`, async (route) => {
-    submittedVote = route.request().postDataJSON();
-    await route.fulfill({
-      status: 201,
-      json: {
-        id: 'election-response',
-        pollId: electionPoll.id,
-        submittedAt: now,
-        answers: [{ elementId: 'cacic-election-vote', value: 'slate:slate-1' }],
-      } satisfies PollResponse,
-    });
-  });
+      submittedSlate = route.request().postDataJSON();
+      await route.fulfill({
+        json: createAdminSlate({
+          ...createSlate({ pollId: slateSubmissionPoll.id, status: 'pending' }),
+          members: createAdminSlate().members,
+        }),
+      });
+    },
+  );
+  await page.route(
+    `**/api/polls/${electionPoll.id}/cacic-election/slates`,
+    async (route) => {
+      await route.fulfill({ json: [approvedSlate] });
+    },
+  );
+  await page.route(
+    `**/api/polls/${electionPoll.id}/responses`,
+    async (route) => {
+      submittedVote = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: 'election-response',
+          pollId: electionPoll.id,
+          submittedAt: now,
+          answers: [
+            { elementId: 'cacic-election-vote', value: 'slate:slate-1' },
+          ],
+        } satisfies PollResponse,
+      });
+    },
+  );
 
   await page.goto(`/polls/${slateSubmissionPoll.id}`);
   await page.getByLabel('Nome da chapa').fill('Chapa Integração');
   for (const [index, member] of createSlateRequest().members.entries()) {
     await page.getByLabel('Nome completo').nth(index).fill(member.fullName);
-    await page.getByLabel('Matrícula').nth(index).fill(member.enrollmentNumber ?? '');
-    await page.getByLabel('Identificador').nth(index).fill(member.identifierValue);
+    await page
+      .getByLabel('Matrícula')
+      .nth(index)
+      .fill(member.enrollmentNumber ?? '');
+    await page
+      .getByLabel('Identificador')
+      .nth(index)
+      .fill(member.identifierValue);
   }
   await page.getByText('Concordo em não criar contas').click();
   await page.getByText('O representante da chapa leu').click();
@@ -381,9 +441,15 @@ test('submits a CACiC slate and casts an election vote', async ({ page }) => {
   expect(submittedSlate).toEqual(createSlateRequest());
 
   await page.goto(`/polls/${electionPoll.id}`);
-  await expect(page.getByRole('heading', { name: 'Eleições do CACiC' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Eleições do CACiC' }),
+  ).toBeVisible();
   await expect(page.getByText('Ana Presidente')).toBeVisible();
-  await page.getByRole('region', { name: 'Opções de voto' }).getByRole('radio', { name: 'Selecionar' }).first().click();
+  await page
+    .getByRole('region', { name: 'Opções de voto' })
+    .getByRole('radio', { name: 'Selecionar' })
+    .first()
+    .click();
   await page.getByRole('button', { name: /Enviar voto/ }).click();
 
   await expect(page.getByText('Resposta registrada')).toBeVisible();
@@ -402,13 +468,19 @@ test('shows public results for a closed poll', async ({ page }) => {
 
   await page.goto('/polls/poll-closed/results');
 
-  await expect(page.getByRole('heading', { name: 'Resultados de Consulta encerrada' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Resultados de Consulta encerrada' }),
+  ).toBeVisible();
   await expect(page.getByText('2 pessoas votaram.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Resumo por pergunta' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Resumo por pergunta' }),
+  ).toBeVisible();
   await expect(page.getByText('Sim')).toBeVisible();
 });
 
-test('redirects non-admin users away from the restricted area', async ({ page }) => {
+test('redirects non-admin users away from the restricted area', async ({
+  page,
+}) => {
   await mockAuthenticatedSession(page);
   await mockPublicPolls(page);
 
@@ -418,7 +490,9 @@ test('redirects non-admin users away from the restricted area', async ({ page })
   await expect(page.getByRole('heading', { name: 'Votações' })).toBeVisible();
 });
 
-test('shows the restricted area navigation for administrators', async ({ page }) => {
+test('shows the restricted area navigation for administrators', async ({
+  page,
+}) => {
   await mockAuthenticatedSession(page, ['poll#read']);
   await mockPublicPolls(page);
   await mockAdminApi(page, { summaries: [pollSummary] });
@@ -428,15 +502,23 @@ test('shows the restricted area navigation for administrators', async ({ page })
   await page.getByRole('link', { name: 'Área restrita' }).click();
 
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole('heading', { name: 'Área restrita' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Área restrita' }),
+  ).toBeVisible();
   await expect(page.getByText('Eleição CACiC 2026')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Informações da eleição' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Informações da eleição' }),
+  ).toBeVisible();
 });
 
 test('creates a poll from the admin builder', async ({ page }) => {
   let savedRequest: unknown;
 
-  await mockAuthenticatedSession(page, ['poll#read', 'poll#create', 'poll#edit']);
+  await mockAuthenticatedSession(page, [
+    'poll#read',
+    'poll#create',
+    'poll#edit',
+  ]);
   await mockAdminApi(page, {
     onCreate: (request) => {
       savedRequest = request;
@@ -458,7 +540,9 @@ test('creates a poll from the admin builder', async ({ page }) => {
   });
 });
 
-test('updates status and deletes polls from the admin builder', async ({ page }) => {
+test('updates status and deletes polls from the admin builder', async ({
+  page,
+}) => {
   const draftPoll = {
     ...poll,
     status: 'draft',
@@ -466,7 +550,12 @@ test('updates status and deletes polls from the admin builder', async ({ page })
   const statuses: string[] = [];
   let deleted = false;
 
-  await mockAuthenticatedSession(page, ['poll#read', 'poll#edit', 'poll#publish', 'poll#delete']);
+  await mockAuthenticatedSession(page, [
+    'poll#read',
+    'poll#edit',
+    'poll#publish',
+    'poll#delete',
+  ]);
   await mockAdminApi(page, {
     initialPoll: draftPoll,
     results: {
@@ -481,7 +570,7 @@ test('updates status and deletes polls from the admin builder', async ({ page })
           voter: {
             userId: 'user-1',
             name: 'Maria Silva',
-            email: 'maria@cacic.dev.br',
+            email: 'maria@cacic.com.br',
             unespRole: 'aluno-graduacao',
             enrollmentNumber: '241200001',
           },
@@ -511,7 +600,9 @@ test('updates status and deletes polls from the admin builder', async ({ page })
   expect(deleted).toBe(true);
 });
 
-test('manages enrollment-list eligibility from the admin builder', async ({ page }) => {
+test('manages enrollment-list eligibility from the admin builder', async ({
+  page,
+}) => {
   const enrollmentPoll = {
     ...poll,
     voterEligibilitySource: 'enrollmentList',
@@ -542,7 +633,9 @@ test('manages enrollment-list eligibility from the admin builder', async ({ page
 
   await page.goto('/admin');
   await selectAdminPoll(page, 'Eleição CACiC 2026');
-  await expect(page.getByRole('heading', { name: 'Lista de matrículas' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Lista de matrículas' }),
+  ).toBeVisible();
   await page.locator('.manual-enrollment-row textarea').fill('241200001');
   await page.getByRole('button', { name: /^Adicionar$/ }).click();
   await expect(page.getByText('241200001')).toBeVisible();
@@ -562,7 +655,9 @@ function readRoutePaths(routeFile: string): string[] {
     resolve(__dirname, '../../frontend/src/app', routeFile),
     'utf8',
   );
-  const matches = [...routeSource.matchAll(/path:\s*'([^']*)'/g)].map((match) => match[1]);
+  const matches = [...routeSource.matchAll(/path:\s*'([^']*)'/g)].map(
+    (match) => match[1],
+  );
   return [...new Set(matches)].sort();
 }
 
@@ -574,7 +669,10 @@ async function mockAnonymousSession(page: Page): Promise<void> {
   });
 }
 
-async function mockAuthenticatedSession(page: Page, permissions: string[] = []): Promise<void> {
+async function mockAuthenticatedSession(
+  page: Page,
+  permissions: string[] = [],
+): Promise<void> {
   await primeBrowserState(page);
 
   const user: AuthenticatedUser = {
@@ -587,9 +685,13 @@ async function mockAuthenticatedSession(page: Page, permissions: string[] = []):
   });
 
   await page.route('**/api/auth/permissions/evaluate', async (route) => {
-    const request = route.request().postDataJSON() as { permissions?: string[] };
+    const request = route.request().postDataJSON() as {
+      permissions?: string[];
+    };
     const response: PermissionEvaluationResponse = {
-      permissions: (request.permissions ?? []).filter((permission) => permissions.includes(permission)),
+      permissions: (request.permissions ?? []).filter((permission) =>
+        permissions.includes(permission),
+      ),
     };
 
     await route.fulfill({ json: response });
@@ -618,7 +720,9 @@ async function acceptCookieBannerIfVisible(page: Page): Promise<void> {
 
 async function selectAdminPoll(page: Page, title: string): Promise<void> {
   await page.locator('.poll-list-item:not(.empty-list-item)').first().click();
-  await expect(page.getByRole('textbox', { name: 'Título da votação' })).toHaveValue(title);
+  await expect(
+    page.getByRole('textbox', { name: 'Título da votação' }),
+  ).toHaveValue(title);
 }
 
 type PublicPollMocks = {
@@ -631,7 +735,10 @@ type PublicPollMocks = {
   summaries?: PollSummary[];
 };
 
-async function mockPublicPolls(page: Page, mocks: PublicPollMocks = {}): Promise<void> {
+async function mockPublicPolls(
+  page: Page,
+  mocks: PublicPollMocks = {},
+): Promise<void> {
   const polls = {
     [poll.id]: poll,
     [closedPoll.id]: closedPoll,
@@ -649,7 +756,9 @@ async function mockPublicPolls(page: Page, mocks: PublicPollMocks = {}): Promise
       await route.fulfill({ json: definition });
     });
     await page.route(`**/api/polls/${id}/responses/me`, async (route) => {
-      await route.fulfill({ json: mocks.responseStates?.[id] ?? emptyResponseState });
+      await route.fulfill({
+        json: mocks.responseStates?.[id] ?? emptyResponseState,
+      });
     });
     await page.route(`**/api/polls/${id}/results`, async (route) => {
       await route.fulfill({
@@ -668,9 +777,14 @@ async function mockPublicPolls(page: Page, mocks: PublicPollMocks = {}): Promise
     await page.route(`**/api/polls/direct/${token}`, async (route) => {
       await route.fulfill({ json: definition });
     });
-    await page.route(`**/api/polls/direct/${token}/responses/me`, async (route) => {
-      await route.fulfill({ json: mocks.directResponseStates?.[token] ?? emptyResponseState });
-    });
+    await page.route(
+      `**/api/polls/direct/${token}/responses/me`,
+      async (route) => {
+        await route.fulfill({
+          json: mocks.directResponseStates?.[token] ?? emptyResponseState,
+        });
+      },
+    );
     await page.route(`**/api/polls/direct/${token}/results`, async (route) => {
       await route.fulfill({
         json: mocks.directResults?.[token] ?? {
@@ -770,67 +884,89 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
     });
   });
 
-  await page.route('**/api/admin/polls/*/eligibility-enrollments', async (route) => {
-    const method = route.request().method();
-    if (method === 'GET') {
-      await route.fulfill({ json: eligibility });
-      return;
-    }
+  await page.route(
+    '**/api/admin/polls/*/eligibility-enrollments',
+    async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        await route.fulfill({ json: eligibility });
+        return;
+      }
 
-    if (method === 'POST') {
-      const request = route.request().postDataJSON() as { enrollmentNumbers?: string[] };
-      mocks.onAddEnrollment?.(request);
+      if (method === 'POST') {
+        const request = route.request().postDataJSON() as {
+          enrollmentNumbers?: string[];
+        };
+        mocks.onAddEnrollment?.(request);
+        eligibility = {
+          entries: (request.enrollmentNumbers ?? []).map(
+            (enrollmentNumber) => ({
+              pollId: currentPoll.id,
+              enrollmentNumber,
+              createdAt: now,
+              people: [
+                {
+                  enrollmentNumber,
+                  name: 'Maria Silva',
+                  email: 'maria@cacic.com.br',
+                },
+              ],
+            }),
+          ),
+          totalCount: request.enrollmentNumbers?.length ?? 0,
+        };
+        await route.fulfill({
+          status: 201,
+          json: {
+            ...eligibility,
+            createdCount: eligibility.totalCount,
+            duplicateCount: 0,
+            existingCount: 0,
+            invalidCount: 0,
+            replacedCount: 0,
+          },
+        });
+        return;
+      }
+
+      if (method === 'DELETE') {
+        mocks.onClearEligibility?.();
+        eligibility = { entries: [], totalCount: 0 };
+        await route.fulfill({ json: eligibility });
+        return;
+      }
+
+      await route.fulfill({ status: 405 });
+    },
+  );
+
+  await page.route(
+    '**/api/admin/polls/*/eligibility-enrollments/*',
+    async (route) => {
+      const enrollmentNumber = route.request().url().split('/').pop() ?? '';
+      mocks.onDeleteEnrollment?.(decodeURIComponent(enrollmentNumber));
       eligibility = {
-        entries: (request.enrollmentNumbers ?? []).map((enrollmentNumber) => ({
-          pollId: currentPoll.id,
-          enrollmentNumber,
-          createdAt: now,
-          people: [{ enrollmentNumber, name: 'Maria Silva', email: 'maria@cacic.dev.br' }],
-        })),
-        totalCount: request.enrollmentNumbers?.length ?? 0,
+        entries: eligibility.entries.filter(
+          (entry) => entry.enrollmentNumber !== enrollmentNumber,
+        ),
+        totalCount: Math.max(0, eligibility.totalCount - 1),
       };
-      await route.fulfill({
-        status: 201,
-        json: {
-          ...eligibility,
-          createdCount: eligibility.totalCount,
-          duplicateCount: 0,
-          existingCount: 0,
-          invalidCount: 0,
-          replacedCount: 0,
-        },
-      });
-      return;
-    }
-
-    if (method === 'DELETE') {
-      mocks.onClearEligibility?.();
-      eligibility = { entries: [], totalCount: 0 };
-      await route.fulfill({ json: eligibility });
-      return;
-    }
-
-    await route.fulfill({ status: 405 });
-  });
-
-  await page.route('**/api/admin/polls/*/eligibility-enrollments/*', async (route) => {
-    const enrollmentNumber = route.request().url().split('/').pop() ?? '';
-    mocks.onDeleteEnrollment?.(decodeURIComponent(enrollmentNumber));
-    eligibility = {
-      entries: eligibility.entries.filter((entry) => entry.enrollmentNumber !== enrollmentNumber),
-      totalCount: Math.max(0, eligibility.totalCount - 1),
-    };
-    await route.fulfill({ status: 204 });
-  });
+      await route.fulfill({ status: 204 });
+    },
+  );
 
   await page.route('**/api/admin/polls/*/status', async (route) => {
-    const request = route.request().postDataJSON() as { status?: Poll['status'] };
+    const request = route.request().postDataJSON() as {
+      status?: Poll['status'];
+    };
     mocks.onStatus?.(request.status ?? '');
-    currentPoll = { ...currentPoll, status: request.status ?? currentPoll.status };
+    currentPoll = {
+      ...currentPoll,
+      status: request.status ?? currentPoll.status,
+    };
     summaries = [pollToSummary(currentPoll)];
     await route.fulfill({ json: currentPoll });
   });
-
 }
 
 function createCompletePoll(): Poll {
@@ -839,10 +975,34 @@ function createCompletePoll(): Poll {
     id: 'complete-poll',
     title: 'Votação completa',
     elements: [
-      { id: 'section', type: 'section', title: 'Bloco inicial', required: false, options: [] },
-      { id: 'statement', type: 'statement', title: 'Leia as regras', required: false, options: [] },
-      { id: 'short', type: 'shortText', title: 'Resumo', required: true, options: [] },
-      { id: 'long', type: 'longText', title: 'Justificativa', required: true, options: [] },
+      {
+        id: 'section',
+        type: 'section',
+        title: 'Bloco inicial',
+        required: false,
+        options: [],
+      },
+      {
+        id: 'statement',
+        type: 'statement',
+        title: 'Leia as regras',
+        required: false,
+        options: [],
+      },
+      {
+        id: 'short',
+        type: 'shortText',
+        title: 'Resumo',
+        required: true,
+        options: [],
+      },
+      {
+        id: 'long',
+        type: 'longText',
+        title: 'Justificativa',
+        required: true,
+        options: [],
+      },
       {
         id: 'single',
         type: 'singleChoice',
@@ -882,7 +1042,10 @@ function createCompletePoll(): Poll {
         settings: {
           grid: {
             rows: [{ id: 'infraestrutura', label: 'Infraestrutura' }],
-            columns: [{ id: 'alta', label: 'Alta' }, { id: 'baixa', label: 'Baixa' }],
+            columns: [
+              { id: 'alta', label: 'Alta' },
+              { id: 'baixa', label: 'Baixa' },
+            ],
           },
         },
       },
@@ -895,7 +1058,10 @@ function createCompletePoll(): Poll {
         settings: {
           grid: {
             rows: [{ id: 'reunioes', label: 'Reuniões' }],
-            columns: [{ id: 'segunda', label: 'Segunda' }, { id: 'sexta', label: 'Sexta' }],
+            columns: [
+              { id: 'segunda', label: 'Segunda' },
+              { id: 'sexta', label: 'Sexta' },
+            ],
           },
         },
       },
@@ -915,8 +1081,20 @@ function createCompletePoll(): Poll {
         options: [],
         settings: { starRating: { max: 5 } },
       },
-      { id: 'date', type: 'date', title: 'Data preferida', required: true, options: [] },
-      { id: 'time', type: 'time', title: 'Horário preferido', required: true, options: [] },
+      {
+        id: 'date',
+        type: 'date',
+        title: 'Data preferida',
+        required: true,
+        options: [],
+      },
+      {
+        id: 'time',
+        type: 'time',
+        title: 'Horário preferido',
+        required: true,
+        options: [],
+      },
       {
         id: 'scheduling',
         type: 'scheduling',
@@ -934,7 +1112,14 @@ function createCompletePoll(): Poll {
             bufferAfterMinutes: 0,
             inviteeMode: 'optional',
             maxInvitees: 1,
-            availability: [{ id: 'availability-1', date: '2026-06-25', startTime: '09:00', endTime: '10:00' }],
+            availability: [
+              {
+                id: 'availability-1',
+                date: '2026-06-25',
+                startTime: '09:00',
+                endTime: '10:00',
+              },
+            ],
           },
         },
       },
