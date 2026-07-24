@@ -19,7 +19,7 @@
         "@angular/ssr": "22.0.2",
         "@aws-sdk/client-s3": "^3.1079.0",
         "@aws-sdk/lib-storage": "^3.1079.0",
-        "@cacic-fct/account-manager-cookie-banner": "^0.1.1",
+        "@cacic-fct/account-manager-cookie-banner": "^0.1.2",
         "@cacic-fct/account-manager-m2m-contracts": "^0.1.2",
         "@cacic-fct/event-manager-m2m-contracts": "^0.1.0",
         "@fontsource-variable/inter": "^5.2.8",
@@ -489,7 +489,7 @@
 
     "@bufbuild/protobuf": ["@bufbuild/protobuf@2.12.1", "", {}, "sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg=="],
 
-    "@cacic-fct/account-manager-cookie-banner": ["@cacic-fct/account-manager-cookie-banner@0.1.1", "", {}, "sha512-fNB2dT9isAClyALbWUtry8lwT/mK2UtbldgW/eGGPkYHoJ7/e8ZLdk1IjHhiRmwLUwvgOs082vY17iYmgXmoLw=="],
+    "@cacic-fct/account-manager-cookie-banner": ["@cacic-fct/account-manager-cookie-banner@0.1.2", "", {}, "sha512-/1Zg85crrfaRnPA0cI9jsp4KllqBqZN16QxM1hbSKR6FUsSIh4TGrXmOlGcodIptben00m7azBL3twbklFyaTg=="],
 
     "@cacic-fct/account-manager-m2m-contracts": ["@cacic-fct/account-manager-m2m-contracts@0.1.2", "", {}, "sha512-vCIT2NsuhFs7ja4g0Pfyv4Zkk7keYBRiFZSYbAts2gHi4OT8AZM5h6mHcD02XRVnnI8i7Uhxzfn8pTLYiV1yfQ=="],
 
