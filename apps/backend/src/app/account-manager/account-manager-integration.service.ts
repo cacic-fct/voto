@@ -1,34 +1,40 @@
 import {
   Injectable,
   Logger,
+  OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Metadata } from '@grpc/grpc-js';
 import type {
   M2MUserEnrollmentLookupRequest,
   M2MUserIdentifierLookupRequest,
   M2MUserIdentifierType,
 } from '@cacic-fct/account-manager-m2m-contracts';
 import { AccountManagerPerson } from '@org/voting-contracts';
-import axios from 'axios';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
+import { GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
 
 const ENROLLMENT_LOOKUP_BATCH_SIZE = 500;
 const IDENTIFIER_LOOKUP_BATCH_SIZE = 200;
-const ACCOUNT_MANAGER_M2M_USER_ROUTES = {
-  enrollmentLookup: () => '/api/v1/users/enrollment-lookup',
-  identifierLookup: () => '/api/v1/users/identifier-lookup',
-} as const;
-
 @Injectable()
-export class AccountManagerIntegrationService {
+export class AccountManagerIntegrationService implements OnModuleDestroy {
   private readonly logger = new Logger(AccountManagerIntegrationService.name);
-  private readonly accountManagerOrigin = this.resolveAccountManagerOrigin(
-    process.env.ACCOUNT_MANAGER_API_URL ?? 'https://account.cacic.com.br/api',
+  private readonly client = new GrpcUnaryClient(
+    process.env.ACCOUNT_MANAGER_GRPC_URL?.trim() || 'localhost:50051',
+    loadService(
+      'account-manager-m2m.proto',
+      ['cacic', 'm2m', 'account_manager', 'v1'],
+      'AccountManagerM2M',
+    ),
   );
   private readonly audience = process.env.ACCOUNT_MANAGER_M2M_AUDIENCE;
   private readonly scope = process.env.ACCOUNT_MANAGER_M2M_SCOPE;
 
   constructor(private readonly m2mTokens: KeycloakM2mTokenService) {}
+
+  onModuleDestroy(): void {
+    this.client.close();
+  }
 
   async lookupPeopleByEnrollmentNumbers(
     enrollmentNumbers: readonly string[],
@@ -116,16 +122,11 @@ export class AccountManagerIntegrationService {
     accessToken: string,
   ): Promise<AccountManagerPerson[]> {
     try {
-      const { data } = await axios.post<unknown>(
-        this.accountManagerUrl(
-          ACCOUNT_MANAGER_M2M_USER_ROUTES.enrollmentLookup(),
-        ),
+      const data = await this.client.call<unknown>(
+        'LookupUsersByEnrollment',
         { enrollmentNumbers } satisfies M2MUserEnrollmentLookupRequest,
-        {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-          },
-        },
+        this.metadata(accessToken),
+        { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
       return this.parseEnrollmentLookupResponse(data);
@@ -134,10 +135,7 @@ export class AccountManagerIntegrationService {
         throw error;
       }
 
-      this.logAxiosWarning(
-        error,
-        'Could not lookup Account Manager users by enrollment number.',
-      );
+      this.logger.warn('Could not lookup Account Manager users by enrollment number.');
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -149,16 +147,11 @@ export class AccountManagerIntegrationService {
     accessToken: string,
   ): Promise<(AccountManagerPerson & { requestId: string })[]> {
     try {
-      const { data } = await axios.post<unknown>(
-        this.accountManagerUrl(
-          ACCOUNT_MANAGER_M2M_USER_ROUTES.identifierLookup(),
-        ),
+      const data = await this.client.call<unknown>(
+        'LookupUsersByIdentifier',
         { identifiers } satisfies M2MUserIdentifierLookupRequest,
-        {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-          },
-        },
+        this.metadata(accessToken),
+        { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
       return this.parseIdentifierLookupResponse(data);
@@ -167,10 +160,7 @@ export class AccountManagerIntegrationService {
         throw error;
       }
 
-      this.logAxiosWarning(
-        error,
-        'Could not lookup Account Manager users by private identifier.',
-      );
+      this.logger.warn('Could not lookup Account Manager users by private identifier.');
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -273,22 +263,9 @@ export class AccountManagerIntegrationService {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private accountManagerUrl(path: string): string {
-    return new URL(path, this.accountManagerOrigin).toString();
-  }
-
-  private resolveAccountManagerOrigin(accountManagerApiUrl: string): string {
-    return new URL(accountManagerApiUrl.replace(/\/+$/, '')).origin;
-  }
-
-  private logAxiosWarning(error: unknown, message: string): void {
-    if (axios.isAxiosError(error)) {
-      this.logger.warn(
-        `${message} Status=${error.response?.status ?? 'none'}.`,
-      );
-      return;
-    }
-
-    this.logger.warn(message);
+  private metadata(accessToken: string): Metadata {
+    const metadata = new Metadata();
+    metadata.set('authorization', `Bearer ${accessToken}`);
+    return metadata;
   }
 }

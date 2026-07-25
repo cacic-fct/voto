@@ -72,9 +72,9 @@ KEYCLOAK_POST_LOGIN_REDIRECT_URI="http://localhost:4200"
 KEYCLOAK_POST_LOGOUT_REDIRECT_URI="http://localhost:4200/"
 KEYCLOAK_M2M_CLIENT_ID="cacic-voto-m2m"
 KEYCLOAK_M2M_CLIENT_SECRET="..."
-EVENT_MANAGER_API_URL="http://localhost:3000/api"
+EVENT_MANAGER_GRPC_URL="localhost:50051"
 EVENT_MANAGER_M2M_AUDIENCE="cacic-event-manager-api"
-ACCOUNT_MANAGER_API_URL="http://localhost:3000/api"
+ACCOUNT_MANAGER_GRPC_URL="localhost:50051"
 ACCOUNT_MANAGER_M2M_AUDIENCE="cacic-account-manager-audience"
 ```
 

@@ -26,6 +26,8 @@
     "@cacic-fct/event-manager-m2m-contracts": "^0.1.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/material-symbols-outlined": "^5.2.45",
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
