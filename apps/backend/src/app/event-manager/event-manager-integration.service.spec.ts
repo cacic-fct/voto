@@ -43,11 +43,23 @@ describe('EventManagerIntegrationService', () => {
         shouldCollectAttendance: true,
       },
     ]);
+    expect(call).toHaveBeenCalledWith(
+      'ListVotingEvents',
+      {},
+      expect.anything(),
+      { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+    );
   });
 
   it('checks attendance through gRPC', async () => {
     call.mockResolvedValue({ attended: true });
     await expect(service.hasAttendance('event-1', 'user-1')).resolves.toBe(true);
+    expect(call).toHaveBeenCalledWith(
+      'CheckVotingAttendance',
+      { eventId: 'event-1', userId: 'user-1' },
+      expect.anything(),
+      { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+    );
   });
 
   it('wraps gRPC failures as service unavailable', async () => {

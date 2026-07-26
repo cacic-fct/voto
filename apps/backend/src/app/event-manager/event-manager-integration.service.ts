@@ -5,13 +5,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Metadata } from '@grpc/grpc-js';
+import type { EventManagerVotingAttendanceCheckResponse } from '@cacic-fct/event-manager-m2m-contracts';
 import { EventManagerEvent } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
 import { GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
-
-type EventManagerVotingAttendanceCheckResponse = {
-  attended: boolean;
-};
 
 @Injectable()
 export class EventManagerIntegrationService implements OnModuleDestroy {
@@ -19,7 +16,7 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
   private readonly client = new GrpcUnaryClient(
     process.env.EVENT_MANAGER_GRPC_URL?.trim() || 'localhost:50051',
     loadService(
-      'event-manager-m2m.proto',
+      'cacic/m2m/event_manager/v1/event-manager-m2m.proto',
       ['cacic', 'm2m', 'event_manager', 'v1'],
       'EventManagerM2M',
     ),
