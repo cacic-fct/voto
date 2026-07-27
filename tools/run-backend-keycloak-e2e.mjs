@@ -76,6 +76,7 @@ function buildTestEnv() {
     KEYCLOAK_JWT_CLOCK_SKEW_SECONDS: '60',
     KEYCLOAK_M2M_CLIENT_ID: 'cacic-voto-m2m',
     KEYCLOAK_M2M_CLIENT_SECRET: 'cacic-voto-m2m-dev-secret',
+    ACCOUNT_MANAGER_GRPC_URL: process.env.ACCOUNT_MANAGER_GRPC_URL ?? 'localhost:50053',
     ACCOUNT_MANAGER_M2M_AUDIENCE: 'cacic-account-manager-audience',
     EVENT_MANAGER_M2M_AUDIENCE: 'cacic-event-manager-audience',
   };
