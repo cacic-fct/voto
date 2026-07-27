@@ -1,4 +1,5 @@
 import { Logger, UnauthorizedException } from '@nestjs/common';
+import axios from 'axios';
 import { generateKeyPairSync, sign as signToken, type JsonWebKey, type KeyObject } from 'node:crypto';
 import { KeycloakTokenVerifier, KeycloakTokenVerifierOptions } from './keycloak-token-verifier';
 
@@ -57,14 +58,16 @@ function tokenWithClaims(
   return `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
 }
 
-function jwksResponse(body: unknown, response: Partial<Response> = {}): Response {
+function jwksResponse(
+  body: unknown,
+  response: Partial<{ status: number; statusText: string }> = {},
+): { data: unknown; status: number; statusText: string } {
   return {
-    ok: true,
+    data: body,
     status: 200,
     statusText: 'OK',
-    json: jest.fn().mockResolvedValue(body),
     ...response,
-  } as unknown as Response;
+  };
 }
 
 function createLogger(): jest.Mocked<Pick<Logger, 'warn'>> {
@@ -89,17 +92,16 @@ function createVerifier(options: Partial<KeycloakTokenVerifierOptions> = {}): {
 }
 
 describe('KeycloakTokenVerifier', () => {
-  const originalFetch = global.fetch;
-  let fetchMock: jest.MockedFunction<typeof fetch>;
+  let axiosGet: jest.SpiedFunction<typeof axios.get>;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
-    fetchMock = jest.fn().mockResolvedValue(jwksResponse({ keys: [validKeys.publicJwk] }));
-    global.fetch = fetchMock;
+    axiosGet = jest.spyOn(axios, 'get');
+    axiosGet.mockResolvedValue(jwksResponse({ keys: [validKeys.publicJwk] }) as never);
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    axiosGet.mockRestore();
     jest.useRealTimers();
   });
 
@@ -116,9 +118,10 @@ describe('KeycloakTokenVerifier', () => {
       sub: 'user-2',
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(`${TEST_ISSUER}/protocol/openid-connect/certs`, {
+    expect(axiosGet).toHaveBeenCalledTimes(1);
+    expect(axiosGet).toHaveBeenCalledWith(`${TEST_ISSUER}/protocol/openid-connect/certs`, {
       headers: { accept: 'application/json' },
+      validateStatus: expect.any(Function),
     });
   });
 
@@ -148,25 +151,24 @@ describe('KeycloakTokenVerifier', () => {
 
   it('refreshes JWKS keys for unknown key ids and failed signature checks', async () => {
     const unknownKidToken = tokenWithClaims({}, { kid: 'key-2', keys: otherKeys });
-    fetchMock.mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] })).mockResolvedValueOnce(
-      jwksResponse({ keys: [otherKeys.publicJwk] }),
+    axiosGet.mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] }) as never).mockResolvedValueOnce(
+      jwksResponse({ keys: [otherKeys.publicJwk] }) as never,
     );
 
     await expect(createVerifier().verifier.verifyAccessTokenClaims(unknownKidToken)).resolves.toMatchObject({
       active: true,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(axiosGet).toHaveBeenCalledTimes(2);
 
-    fetchMock = jest
-      .fn()
-      .mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] }))
-      .mockResolvedValueOnce(jwksResponse({ keys: [rotatedKeys.publicJwk] })) as jest.MockedFunction<typeof fetch>;
-    global.fetch = fetchMock;
+    axiosGet.mockReset();
+    axiosGet
+      .mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] }) as never)
+      .mockResolvedValueOnce(jwksResponse({ keys: [rotatedKeys.publicJwk] }) as never);
 
     await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims({}, { keys: rotatedKeys }))).resolves.toMatchObject({
       active: true,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(axiosGet).toHaveBeenCalledTimes(2);
   });
 
   it('rejects invalid signatures after forced refresh', async () => {
@@ -199,17 +201,19 @@ describe('KeycloakTokenVerifier', () => {
 
   it('rejects unusable JWKS responses', async () => {
     const { verifier, logger } = createVerifier();
-    fetchMock.mockResolvedValueOnce(jwksResponse({}, { ok: false, status: 503, statusText: 'Unavailable' }));
+    axiosGet.mockResolvedValueOnce(jwksResponse({}, { status: 503, statusText: 'Unavailable' }) as never);
 
     await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('status=503 Unavailable'));
 
-    fetchMock.mockResolvedValueOnce(jwksResponse({ keys: [{ kid: 'bad', kty: 'oct' }, 'not-record'] }));
+    axiosGet.mockResolvedValueOnce(jwksResponse({ keys: [{ kid: 'bad', kty: 'oct' }, 'not-record'] }) as never);
     await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
       'Unable to load Keycloak signing keys.',
     );
 
-    fetchMock.mockResolvedValueOnce(jwksResponse({ keys: [{ kid: 'broken', kty: 'RSA', use: 'sig', alg: 'RS256' }] }));
+    axiosGet.mockResolvedValueOnce(
+      jwksResponse({ keys: [{ kid: 'broken', kty: 'RSA', use: 'sig', alg: 'RS256' }] }) as never,
+    );
     await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
       'Unable to load Keycloak signing keys.',
     );
@@ -217,7 +221,7 @@ describe('KeycloakTokenVerifier', () => {
 
   it('logs network errors during JWKS lookup', async () => {
     const { verifier, logger } = createVerifier();
-    fetchMock.mockRejectedValueOnce(new Error('offline'));
+    axiosGet.mockRejectedValueOnce(new Error('offline'));
 
     await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
 
@@ -225,13 +229,13 @@ describe('KeycloakTokenVerifier', () => {
   });
 
   it('handles non-record JWKS bodies and non-Error lookup failures', async () => {
-    fetchMock.mockResolvedValueOnce(jwksResponse(null));
+    axiosGet.mockResolvedValueOnce(jwksResponse(null) as never);
     await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
       'Unable to load Keycloak signing keys.',
     );
 
     const { verifier, logger } = createVerifier();
-    fetchMock.mockRejectedValueOnce('offline');
+    axiosGet.mockRejectedValueOnce('offline');
     await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
   });

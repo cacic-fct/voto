@@ -1,4 +1,5 @@
 import { Logger, UnauthorizedException } from '@nestjs/common';
+import axios from 'axios';
 import { Buffer } from 'node:buffer';
 import {
   createPublicKey,
@@ -103,19 +104,19 @@ export class KeycloakTokenVerifier {
     const jwksUrl = `${this.options.realmUrl}/protocol/openid-connect/certs`;
 
     try {
-      const response = await fetch(jwksUrl, {
+      const response = await axios.get<unknown>(jwksUrl, {
         headers: {
           accept: 'application/json',
         },
+        validateStatus: () => true,
       });
 
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         this.options.logger.warn(`Keycloak JWKS lookup failed. status=${response.status} ${response.statusText}.`);
         throw new UnauthorizedException('Unable to load Keycloak signing keys.');
       }
 
-      const body: unknown = await response.json();
-      const keys = this.parseJwks(body);
+      const keys = this.parseJwks(response.data);
       if (keys.size === 0) {
         this.options.logger.warn('Keycloak JWKS response did not include usable RS256 signing keys.');
         throw new UnauthorizedException('Unable to load Keycloak signing keys.');
