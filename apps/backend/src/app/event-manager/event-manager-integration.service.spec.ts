@@ -62,6 +62,13 @@ describe('EventManagerIntegrationService', () => {
     );
   });
 
+  it('rejects an invalid attendance response', async () => {
+    call.mockResolvedValue({ attended: 'true' });
+    await expect(service.hasAttendance('event-1', 'user-1')).rejects.toEqual(
+      expect.objectContaining({ message: 'Event Manager returned an invalid attendance response.' }),
+    );
+  });
+
   it('wraps gRPC failures as service unavailable', async () => {
     call.mockRejectedValue(new Error('unavailable'));
     await expect(service.listLinkableEvents()).rejects.toBeInstanceOf(ServiceUnavailableException);

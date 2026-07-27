@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type LgpdUserInput = {
@@ -127,7 +128,7 @@ export class VotingLgpdService {
     return {
       success: true,
       deferredToHardDeletion: true,
-      note: 'CACiC Voto keeps no independent soft-delete state. Account Manager disables the account before this call; hard deletion removes the requester identity and its direct voting link.',
+      note: 'CACiC Voto keeps no independent soft-delete state. Account Manager disables the account before this call; hard deletion anonymizes the requester identity while preserving voting records.',
     };
   }
 
@@ -138,14 +139,39 @@ export class VotingLgpdService {
   }
 
   async hardDelete(input: LgpdDeletionInput): Promise<Record<string, unknown>> {
-    const deletedUser = await this.prisma.user.deleteMany({ where: { id: input.userId } });
+    const anonymizedSubjectId = buildAnonymizedSubjectId(input.requestId);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const users = await tx.user.updateMany({
+        where: { id: input.userId },
+        data: {
+          id: anonymizedSubjectId,
+          preferredUsername: null,
+          email: null,
+          name: null,
+          roles: [],
+          permissions: [],
+          claims: Prisma.JsonNull,
+          lastLoginAt: null,
+        },
+      });
+      const pollImages = await tx.pollImage.updateMany({
+        where: { createdById: input.userId },
+        data: { createdById: anonymizedSubjectId },
+      });
+      return { users, pollImages };
+    });
 
-    this.logger.log(`Hard-deleted CACiC Voto LGPD data request=${input.requestId}, user=${input.userId}.`);
+    this.logger.log(`Anonymized CACiC Voto LGPD data request=${input.requestId}, user=${input.userId}.`);
 
     return {
-      success: true,
-      usersDeleted: deletedUser.count,
-      note: 'Deleting the requester user removes direct identity fields, voter registrations, and user links on responses and election activities. Poll content and other users remain untouched.',
+      success: result.users.count > 0,
+      usersAnonymized: result.users.count,
+      relatedRecordsAnonymized: result.pollImages.count,
+      note: 'The requester identity is anonymized with one request-derived ID across related voting, response, poll-management, and election-activity records. Voting records and results are preserved.',
     };
   }
+}
+
+function buildAnonymizedSubjectId(requestId: string): string {
+  return `anonymized:${requestId}`;
 }

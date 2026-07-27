@@ -1,8 +1,11 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { VotingLgpdService } from './voting-lgpd.service';
+import { Prisma } from '@prisma/client';
 
 type PrismaMock = {
-  user: { findUnique: jest.Mock; deleteMany: jest.Mock };
+  $transaction: jest.Mock;
+  user: { findUnique: jest.Mock; updateMany: jest.Mock };
+  pollImage: { updateMany: jest.Mock };
   pollResponse: { findMany: jest.Mock };
   pollVoter: { findMany: jest.Mock };
   poll: { findMany: jest.Mock };
@@ -11,7 +14,9 @@ type PrismaMock = {
 
 function createPrismaMock(): PrismaMock {
   return {
-    user: { findUnique: jest.fn(), deleteMany: jest.fn() },
+    $transaction: jest.fn(),
+    user: { findUnique: jest.fn(), updateMany: jest.fn() },
+    pollImage: { updateMany: jest.fn() },
     pollResponse: { findMany: jest.fn() },
     pollVoter: { findMany: jest.fn() },
     poll: { findMany: jest.fn() },
@@ -97,15 +102,47 @@ describe('VotingLgpdService', () => {
     expect(prisma.pollResponse.findMany.mock.calls[0][0].select.answers.select).not.toHaveProperty('elementSnapshot');
   });
 
-  it('hard-deletes only the requesting user record', async () => {
+  it('anonymizes the requesting user with a stable request-derived ID', async () => {
     const prisma = createPrismaMock();
-    prisma.user.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+    prisma.pollImage.updateMany.mockResolvedValue({ count: 2 });
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
     const service = new VotingLgpdService(prisma as unknown as PrismaService);
 
     await expect(service.hardDelete({ requestId: 'request-1', userId: 'requester' })).resolves.toMatchObject({
       success: true,
-      usersDeleted: 1,
+      usersAnonymized: 1,
+      relatedRecordsAnonymized: 2,
     });
-    expect(prisma.user.deleteMany).toHaveBeenCalledWith({ where: { id: 'requester' } });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'requester' },
+      data: {
+        id: 'anonymized:request-1',
+        preferredUsername: null,
+        email: null,
+        name: null,
+        roles: [],
+        permissions: [],
+        claims: Prisma.JsonNull,
+        lastLoginAt: null,
+      },
+    });
+    expect(prisma.pollImage.updateMany).toHaveBeenCalledWith({
+      where: { createdById: 'requester' },
+      data: { createdById: 'anonymized:request-1' },
+    });
+  });
+
+  it('reports a failed deletion when the user does not exist', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    prisma.pollImage.updateMany.mockResolvedValue({ count: 0 });
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    const service = new VotingLgpdService(prisma as unknown as PrismaService);
+
+    await expect(service.hardDelete({ requestId: 'request-1', userId: 'missing' })).resolves.toMatchObject({
+      success: false,
+      usersAnonymized: 0,
+    });
   });
 });

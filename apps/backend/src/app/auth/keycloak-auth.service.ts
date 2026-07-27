@@ -207,7 +207,7 @@ export class KeycloakAuthService {
   async authenticateMachineToMachineToken(
     accessToken: string,
     requiredRoles: readonly string[],
-    allowedClientIds: readonly string[] = [],
+    allowedClientIds: readonly string[],
   ): Promise<AuthenticatedPrincipal> {
     const principal = await this.getOrCreatePrincipal(accessToken);
 
@@ -216,7 +216,7 @@ export class KeycloakAuthService {
     }
 
     const clientId = this.readClientId(principal);
-    if (allowedClientIds.length > 0 && (!clientId || !allowedClientIds.includes(clientId))) {
+    if (!clientId || !allowedClientIds.includes(clientId)) {
       throw new ForbiddenException('Service account client is not allowed.');
     }
 

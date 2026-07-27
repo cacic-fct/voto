@@ -270,7 +270,9 @@ describe('KeycloakAuthService', () => {
     await expect(
       service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
     ).resolves.toMatchObject({ sub: 'service-account-id' });
-    await expect(service.authenticateMachineToMachineToken(accessToken, ['users:read'])).rejects.toBeInstanceOf(
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['users:read'], ['cacic-account-manager-m2m']),
+    ).rejects.toBeInstanceOf(
       ForbiddenException,
     );
 
@@ -284,7 +286,9 @@ describe('KeycloakAuthService', () => {
       realm_access: { roles: ['lgpd:read'] },
       sub: 'requester-id',
     });
-    await expect(service.authenticateMachineToMachineToken(userAccessToken, ['lgpd:read'])).rejects.toBeInstanceOf(
+    await expect(
+      service.authenticateMachineToMachineToken(userAccessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).rejects.toBeInstanceOf(
       ForbiddenException,
     );
   });

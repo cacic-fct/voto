@@ -4,7 +4,6 @@ import {
   OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Metadata } from '@grpc/grpc-js';
 import type {
   M2MUserEnrollmentLookupRequest,
   M2MUserIdentifierLookupRequest,
@@ -12,7 +11,7 @@ import type {
 } from '@cacic-fct/account-manager-m2m-contracts';
 import { AccountManagerPerson } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
-import { GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
+import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
 
 const ENROLLMENT_LOOKUP_BATCH_SIZE = 500;
 const IDENTIFIER_LOOKUP_BATCH_SIZE = 200;
@@ -20,7 +19,7 @@ const IDENTIFIER_LOOKUP_BATCH_SIZE = 200;
 export class AccountManagerIntegrationService implements OnModuleDestroy {
   private readonly logger = new Logger(AccountManagerIntegrationService.name);
   private readonly client = new GrpcUnaryClient(
-    process.env.ACCOUNT_MANAGER_GRPC_URL?.trim() || 'localhost:50051',
+    requiredAccountManagerGrpcUrl(),
     loadService(
       'account-manager-m2m.proto',
       ['cacic', 'm2m', 'account_manager', 'v1'],
@@ -125,7 +124,7 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
       const data = await this.client.call<unknown>(
         'LookupUsersByEnrollment',
         { enrollmentNumbers } satisfies M2MUserEnrollmentLookupRequest,
-        this.metadata(accessToken),
+        authorizationMetadata(accessToken),
         { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
@@ -135,7 +134,7 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
         throw error;
       }
 
-      this.logger.warn('Could not lookup Account Manager users by enrollment number.');
+      this.logger.warn('Could not lookup Account Manager users by enrollment number.', error);
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -150,7 +149,7 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
       const data = await this.client.call<unknown>(
         'LookupUsersByIdentifier',
         { identifiers } satisfies M2MUserIdentifierLookupRequest,
-        this.metadata(accessToken),
+        authorizationMetadata(accessToken),
         { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
@@ -160,7 +159,7 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
         throw error;
       }
 
-      this.logger.warn('Could not lookup Account Manager users by private identifier.');
+      this.logger.warn('Could not lookup Account Manager users by private identifier.', error);
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -263,9 +262,10 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private metadata(accessToken: string): Metadata {
-    const metadata = new Metadata();
-    metadata.set('authorization', `Bearer ${accessToken}`);
-    return metadata;
-  }
+}
+
+function requiredAccountManagerGrpcUrl(): string {
+  const target = process.env.ACCOUNT_MANAGER_GRPC_URL?.trim();
+  if (!target) throw new Error('ACCOUNT_MANAGER_GRPC_URL must be configured.');
+  return target;
 }

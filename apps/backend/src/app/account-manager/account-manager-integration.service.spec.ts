@@ -4,6 +4,7 @@ import type { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service
 import { GrpcUnaryClient } from '../grpc/grpc-runtime';
 
 describe('AccountManagerIntegrationService', () => {
+  const originalGrpcUrl = process.env.ACCOUNT_MANAGER_GRPC_URL;
   const tokenService = {
     getClientCredentialsToken: jest.fn().mockResolvedValue('token'),
   };
@@ -12,6 +13,7 @@ describe('AccountManagerIntegrationService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.ACCOUNT_MANAGER_GRPC_URL = 'account-manager:50051';
     call = jest.spyOn(GrpcUnaryClient.prototype, 'call');
     service = new AccountManagerIntegrationService(tokenService as unknown as KeycloakM2mTokenService);
   });
@@ -19,6 +21,11 @@ describe('AccountManagerIntegrationService', () => {
   afterEach(() => {
     service.onModuleDestroy();
     call.mockRestore();
+  });
+
+  afterAll(() => {
+    if (originalGrpcUrl === undefined) delete process.env.ACCOUNT_MANAGER_GRPC_URL;
+    else process.env.ACCOUNT_MANAGER_GRPC_URL = originalGrpcUrl;
   });
 
   it('deduplicates enrollment numbers and maps gRPC users', async () => {
@@ -52,6 +59,13 @@ describe('AccountManagerIntegrationService', () => {
     call.mockRejectedValue(new Error('unavailable'));
     await expect(service.lookupPeopleByEnrollmentNumbers(['123'])).rejects.toBeInstanceOf(
       ServiceUnavailableException,
+    );
+  });
+
+  it('requires an Account Manager gRPC target', () => {
+    delete process.env.ACCOUNT_MANAGER_GRPC_URL;
+    expect(() => new AccountManagerIntegrationService(tokenService as unknown as KeycloakM2mTokenService)).toThrow(
+      'ACCOUNT_MANAGER_GRPC_URL must be configured.',
     );
   });
 });

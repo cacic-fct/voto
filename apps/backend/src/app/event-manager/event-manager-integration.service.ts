@@ -4,11 +4,9 @@ import {
   OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Metadata } from '@grpc/grpc-js';
-import type { EventManagerVotingAttendanceCheckResponse } from '@cacic-fct/event-manager-m2m-contracts';
 import { EventManagerEvent } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
-import { GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
+import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
 
 @Injectable()
 export class EventManagerIntegrationService implements OnModuleDestroy {
@@ -37,7 +35,7 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
       const data = await this.client.call<unknown>(
         'ListVotingEvents',
         {},
-        this.metadata(accessToken),
+        authorizationMetadata(accessToken),
         { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
@@ -64,15 +62,22 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
     const accessToken = await this.getAccessToken();
 
     try {
-      const data = await this.client.call<EventManagerVotingAttendanceCheckResponse>(
+      const data = await this.client.call<unknown>(
         'CheckVotingAttendance',
         { eventId, userId },
-        this.metadata(accessToken),
+        authorizationMetadata(accessToken),
         { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
-      return data.attended === true;
-    } catch {
+      if (!this.isRecord(data) || typeof data['attended'] !== 'boolean') {
+        throw new ServiceUnavailableException(
+          'Event Manager returned an invalid attendance response.',
+        );
+      }
+
+      return data['attended'];
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
       this.logger.warn('Could not verify Event Manager attendance.');
       throw new ServiceUnavailableException(
         'Could not verify Event Manager attendance.',
@@ -132,9 +137,4 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private metadata(accessToken: string): Metadata {
-    const metadata = new Metadata();
-    metadata.set('authorization', `Bearer ${accessToken}`);
-    return metadata;
-  }
 }

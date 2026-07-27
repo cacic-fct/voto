@@ -1,7 +1,7 @@
 import {
   ChannelCredentials,
   Client,
-  type Metadata,
+  Metadata,
   type MethodDefinition,
   type ServiceDefinition,
   status,
@@ -13,6 +13,12 @@ import { join } from 'node:path';
 
 type UnknownMethod = MethodDefinition<unknown, unknown>;
 const TRANSIENT_CODES = new Set([status.UNAVAILABLE, status.DEADLINE_EXCEEDED, status.RESOURCE_EXHAUSTED]);
+
+export function authorizationMetadata(accessToken: string): Metadata {
+  const metadata = new Metadata();
+  metadata.set('authorization', `Bearer ${accessToken}`);
+  return metadata;
+}
 
 export function loadService(fileName: string, packageSegments: string[], serviceName: string): ServiceDefinition {
   const configuredRoot = process.env.CACIC_GRPC_PROTO_ROOT?.trim();
@@ -62,12 +68,15 @@ export class GrpcUnaryClient {
     const method = this.method(methodName);
     const attempts = options.idempotent ? (options.maxAttempts ?? 3) : 1;
     const timeoutMs = options.timeoutMs ?? 30_000;
+    const deadline = Date.now() + timeoutMs;
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      if (Date.now() >= deadline) break;
       try {
         await new Promise<void>((resolve, reject) => {
-          this.client.waitForReady(Date.now() + timeoutMs, (error) => (error ? reject(error) : resolve()));
+          this.client.waitForReady(deadline, (error) => (error ? reject(error) : resolve()));
         });
+        if (Date.now() >= deadline) break;
         return await new Promise<T>((resolve, reject) => {
           this.client.makeUnaryRequest(
             method.path,
@@ -75,7 +84,7 @@ export class GrpcUnaryClient {
             method.responseDeserialize,
             request,
             metadata,
-            { deadline: Date.now() + timeoutMs },
+            { deadline },
             (error, response) => (error ? reject(error) : resolve(response as T)),
           );
         });
@@ -84,10 +93,11 @@ export class GrpcUnaryClient {
         if (!this.shouldRetry(error, attempt, attempts)) throw error;
         const backoffMs = Math.min(100 * 2 ** (attempt - 1), 1_000);
         const jitteredBackoffMs = Math.round(backoffMs * (0.8 + Math.random() * 0.4));
+        if (Date.now() + jitteredBackoffMs >= deadline) break;
         await new Promise((resolve) => setTimeout(resolve, jitteredBackoffMs));
       }
     }
-    throw lastError;
+    throw lastError ?? Object.assign(new Error('gRPC call deadline exceeded.'), { code: status.DEADLINE_EXCEEDED });
   }
 
   close(): void {
