@@ -1,7 +1,14 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import { Metadata } from '@grpc/grpc-js';
 import { EventManagerIntegrationService } from './event-manager-integration.service';
 import type { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
 import { GrpcUnaryClient } from '../grpc/grpc-runtime';
+
+function authenticatedMetadata(accessToken: string): Metadata {
+  const metadata = new Metadata();
+  metadata.set('authorization', `Bearer ${accessToken}`);
+  return metadata;
+}
 
 describe('EventManagerIntegrationService', () => {
   const tokenService = {
@@ -46,7 +53,7 @@ describe('EventManagerIntegrationService', () => {
     expect(call).toHaveBeenCalledWith(
       'ListVotingEvents',
       {},
-      expect.anything(),
+      authenticatedMetadata('token'),
       { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
     );
   });
@@ -57,7 +64,7 @@ describe('EventManagerIntegrationService', () => {
     expect(call).toHaveBeenCalledWith(
       'CheckVotingAttendance',
       { eventId: 'event-1', userId: 'user-1' },
-      expect.anything(),
+      authenticatedMetadata('token'),
       { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
     );
   });

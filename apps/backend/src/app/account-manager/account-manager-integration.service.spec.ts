@@ -1,7 +1,14 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import { Metadata } from '@grpc/grpc-js';
 import { AccountManagerIntegrationService } from './account-manager-integration.service';
 import type { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
 import { GrpcUnaryClient } from '../grpc/grpc-runtime';
+
+function authenticatedMetadata(accessToken: string): Metadata {
+  const metadata = new Metadata();
+  metadata.set('authorization', `Bearer ${accessToken}`);
+  return metadata;
+}
 
 describe('AccountManagerIntegrationService', () => {
   const originalGrpcUrl = process.env.ACCOUNT_MANAGER_GRPC_URL;
@@ -39,7 +46,7 @@ describe('AccountManagerIntegrationService', () => {
     expect(call).toHaveBeenCalledWith(
       'LookupUsersByEnrollment',
       { enrollmentNumbers: ['123'] },
-      expect.anything(),
+      authenticatedMetadata('token'),
       { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
     );
   });
@@ -53,6 +60,16 @@ describe('AccountManagerIntegrationService', () => {
       { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
     ]);
     expect(result.get('candidate-1')).toEqual([{ userId: 'u1', name: 'Usuário', email: null }]);
+    expect(call).toHaveBeenCalledWith(
+      'LookupUsersByIdentifier',
+      {
+        identifiers: [
+          { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
+        ],
+      },
+      authenticatedMetadata('token'),
+      { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+    );
   });
 
   it('wraps gRPC failures as service unavailable', async () => {
