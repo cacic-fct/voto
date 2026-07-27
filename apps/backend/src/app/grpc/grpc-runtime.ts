@@ -25,6 +25,7 @@ export function loadService(fileName: string, packageSegments: string[], service
   const candidates = [
     ...(configuredRoot ? [join(configuredRoot, fileName)] : []),
     join(__dirname, 'assets', 'grpc', fileName),
+    join(__dirname, '..', '..', 'assets', 'grpc', fileName),
     join(process.cwd(), 'src', 'assets', 'grpc', fileName),
     join(process.cwd(), 'apps', 'backend', 'src', 'assets', 'grpc', fileName),
   ];
