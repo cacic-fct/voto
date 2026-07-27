@@ -77,7 +77,7 @@ COPY --from=builder --chown=app:app /workspace/dist/apps/backend ./
 
 USER app
 
-EXPOSE 3000
+EXPOSE 3000 50051
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "main.js"]

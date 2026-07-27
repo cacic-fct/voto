@@ -258,6 +258,37 @@ describe('KeycloakAuthService', () => {
     );
   });
 
+  it('accepts only service-account tokens with the required M2M roles', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      azp: 'cacic-account-manager-m2m',
+      preferred_username: 'service-account-cacic-account-manager-m2m',
+      realm_access: { roles: ['lgpd:read', 'lgpd:delete'] },
+      sub: 'service-account-id',
+    });
+
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).resolves.toMatchObject({ sub: 'service-account-id' });
+    await expect(service.authenticateMachineToMachineToken(accessToken, ['users:read'])).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['another-service-m2m']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const userAccessToken = tokenWithClaims({
+      azp: 'voto-client',
+      preferred_username: 'requester',
+      realm_access: { roles: ['lgpd:read'] },
+      sub: 'requester-id',
+    });
+    await expect(service.authenticateMachineToMachineToken(userAccessToken, ['lgpd:read'])).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
