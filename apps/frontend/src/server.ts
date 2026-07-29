@@ -12,7 +12,17 @@ const serverDistFolder = dirname(fileURLToPath(import.meta.url));
 const browserDistFolder = resolve(serverDistFolder, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+const angularApp = new AngularNodeAppEngine({
+  allowedHosts: ['voto.cacic.com.br'],
+  trustProxyHeaders: [
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'cf-connecting-ip',
+    'x-forwarded-server',
+    'x-forwarded-for',
+    'x-forwarded-port',
+  ],
+});
 
 /**
  * Example Express Rest API endpoints can be defined here.
