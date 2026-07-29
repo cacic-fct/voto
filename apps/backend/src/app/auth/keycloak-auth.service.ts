@@ -204,6 +204,30 @@ export class KeycloakAuthService {
     return principal;
   }
 
+  async authenticateMachineToMachineToken(
+    accessToken: string,
+    requiredRoles: readonly string[],
+    allowedClientIds: readonly string[],
+  ): Promise<AuthenticatedPrincipal> {
+    const principal = await this.getOrCreatePrincipal(accessToken);
+
+    if (!this.isServiceAccountPrincipal(principal)) {
+      throw new ForbiddenException('Access token is not a service account token.');
+    }
+
+    const clientId = this.readClientId(principal);
+    if (!clientId || !allowedClientIds.includes(clientId)) {
+      throw new ForbiddenException('Service account client is not allowed.');
+    }
+
+    const missingRoles = requiredRoles.filter((role) => !principal.roleSet.has(role));
+    if (missingRoles.length > 0) {
+      throw new ForbiddenException(`Missing required role(s): ${missingRoles.join(', ')}.`);
+    }
+
+    return principal;
+  }
+
   async evaluateSessionPermissions(sessionId: string, requiredPermissions: string[]): Promise<string[]> {
     const session = await this.sessions.get(sessionId);
     if (!session) {

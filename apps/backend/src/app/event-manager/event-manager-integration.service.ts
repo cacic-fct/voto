@@ -1,60 +1,57 @@
 import {
   Injectable,
   Logger,
+  OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { EventManagerEvent } from '@org/voting-contracts';
-import axios from 'axios';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
-
-type EventManagerVotingAttendanceCheckResponse = {
-  attended: boolean;
-};
-
-const EVENT_MANAGER_M2M_API_PREFIX = '/api';
-const EVENT_MANAGER_M2M_VOTING_ROUTES = {
-  events: () => `${EVENT_MANAGER_M2M_API_PREFIX}/internal/voting/events`,
-  attendanceCheck: (eventId: string) =>
-    `${EVENT_MANAGER_M2M_API_PREFIX}/internal/voting/events/${encodeURIComponent(eventId)}/attendance-check`,
-};
+import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
 
 @Injectable()
-export class EventManagerIntegrationService {
+export class EventManagerIntegrationService implements OnModuleDestroy {
   private readonly logger = new Logger(EventManagerIntegrationService.name);
-  private readonly eventManagerOrigin = this.resolveEventManagerOrigin(
-    process.env.EVENT_MANAGER_API_URL ?? 'https://eventos.cacic.com.br/api',
+  private readonly client = new GrpcUnaryClient(
+    process.env.EVENT_MANAGER_GRPC_URL?.trim() || 'localhost:50051',
+    loadService(
+      'cacic/m2m/event_manager/v1/event-manager-m2m.proto',
+      ['cacic', 'm2m', 'event_manager', 'v1'],
+      'EventManagerM2M',
+    ),
   );
   private readonly audience = process.env.EVENT_MANAGER_M2M_AUDIENCE;
   private readonly scope = process.env.EVENT_MANAGER_M2M_SCOPE;
 
   constructor(private readonly m2mTokens: KeycloakM2mTokenService) {}
 
+  onModuleDestroy(): void {
+    this.client.close();
+  }
+
   async listLinkableEvents(): Promise<EventManagerEvent[]> {
     const accessToken = await this.getAccessToken();
 
     try {
-      const { data } = await axios.get<unknown>(
-        this.eventManagerUrl(EVENT_MANAGER_M2M_VOTING_ROUTES.events()),
-        {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-          },
-        },
+      const data = await this.client.call<unknown>(
+        'ListVotingEvents',
+        {},
+        authorizationMetadata(accessToken),
+        { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
-      if (!Array.isArray(data)) {
+      if (!this.isRecord(data) || !Array.isArray(data['events'])) {
         throw new ServiceUnavailableException(
           'Event Manager returned an invalid event list.',
         );
       }
 
-      return data.map((item) => this.parseEvent(item));
+      return data['events'].map((item) => this.parseEvent(item));
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
 
-      this.logAxiosWarning(error, 'Could not list Event Manager events.');
+      this.logger.warn('Could not list Event Manager events.');
       throw new ServiceUnavailableException(
         'Could not list Event Manager events.',
       );
@@ -65,22 +62,23 @@ export class EventManagerIntegrationService {
     const accessToken = await this.getAccessToken();
 
     try {
-      const { data } =
-        await axios.post<EventManagerVotingAttendanceCheckResponse>(
-          this.eventManagerUrl(
-            EVENT_MANAGER_M2M_VOTING_ROUTES.attendanceCheck(eventId),
-          ),
-          { userId },
-          {
-            headers: {
-              authorization: `Bearer ${accessToken}`,
-            },
-          },
-        );
+      const data = await this.client.call<unknown>(
+        'CheckVotingAttendance',
+        { eventId, userId },
+        authorizationMetadata(accessToken),
+        { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+      );
 
-      return data.attended === true;
+      if (!this.isRecord(data) || typeof data['attended'] !== 'boolean') {
+        throw new ServiceUnavailableException(
+          'Event Manager returned an invalid attendance response.',
+        );
+      }
+
+      return data['attended'];
     } catch (error) {
-      this.logAxiosWarning(error, 'Could not verify Event Manager attendance.');
+      if (error instanceof ServiceUnavailableException) throw error;
+      this.logger.warn('Could not verify Event Manager attendance.');
       throw new ServiceUnavailableException(
         'Could not verify Event Manager attendance.',
       );
@@ -139,22 +137,4 @@ export class EventManagerIntegrationService {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private eventManagerUrl(path: string): string {
-    return new URL(path, this.eventManagerOrigin).toString();
-  }
-
-  private resolveEventManagerOrigin(eventManagerApiUrl: string): string {
-    return new URL(eventManagerApiUrl.replace(/\/+$/, '')).origin;
-  }
-
-  private logAxiosWarning(error: unknown, message: string): void {
-    if (axios.isAxiosError(error)) {
-      this.logger.warn(
-        `${message} Status=${error.response?.status ?? 'none'}.`,
-      );
-      return;
-    }
-
-    this.logger.warn(message);
-  }
 }

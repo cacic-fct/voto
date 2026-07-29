@@ -147,8 +147,10 @@ async function waitForKeycloak(): Promise<void> {
 
   while (Date.now() < timeoutAt) {
     try {
-      const response = await fetch(metadataUrl);
-      if (response.ok) {
+      const response = await axios.get(metadataUrl, {
+        validateStatus: () => true,
+      });
+      if (response.status >= 200 && response.status < 300) {
         return;
       }
 

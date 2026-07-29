@@ -53,15 +53,6 @@ function tokenWithClaims(claims: Record<string, unknown>): string {
   return `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
 }
 
-function jwksResponse(keys: unknown[]): Response {
-  return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: jest.fn().mockResolvedValue({ keys }),
-  } as unknown as Response;
-}
-
 function createSessionStoreMock(): SessionStoreMock {
   return {
     get: jest.fn(),
@@ -92,11 +83,9 @@ function createPrismaMock(): PrismaMock {
 
 describe('KeycloakAuthService', () => {
   const originalEnv = process.env;
-  const originalFetch = global.fetch;
   let sessions: SessionStoreMock;
   let authorizationState: AuthorizationStateMock;
   let prisma: PrismaMock;
-  let fetchMock: jest.MockedFunction<typeof fetch>;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
@@ -108,8 +97,6 @@ describe('KeycloakAuthService', () => {
       KEYCLOAK_POST_LOGOUT_REDIRECT_URI: 'https://app.example/login',
       KEYCLOAK_INTROSPECTION_CACHE_TTL_MS: '60000',
     };
-    fetchMock = jest.fn().mockResolvedValue(jwksResponse([publicJwk]));
-    global.fetch = fetchMock;
     delete process.env.KEYCLOAK_CLIENT_SECRET;
     delete process.env.KEYCLOAK_IDP_HINT;
     delete process.env.KEYCLOAK_ALLOWED_ACCESS_TOKEN_CLIENTS;
@@ -119,11 +106,11 @@ describe('KeycloakAuthService', () => {
     prisma = createPrismaMock();
     mockedAxios.post.mockReset();
     mockedAxios.get.mockReset();
+    mockedAxios.get.mockResolvedValue({ data: { keys: [publicJwk] }, status: 200, statusText: 'OK' });
     mockedAxios.isAxiosError.mockReset();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
     jest.useRealTimers();
   });
 
@@ -140,7 +127,11 @@ describe('KeycloakAuthService', () => {
   }
 
   function mockUserInfo(claims: Record<string, unknown>): void {
-    mockedAxios.get.mockResolvedValue({ data: claims });
+    mockedAxios.get.mockImplementation(async (url: string) =>
+      url.endsWith('/protocol/openid-connect/certs')
+        ? ({ data: { keys: [publicJwk] }, status: 200, statusText: 'OK' } as never)
+        : ({ data: claims } as never),
+    );
   }
 
   it('builds authorization URLs from default realm/client config and omitted options', async () => {
@@ -258,6 +249,41 @@ describe('KeycloakAuthService', () => {
     );
   });
 
+  it('accepts only service-account tokens with the required M2M roles', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      azp: 'cacic-account-manager-m2m',
+      preferred_username: 'service-account-cacic-account-manager-m2m',
+      realm_access: { roles: ['lgpd:read', 'lgpd:delete'] },
+      sub: 'service-account-id',
+    });
+
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).resolves.toMatchObject({ sub: 'service-account-id' });
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['users:read'], ['cacic-account-manager-m2m']),
+    ).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['another-service-m2m']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const userAccessToken = tokenWithClaims({
+      azp: 'voto-client',
+      preferred_username: 'requester',
+      realm_access: { roles: ['lgpd:read'] },
+      sub: 'requester-id',
+    });
+    await expect(
+      service.authenticateMachineToMachineToken(userAccessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
@@ -323,13 +349,7 @@ describe('KeycloakAuthService', () => {
     mockedAxios.post
       .mockResolvedValueOnce({ data: { access_token: refreshedToken, refresh_token: 'refresh-2', expires_in: 120 } })
       .mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['edit'] }] });
-    mockedAxios.get.mockResolvedValue({
-      data: {
-        sub: 'user-1',
-        preferred_username: 'ada',
-        email: 'ada@example.com',
-      },
-    });
+    mockUserInfo({ sub: 'user-1', preferred_username: 'ada', email: 'ada@example.com' });
 
     const principal = await service.authenticateSession('session-1', ['poll#edit']);
 
@@ -359,7 +379,7 @@ describe('KeycloakAuthService', () => {
     mockedAxios.post.mockResolvedValue({
       data: { access_token: refreshedToken, expires_in: 120, refresh_expires_in: 600 },
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.refreshSession('session-1')).resolves.toEqual({
       expiresAt: Date.now() + 120000,
@@ -396,7 +416,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
     await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -414,12 +434,11 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'admin-1' } });
+    mockUserInfo({ sub: 'admin-1' });
 
     await expect(service.authenticateSession('session-1', ['poll#delete'])).resolves.toMatchObject({ sub: 'admin-1' });
     await expect(service.authenticateSession('session-1', ['poll#create'])).resolves.toMatchObject({ sub: 'admin-1' });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -436,7 +455,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'reader-1' } });
+    mockUserInfo({ sub: 'reader-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
 
     await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
@@ -455,7 +474,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
     mockedAxios.post.mockResolvedValue({ data: [{ rsname: 'poll', scopes: ['read'] }] });
 
     await expect(service.evaluateSessionPermissions('session-1', [' poll#read ', '', 'poll#read', 'poll#edit'])).resolves.toEqual([
@@ -477,7 +496,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual(['poll#read']);
     expect(mockedAxios.post).not.toHaveBeenCalled();
@@ -495,7 +514,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.evaluateSessionPermissions('session-1', [])).resolves.toEqual([]);
     expect(mockedAxios.post).not.toHaveBeenCalled();
@@ -519,7 +538,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'admin-1' } });
+    mockUserInfo({ sub: 'admin-1' });
 
     await expect(service.evaluateSessionPermissions('session-1', [' poll#read ', 'poll#edit'])).resolves.toEqual([
       'poll#read',
@@ -540,7 +559,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'reader-1' } });
+    mockUserInfo({ sub: 'reader-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
 
     await expect(service.evaluateSessionPermissions('session-1', ['poll#read', 'poll#edit'])).resolves.toEqual([
@@ -566,7 +585,7 @@ describe('KeycloakAuthService', () => {
         sessionExpiresAt: Date.now() + 600000,
       });
     sessions.acquireRefreshLock.mockResolvedValue(false);
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
 
@@ -605,7 +624,7 @@ describe('KeycloakAuthService', () => {
         refresh_expires_in: 600,
       },
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
     expect(mockedAxios.post.mock.calls[0][1]).toContain('refresh_token=refresh');
@@ -641,7 +660,7 @@ describe('KeycloakAuthService', () => {
       });
     sessions.acquireRefreshLock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     mockedAxios.post.mockResolvedValue({ data: { access_token: refreshedToken, expires_in: 120 } });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
 
@@ -735,7 +754,6 @@ describe('KeycloakAuthService', () => {
 
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const otherKeyPair = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const encodedHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'unknown-key' }), 'utf8').toString(
@@ -828,7 +846,10 @@ describe('KeycloakAuthService', () => {
       expect.any(String),
       expect.any(Object),
     );
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect.stringContaining('/protocol/openid-connect/certs'),
+      expect.any(Object),
+    );
   });
 
   it('handles permission evaluation denial and transient failures as no grants', async () => {
@@ -840,7 +861,7 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
     mockedAxios.isAxiosError.mockReturnValueOnce(true);
     mockedAxios.post.mockRejectedValueOnce({ response: { status: 403 } });
 
@@ -866,7 +887,7 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
     mockedAxios.post.mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['read'] }] });
-    mockedAxios.get.mockResolvedValue({ data: { sub: 'user-1' } });
+    mockUserInfo({ sub: 'user-1' });
 
     await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual(['poll#read']);
     expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=secret');

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { INestApplication } from '@nestjs/common';
+import Redis from 'ioredis';
 import type { AddressInfo } from 'node:net';
 
 let app: INestApplication | undefined;
@@ -20,7 +21,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const backendRedis = app?.get(Redis, { strict: false });
   await app?.close();
+  backendRedis?.disconnect();
   app = undefined;
   axios.defaults.baseURL = undefined;
 });
