@@ -28,7 +28,7 @@ describe('keycloak claim utilities', () => {
   it('extracts distinct realm and client roles from multiple claim sources', () => {
     const roles = extractRoles(
       {
-        realm_access: { roles: [' admin ', '', 'member'] },
+        realm_access: { roles: [' super-admin ', '', 'member'] },
         resource_access: {
           voting: { roles: ['poll-admin', 'member'] },
           ignored: { roles: [1, ''] },
@@ -40,14 +40,14 @@ describe('keycloak claim utilities', () => {
       },
     );
 
-    expect(roles).toEqual(['admin', 'member', 'poll-admin', 'auditor']);
+    expect(roles).toEqual(['super-admin', 'member', 'poll-admin', 'auditor']);
   });
 
   it('skips invalid client-role and realm-role structures', () => {
     const roles = new Set<string>();
 
     extractClientRoles(null, roles);
-    extractClientRoles({ voting: { roles: 'admin' } }, roles);
+    extractClientRoles({ voting: { roles: 'super-admin' } }, roles);
 
     expect([...roles]).toEqual([]);
     expect(extractRealmRoles(null, 'invalid', { roles: [' valid ', 1] })).toEqual(['valid']);

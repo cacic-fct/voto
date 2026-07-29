@@ -98,7 +98,7 @@ describeKeycloak('Keycloak-backed authentication', () => {
       expect.objectContaining({
         email: 'voto-admin@unesp.br',
         preferredUsername: 'voto-admin@unesp.br',
-        roles: expect.arrayContaining(['voting-admin']),
+        roles: expect.arrayContaining(['super-admin']),
         permissions: [],
         scopes: expect.arrayContaining(['openid', 'email', 'profile']),
         oidcScopes: expect.arrayContaining(['openid', 'email', 'profile']),

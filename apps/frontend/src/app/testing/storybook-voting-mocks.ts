@@ -168,7 +168,7 @@ export function createStoryUser(email: string, isAdmin: boolean): AuthenticatedU
     sub: 'storybook-user',
     preferredUsername: email.split('@')[0],
     email,
-    roles: isAdmin ? ['voting-admin'] : ['authenticated-user'],
+    roles: isAdmin ? ['super-admin'] : ['authenticated-user'],
     permissions: isAdmin ? [...VOTING_ADMIN_PERMISSIONS] : [],
     scopes: ['openid', 'profile', 'email'],
     oidcScopes: ['openid', 'profile', 'email'],

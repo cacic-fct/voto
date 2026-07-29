@@ -12,7 +12,7 @@
         "name": "access"
       },
       {
-        "name": "voting-admin"
+        "name": "super-admin"
       }
     ]
   },
@@ -133,7 +133,7 @@
       ],
       "realmRoles": [
         "access",
-        "voting-admin"
+        "super-admin"
       ]
     }
   ]

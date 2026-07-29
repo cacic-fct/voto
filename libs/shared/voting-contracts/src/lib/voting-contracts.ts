@@ -455,9 +455,7 @@ export function normalizePermissions(permissions: readonly string[]): string[] {
 }
 
 export function hasVotingAdminRole(roles: readonly string[] = []): boolean {
-  return roles.some((role) =>
-    ['admin', 'administrator', 'voting-admin'].includes(role),
-  );
+  return roles.includes('super-admin');
 }
 
 export function hasElectionsObserverRole(

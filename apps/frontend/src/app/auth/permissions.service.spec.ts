@@ -80,7 +80,7 @@ describe('PermissionsService', () => {
   });
 
   it('recognizes admin users through roles or permissions', async () => {
-    roles.set(['voting-admin']);
+    roles.set(['super-admin']);
     expect(permissions.isAdmin()).toBe(true);
 
     roles.set([]);

@@ -421,12 +421,12 @@ describe('KeycloakAuthService', () => {
     await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('uses cached principals and skips permission evaluation for voting admins', async () => {
+  it('uses cached principals and skips permission evaluation for super-admins', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
       sub: 'admin-1',
       exp: Math.floor(Date.now() / 1000) + 120,
-      realm_access: { roles: ['admin'] },
+      realm_access: { roles: ['super-admin'] },
     });
     sessions.get.mockResolvedValue({
       accessToken,
@@ -520,12 +520,12 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
-  it('returns all evaluated permissions for voting admins and rejects missing sessions', async () => {
+  it('returns all requested permissions for super-admins and rejects missing sessions', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
       sub: 'admin-1',
       exp: Math.floor(Date.now() / 1000) + 120,
-      realm_access: { roles: ['voting-admin'] },
+      realm_access: { roles: ['super-admin'] },
     });
     sessions.get.mockResolvedValueOnce(undefined);
     await expect(service.evaluateSessionPermissions('missing', ['poll#read'])).rejects.toBeInstanceOf(
