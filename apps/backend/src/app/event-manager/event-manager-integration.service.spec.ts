@@ -58,6 +58,12 @@ describe('EventManagerIntegrationService', () => {
     );
   });
 
+  it('treats an omitted repeated events field as an empty event list', async () => {
+    call.mockResolvedValue({});
+
+    await expect(service.listLinkableEvents()).resolves.toEqual([]);
+  });
+
   it('checks attendance through gRPC', async () => {
     call.mockResolvedValue({ attended: true });
     await expect(service.hasAttendance('event-1', 'user-1')).resolves.toBe(true);

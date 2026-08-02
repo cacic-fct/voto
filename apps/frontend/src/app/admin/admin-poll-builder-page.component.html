@@ -282,6 +282,9 @@
               </mat-option>
             }
           </mat-select>
+          @if (!loadingEvents() && eventOptions().length === 0) {
+            <mat-hint>Nenhum evento disponível para vincular.</mat-hint>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline">

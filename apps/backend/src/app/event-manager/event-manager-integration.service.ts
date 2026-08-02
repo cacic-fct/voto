@@ -39,19 +39,31 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
         { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
       );
 
-      if (!this.isRecord(data) || !Array.isArray(data['events'])) {
+      if (!this.isRecord(data)) {
         throw new ServiceUnavailableException(
           'Event Manager returned an invalid event list.',
         );
       }
 
-      return data['events'].map((item) => this.parseEvent(item));
+      // With proto-loader defaults disabled, an empty repeated field may be
+      // omitted from the decoded response. That is a valid empty event list.
+      const events = data['events'];
+      if (events === undefined) {
+        return [];
+      }
+      if (!Array.isArray(events)) {
+        throw new ServiceUnavailableException(
+          'Event Manager returned an invalid event list.',
+        );
+      }
+
+      return events.map((item) => this.parseEvent(item));
     } catch (error) {
+      this.logger.warn(`Could not list Event Manager events: ${this.describeError(error)}`);
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
 
-      this.logger.warn('Could not list Event Manager events.');
       throw new ServiceUnavailableException(
         'Could not list Event Manager events.',
       );
@@ -135,6 +147,10 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private describeError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
 }
