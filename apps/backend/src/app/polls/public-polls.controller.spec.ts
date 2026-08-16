@@ -90,11 +90,11 @@ describe('PublicPollsController', () => {
     });
 
     const events = controller.streamPollResults('poll-1', request, '2');
-    expect(polls.streamPublicPollResults).toHaveBeenCalledWith('poll-1', 2, request.user);
+    expect(polls.streamPublicPollResults).toHaveBeenCalledWith('poll-1', '2', request.user);
     await expect(new Promise((resolve) => events.subscribe(resolve))).resolves.toEqual({ data: { pollId: 'poll-1' } });
 
     controller.streamPollResults('poll-1', request, '-1');
-    expect(polls.streamPublicPollResults).toHaveBeenLastCalledWith('poll-1', 0, request.user);
+    expect(polls.streamPublicPollResults).toHaveBeenLastCalledWith('poll-1', '-1', request.user);
     expect(polls.getUserResponseState).toHaveBeenCalledWith('poll-1', request.user);
     expect(polls.submitResponse).toHaveBeenCalledWith('poll-1', body, request.user);
     expect(polls.submitCacicElectionSlate).toHaveBeenCalledWith('poll-1', { name: 'Chapa 1' }, request.user);
@@ -111,7 +111,7 @@ describe('PublicPollsController', () => {
     await expect(controller.submitDirectLinkResponse(token, request, body)).resolves.toEqual({ id: 'response-1' });
 
     const events = controller.streamDirectLinkPollResults(token, request, '4');
-    expect(polls.streamDirectLinkPublicPollResults).toHaveBeenCalledWith(token, 4, request.user);
+    expect(polls.streamDirectLinkPublicPollResults).toHaveBeenCalledWith(token, '4', request.user);
     await expect(new Promise((resolve) => events.subscribe(resolve))).resolves.toEqual({ data: { pollId: 'poll-1' } });
 
     expect(polls.getPublishedPollByDirectLink).toHaveBeenCalledWith(token, request.user);

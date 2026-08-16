@@ -577,7 +577,7 @@ describe('AdminPollBuilderPageComponent', () => {
     confirm.mockRestore();
   });
 
-  it('should merge live admin result deltas and close event sources', async () => {
+  it('should apply live admin result snapshots and close event sources', async () => {
     const source = { close: vi.fn(), onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined };
     const initialResults: PollResults = {
       pollId: poll.id,
@@ -590,6 +590,7 @@ describe('AdminPollBuilderPageComponent', () => {
       pollId: poll.id,
       responseCount: 2,
       responses: [
+        initialResults.responses[0],
         {
           id: 'response-2',
           submittedAt: '2026-06-18T12:05:00.000Z',

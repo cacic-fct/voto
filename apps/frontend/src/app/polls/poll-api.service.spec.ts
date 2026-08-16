@@ -362,7 +362,7 @@ describe('PollApiService', () => {
     await expect(remove).resolves.toBeNull();
   });
 
-  it('opens credentialed EventSource streams with encoded poll ids and non-negative cursors', () => {
+  it('opens credentialed EventSource streams and leaves replay cursors to Last-Event-ID', () => {
     const eventSource = vi.fn(function EventSourceMock(this: EventSource, url: string, init?: EventSourceInit) {
       Object.assign(this, { url, init });
     });
@@ -373,15 +373,15 @@ describe('PollApiService', () => {
     service.openDirectLinkPollResultsEvents('018f47b1-5c4e-7c7b-9e6f-0c8c2f7281ad', 3);
 
     expect(String(eventSource.mock.calls[0]?.[0])).toBe(
-      `${window.location.origin}/api/admin/polls/poll%2F1/results/events?after=0`,
+      `${window.location.origin}/api/admin/polls/poll%2F1/results/events`,
     );
     expect(eventSource.mock.calls[0]?.[1]).toEqual({ withCredentials: true });
     expect(String(eventSource.mock.calls[1]?.[0])).toBe(
-      `${window.location.origin}/api/polls/poll%202/results/events?after=5`,
+      `${window.location.origin}/api/polls/poll%202/results/events`,
     );
     expect(eventSource.mock.calls[1]?.[1]).toEqual({ withCredentials: true });
     expect(String(eventSource.mock.calls[2]?.[0])).toBe(
-      `${window.location.origin}/api/polls/direct/018f47b1-5c4e-7c7b-9e6f-0c8c2f7281ad/results/events?after=3`,
+      `${window.location.origin}/api/polls/direct/018f47b1-5c4e-7c7b-9e6f-0c8c2f7281ad/results/events`,
     );
     expect(eventSource.mock.calls[2]?.[1]).toEqual({ withCredentials: true });
   });

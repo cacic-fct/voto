@@ -4,11 +4,11 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
   Put,
-  Query,
   Req,
   Res,
   Sse,
@@ -185,9 +185,9 @@ export class AdminPollsController {
   streamPollResults(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
-    @Query('after') after?: string,
+    @Headers('last-event-id') lastEventId?: string,
   ): Observable<MessageEvent> {
-    return this.polls.streamAdminPollResults(id, this.parseResultCursor(after), this.getUser(request));
+    return this.polls.streamAdminPollResults(id, lastEventId, this.getUser(request));
   }
 
   @Get(':id/cacic-election/slates')
@@ -355,11 +355,6 @@ export class AdminPollsController {
     }
 
     return request.user;
-  }
-
-  private parseResultCursor(value: string | undefined): number {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
   }
 
   private getPollImages(): PollImagesService {

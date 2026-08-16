@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, MessageEvent, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, MessageEvent, NotFoundException, Optional } from '@nestjs/common';
 import {
   PollResponseAnswer,
   PollResults,
@@ -7,7 +7,8 @@ import {
   PollResultsVoter,
 } from '@org/voting-contracts';
 import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle, Prisma } from '@prisma/client';
-import { Observable, Subscriber } from 'rxjs';
+import { concatMap, defer, Observable, Subscriber, switchMap } from 'rxjs';
+import { SseReplayService } from '../realtime/sse-replay.service';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -17,6 +18,7 @@ import {
 } from './poll-admin-access';
 import { requireAuthenticatedVoter } from './poll-auth';
 import { PollEligibilityService } from './poll-eligibility.service';
+import { PollResultsRealtimeService } from './poll-results-realtime.service';
 import { normalizeDirectLinkToken } from './poll-identifiers';
 import {
   PollResultResponseRecord,
@@ -37,6 +39,8 @@ export class PollResultsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eligibility: PollEligibilityService,
+    @Optional() private readonly realtime?: PollResultsRealtimeService,
+    @Optional() private readonly replay?: SseReplayService,
   ) {}
 
   async getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
@@ -96,20 +100,40 @@ export class PollResultsService {
     return this.toPollResults(poll, responses, 'public', { responseCount: responses.length });
   }
 
-  streamAdminPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+  streamAdminPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
     const audience = user ? resolveAdminPollAudience(user) : 'admin';
-    return this.streamPollResults(id, after, audience, user);
+    return this.streamPollResults(id, lastEventId, audience, user);
   }
 
-  streamPublicPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
-    return this.streamPollResults(id, after, 'public', user);
+  streamPublicPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+    return this.streamPollResults(id, lastEventId, 'public', user);
   }
 
   streamDirectLinkPublicPollResults(
     directLinkToken: string,
-    after: number,
+    lastEventId: string | undefined,
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
+    if (this.realtime && this.replay) {
+      const realtime = this.realtime;
+      const replay = this.replay;
+      return defer(async () => {
+        const poll = await this.getDirectLinkPollResultsMetadata(directLinkToken);
+        this.assertPublicResultsVisible(poll);
+        requireAuthenticatedVoter(user);
+        return poll.id;
+      }).pipe(switchMap((pollId) => {
+        const scope = realtime.scope('public', pollId);
+        const source = realtime.watch(scope).pipe(concatMap(async (event) => {
+          const poll = await this.getDirectLinkPollResultsMetadata(directLinkToken);
+          this.assertPublicResultsVisible(poll);
+          requireAuthenticatedVoter(user);
+          if (poll.id !== pollId) throw new ForbiddenException('Poll access changed.');
+          return event;
+        }));
+        return replay.replay(scope, lastEventId, source);
+      }));
+    }
     return new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
 
@@ -118,6 +142,7 @@ export class PollResultsService {
         this.assertPublicResultsVisible(poll);
         requireAuthenticatedVoter(user);
 
+        const after = 0;
         const catchUp = await this.getPollResultsDelta(poll, after, 'public');
         if (catchUp.responses.length > 0 || catchUp.responseCount !== after) {
           subscriber.next({ data: catchUp });
@@ -136,18 +161,24 @@ export class PollResultsService {
     });
   }
 
-  async publishPollResultsForResponse(pollId: string): Promise<void> {
-    if (!this.resultSubscribers.has(pollId)) {
+  async publishPollResultsForResponse(pollId: string, final = false): Promise<void> {
+    if (!this.realtime && !this.resultSubscribers.has(pollId)) {
       return;
     }
-
     const poll = await this.getPollResultsMetadata(pollId);
-    const responseCount = await this.countPollResponses(pollId);
-    this.publishPollResults({
-      admin: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'admin'),
-      observer: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'observer'),
-      public: await this.getPollResultsDelta(poll, Math.max(0, responseCount - 1), 'public'),
-    });
+    const event = {
+      admin: { ...(await this.getPollResultsDelta(poll, 0, 'admin')), ...(final ? { final: true } : {}) },
+      observer: { ...(await this.getPollResultsDelta(poll, 0, 'observer')), ...(final ? { final: true } : {}) },
+      public: { ...(await this.getPollResultsDelta(poll, 0, 'public')), ...(final ? { final: true } : {}) },
+    };
+    this.publishPollResults(event);
+    if (this.realtime) {
+      await Promise.all([
+        this.realtime.publish(this.realtime.scope('admin', pollId), event.admin),
+        this.realtime.publish(this.realtime.scope('observer', pollId), event.observer),
+        this.realtime.publish(this.realtime.scope('public', pollId), event.public),
+      ]);
+    }
   }
 
   async getPollResultsMetadata(id: string): Promise<PollResultsMetadata> {
@@ -401,10 +432,34 @@ export class PollResultsService {
 
   private streamPollResults(
     id: string,
-    after: number,
+    lastEventId: string | undefined,
     audience: AdminPollAudience | 'public',
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
+    if (this.realtime && this.replay) {
+      const realtime = this.realtime;
+      const replay = this.replay;
+      return defer(async () => {
+        const poll = await this.getPollResultsMetadata(id);
+        if (audience === 'observer') assertObserverCanReadElectionPoll(poll);
+        if (audience === 'public') {
+          this.assertPublicResultsVisible(poll);
+          await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+        }
+      }).pipe(switchMap(() => {
+        const scope = realtime.scope(audience, id);
+        const source = realtime.watch(scope).pipe(concatMap(async (event) => {
+          const poll = await this.getPollResultsMetadata(id);
+          if (audience === 'observer') assertObserverCanReadElectionPoll(poll);
+          if (audience === 'public') {
+            this.assertPublicResultsVisible(poll);
+            await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+          }
+          return event;
+        }));
+        return replay.replay(scope, lastEventId, source);
+      }));
+    }
     return new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
 
@@ -418,6 +473,7 @@ export class PollResultsService {
           await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
         }
 
+        const after = 0;
         const catchUp = await this.getPollResultsDelta(poll, after, audience);
         if (catchUp.responses.length > 0 || catchUp.responseCount !== after) {
           subscriber.next({ data: catchUp });

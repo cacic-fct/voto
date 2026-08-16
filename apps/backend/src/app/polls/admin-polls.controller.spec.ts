@@ -112,11 +112,11 @@ describe('AdminPollsController', () => {
     expect(response.send).toHaveBeenCalledWith('24123456\n25123456');
 
     const events = controller.streamPollResults('poll-1', request, '3');
-    expect(polls.streamAdminPollResults).toHaveBeenCalledWith('poll-1', 3, request.user);
+    expect(polls.streamAdminPollResults).toHaveBeenCalledWith('poll-1', '3', request.user);
     await expect(new Promise((resolve) => events.subscribe(resolve))).resolves.toEqual({ data: { pollId: 'poll-1' } });
 
     controller.streamPollResults('poll-1', request, 'bad');
-    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith('poll-1', 0, request.user);
+    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith('poll-1', 'bad', request.user);
   });
 
   it('delegates write operations with the authenticated user', async () => {

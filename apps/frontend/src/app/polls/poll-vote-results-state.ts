@@ -8,16 +8,12 @@ export function applyResultsDelta(
     return current;
   }
 
-  const existingResponses = new Map(
-    current.responses.map((response) => [response.id, response]),
-  );
-  for (const response of delta.responses) {
-    existingResponses.set(response.id, response);
-  }
-
   return {
     ...current,
+    answersReleased: delta.answersReleased ?? current.answersReleased,
     responseCount: delta.responseCount,
-    responses: [...existingResponses.values()],
+    voterCount: delta.voterCount ?? current.voterCount,
+    voters: delta.voters ?? current.voters,
+    responses: delta.responses,
   };
 }

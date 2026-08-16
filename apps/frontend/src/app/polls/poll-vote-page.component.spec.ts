@@ -697,7 +697,7 @@ describe('PollVotePageComponent', () => {
     expect(component.submitButtonLabel()).toBe('Salvar edição');
   });
 
-  it('should load public results, open live events, and merge result deltas', async () => {
+  it('should load public results, open live events, and apply result snapshots', async () => {
     const eventSource = { close: vi.fn(), onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined };
     const component = fixture.componentInstance as unknown as {
       results: { (): PollResults | null };
@@ -716,7 +716,10 @@ describe('PollVotePageComponent', () => {
     const delta = {
       pollId: poll.id,
       responseCount: 2,
-      responses: [{ id: 'response-2', submittedAt: '2026-06-16T10:05:00.000Z', answers: [] }],
+      responses: [
+        initialResults.responses[0],
+        { id: 'response-2', submittedAt: '2026-06-16T10:05:00.000Z', answers: [] },
+      ],
     };
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(of(initialResults));
     vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(eventSource as unknown as EventSource);

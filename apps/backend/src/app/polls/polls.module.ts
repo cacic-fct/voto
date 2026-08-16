@@ -18,6 +18,8 @@ import { PollMutationsService } from './poll-mutations.service';
 import { PollQueryService } from './poll-query.service';
 import { PollResponsesService } from './poll-responses.service';
 import { PollResultsService } from './poll-results.service';
+import { PollResultsRealtimeService } from './poll-results-realtime.service';
+import { SseReplayService } from '../realtime/sse-replay.service';
 import { PollsService } from './polls.service';
 import { PublicPollsController } from './public-polls.controller';
 
@@ -39,9 +41,11 @@ import { PublicPollsController } from './public-polls.controller';
     PollMutationsService,
     PollQueryService,
     PollResponsesService,
+    PollResultsRealtimeService,
     PollResultsService,
     PollsService,
     S3Service,
+    SseReplayService,
   ],
 })
 export class PollsModule {}

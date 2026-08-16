@@ -143,7 +143,7 @@ describe('PublicPollResultsPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Comentário público');
   });
 
-  it('should summarize answers and merge live result deltas', () => {
+  it('should summarize answers and apply live result snapshots', () => {
     const eventSource = {
       close: vi.fn(),
       onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
@@ -153,6 +153,7 @@ describe('PublicPollResultsPageComponent', () => {
       pollId: poll.id,
       responseCount: 2,
       responses: [
+        results.responses[0],
         {
           id: 'response-2',
           answers: [{ elementId: 'choice', value: 'b' }],

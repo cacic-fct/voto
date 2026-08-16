@@ -1,4 +1,4 @@
-import { Injectable, MessageEvent, Optional } from '@nestjs/common';
+import { Injectable, Logger, MessageEvent, Optional } from '@nestjs/common';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -94,6 +94,7 @@ import { parseStringList, toPollResultsVoter } from './poll-user-claims';
 
 @Injectable()
 export class PollsService {
+  private readonly logger = new Logger(PollsService.name);
   private readonly eligibility: PollEligibilityService;
   private readonly mutations: PollMutationsService;
   private readonly query: PollQueryService;
@@ -208,20 +209,20 @@ export class PollsService {
     return this.results.getDirectLinkPublicPollResults(directLinkToken, user);
   }
 
-  streamAdminPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
-    return this.results.streamAdminPollResults(id, after, user);
+  streamAdminPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+    return this.results.streamAdminPollResults(id, lastEventId, user);
   }
 
-  streamPublicPollResults(id: string, after: number, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
-    return this.results.streamPublicPollResults(id, after, user);
+  streamPublicPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+    return this.results.streamPublicPollResults(id, lastEventId, user);
   }
 
   streamDirectLinkPublicPollResults(
     directLinkToken: string,
-    after: number,
+    lastEventId: string | undefined,
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
-    return this.results.streamDirectLinkPublicPollResults(directLinkToken, after, user);
+    return this.results.streamDirectLinkPublicPollResults(directLinkToken, lastEventId, user);
   }
 
   getPollResultsDelta(
@@ -240,8 +241,16 @@ export class PollsService {
     return this.mutations.updatePoll(id, input, user);
   }
 
-  updatePollStatus(id: string, status: PollStatus, user: AuthenticatedPrincipal): Promise<Poll> {
-    return this.mutations.updatePollStatus(id, status, user);
+  async updatePollStatus(id: string, status: PollStatus, user: AuthenticatedPrincipal): Promise<Poll> {
+    const poll = await this.mutations.updatePollStatus(id, status, user);
+    if (status === 'closed') {
+      try {
+        await this.results.publishPollResultsForResponse(id, true);
+      } catch (error) {
+        this.logger.warn(`Could not publish the final results for closed poll ${id}.`, error);
+      }
+    }
+    return poll;
   }
 
   deletePoll(id: string): Promise<void> {

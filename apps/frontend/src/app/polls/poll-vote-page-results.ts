@@ -84,6 +84,9 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
+        if (delta.final) {
+          void this.reconcileFinalResults(pollId);
+        }
       }
     };
     this.resultsEvents = source;
@@ -91,6 +94,14 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
 
   private applyResultsDelta(delta: PollResultsDelta): void {
     this.results.update((current) => applyResultsDeltaToResults(current, delta));
+  }
+
+  private async reconcileFinalResults(pollId: string): Promise<void> {
+    try {
+      this.results.set(await firstValueFrom(this.getPublicPollResults(pollId)));
+    } finally {
+      this.closeResultsEvents();
+    }
   }
 
   private isPollVotingOpen(poll: Poll): boolean {

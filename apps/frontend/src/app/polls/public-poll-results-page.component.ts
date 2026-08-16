@@ -247,6 +247,9 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
+        if (delta.final) {
+          void this.reconcileFinalResults(pollId);
+        }
       }
     };
     this.resultsEvents = source;
@@ -263,22 +266,23 @@ export class PublicPollResultsPageComponent implements OnDestroy {
         return current;
       }
 
-      const existingResponses = new Map(
-        current.responses.map((response) => [response.id, response]),
-      );
-      for (const response of delta.responses) {
-        existingResponses.set(response.id, response);
-      }
-
       return {
         ...current,
         answersReleased: delta.answersReleased ?? current.answersReleased,
         responseCount: delta.responseCount,
         voterCount: delta.voterCount ?? current.voterCount,
         voters: delta.voters ?? current.voters,
-        responses: [...existingResponses.values()],
+        responses: delta.responses,
       };
     });
+  }
+
+  private async reconcileFinalResults(pollId: string): Promise<void> {
+    try {
+      this.results.set(await firstValueFrom(this.getResults(pollId)));
+    } finally {
+      this.closeResultsEvents();
+    }
   }
 
   private buildQuestionSummary(

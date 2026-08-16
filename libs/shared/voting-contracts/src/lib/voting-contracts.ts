@@ -286,6 +286,7 @@ export type PollResults = {
 
 export type PollResultsDelta = {
   pollId: string;
+  final?: boolean;
   answersReleased?: boolean;
   responseCount: number;
   voterCount?: number;

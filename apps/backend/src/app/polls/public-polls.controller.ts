@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Req, Res, Sse } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Req, Res, Sse } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
 import { ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type {
@@ -89,11 +89,11 @@ export class PublicPollsController {
   streamDirectLinkPollResults(
     @Param('directLinkToken') directLinkToken: string,
     @Req() request: AuthenticatedRequest,
-    @Query('after') after?: string,
+    @Headers('last-event-id') lastEventId?: string,
   ): Observable<MessageEvent> {
     return this.polls.streamDirectLinkPublicPollResults(
       directLinkToken,
-      this.parseResultCursor(after),
+      lastEventId,
       request.user,
     );
   }
@@ -196,9 +196,9 @@ export class PublicPollsController {
   streamPollResults(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
-    @Query('after') after?: string,
+    @Headers('last-event-id') lastEventId?: string,
   ): Observable<MessageEvent> {
-    return this.polls.streamPublicPollResults(id, this.parseResultCursor(after), request.user);
+    return this.polls.streamPublicPollResults(id, lastEventId, request.user);
   }
 
   @Post(':id/responses')
@@ -210,11 +210,6 @@ export class PublicPollsController {
     @Body() body: SubmitPollResponseDto,
   ): Promise<PollResponse> {
     return this.polls.submitResponse(id, body, request.user);
-  }
-
-  private parseResultCursor(value: string | undefined): number {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
   }
 
   private getPollImages(): PollImagesService {

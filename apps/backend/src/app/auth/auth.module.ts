@@ -25,6 +25,6 @@ import { getRedisConnectionOptions } from './redis-connection';
       useClass: AuthGuard,
     },
   ],
-  exports: [KeycloakAuthService, KeycloakM2mTokenService],
+  exports: [KeycloakAuthService, KeycloakM2mTokenService, Redis],
 })
 export class AuthModule {}

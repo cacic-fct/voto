@@ -96,6 +96,9 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
+        if (delta.final) {
+          void this.reconcileFinalResults(pollId);
+        }
       }
     };
     this.resultsEvents = source;
@@ -107,20 +110,27 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
         return current;
       }
 
-      const existingResponses = new Map(current.responses.map((response) => [response.id, response]));
-      for (const response of delta.responses) {
-        existingResponses.set(response.id, response);
-      }
-
       return {
         ...current,
+        answersReleased: delta.answersReleased ?? current.answersReleased,
         responseCount: delta.responseCount,
-        responses: [...existingResponses.values()],
+        voterCount: delta.voterCount ?? current.voterCount,
+        voters: delta.voters ?? current.voters,
+        responses: delta.responses,
       };
     });
 
     if (!this.selectedIndividualResponseId()) {
       this.selectedIndividualResponseId.set(delta.responses.find((response) => response.voter)?.id ?? null);
+    }
+  }
+
+  private async reconcileFinalResults(pollId: string): Promise<void> {
+    try {
+      const results = await firstValueFrom(this.api.getAdminPollResults(pollId));
+      this.results.set(results);
+    } finally {
+      this.closeResultsEvents();
     }
   }
 }

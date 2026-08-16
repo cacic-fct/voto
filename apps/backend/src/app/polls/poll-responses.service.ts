@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PollResponse, PollResponseAnswer, PollUserResponseState } from '@org/voting-contracts';
 import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -26,6 +26,7 @@ import {
 
 @Injectable()
 export class PollResponsesService {
+  private readonly logger = new Logger(PollResponsesService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly eligibility: PollEligibilityService,
@@ -57,7 +58,7 @@ export class PollResponsesService {
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter.sub, answers);
-    await this.results.publishPollResultsForResponse(poll.id);
+    await this.publishResultsBestEffort(poll.id);
 
     return toContractPollResponse(response);
   }
@@ -88,7 +89,7 @@ export class PollResponsesService {
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter.sub, answers);
-    await this.results.publishPollResultsForResponse(poll.id);
+    await this.publishResultsBestEffort(poll.id);
 
     return toContractPollResponse(response);
   }
@@ -124,6 +125,14 @@ export class PollResponsesService {
     const voter = requireAuthenticatedVoter(user);
     await this.eligibility.ensureVotingAllowed(poll, voter);
     return this.readUserResponseState(poll, voter);
+  }
+
+  private async publishResultsBestEffort(pollId: string): Promise<void> {
+    try {
+      await this.results.publishPollResultsForResponse(pollId);
+    } catch (error) {
+      this.logger.warn(`Could not publish the committed poll response for ${pollId}.`, error);
+    }
   }
 
   async getDirectLinkUserResponseState(

@@ -240,9 +240,9 @@ export class PollApiService {
     }
   }
 
-  private openResultsEvents(path: string, after: number): EventSource {
+  private openResultsEvents(path: string, _after: number): EventSource {
+    void _after;
     const url = new URL(path, globalThis.location.origin);
-    url.searchParams.set('after', String(Math.max(0, after)));
     return new EventSource(url, { withCredentials: true });
   }
 }
