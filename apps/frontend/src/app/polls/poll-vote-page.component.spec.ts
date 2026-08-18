@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -128,6 +128,7 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
+              data: {},
               paramMap: {
                 get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
               },
@@ -147,9 +148,12 @@ describe('PollVotePageComponent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('should load the selected poll', () => {
+  it('should load the selected poll', async () => {
     expect(api.getPublicPoll).toHaveBeenCalledWith('poll-1');
-    expect(fixture.nativeElement.textContent).toContain('Eleição CACiC');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Eleição CACiC');
+    });
   });
 
   it('should load and submit CACiC election slates during slate submission', async () => {
@@ -942,6 +946,7 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
+              data: {},
               paramMap: {
                 get: vi.fn().mockReturnValue(null),
               },
@@ -972,6 +977,7 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
+	              data: {},
 	              paramMap: {
 	                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
 	              },
@@ -984,9 +990,11 @@ describe('PollVotePageComponent', () => {
     failingFixture.detectChanges();
     await failingFixture.whenStable();
 
-    expect((failingFixture.componentInstance as unknown as { error: { (): string | null } }).error()).toBe(
-      'Não foi possível carregar a votação.',
-    );
+    await vi.waitFor(() => {
+      expect((failingFixture.componentInstance as unknown as { error: { (): string | null } }).error()).toBe(
+        'Não foi possível carregar a votação.',
+      );
+    });
   });
 
   it('should load direct-link polls and use direct-link response and result APIs', async () => {
@@ -1032,6 +1040,7 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
+              data: {},
               paramMap: {
                 get: vi.fn((name: string) => (name === 'directLinkToken' ? 'direct-token' : null)),
               },
@@ -1091,6 +1100,7 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
+              data: {},
               paramMap: {
                 get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
               },
@@ -1122,5 +1132,88 @@ describe('PollVotePageComponent', () => {
     expect(component.mySlate()).toBeNull();
     expect(component.error()).toBe('Não foi possível enviar a chapa. Confira os campos obrigatórios.');
     expect(serverApi.openPublicPollResultsEvents).not.toHaveBeenCalled();
+  });
+
+  it('uses the isolated kiosk APIs, hides public results, and returns after submission', async () => {
+    TestBed.resetTestingModule();
+    vi.mocked(api.getPublicPoll).mockClear();
+    const kioskPoll = {
+      ...poll,
+      resultsPublic: true,
+      resultsLive: true,
+    };
+    const kioskApi = {
+      ...api,
+      getKioskVotingContext: vi.fn().mockReturnValue(
+        of({
+          poll: kioskPoll,
+          voter: {
+            displayName: 'Pessoa Eleitora',
+            maskedPrimaryEmail: 'pe***@example.com',
+          },
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+      getKioskVoterResponse: vi.fn().mockReturnValue(
+        of({
+          hasSubmitted: false,
+          canEdit: false,
+          canSubmitAnother: false,
+        }),
+      ),
+      submitKioskResponse: vi.fn().mockReturnValue(of(response)),
+      cancelKioskAuthorization: vi.fn().mockReturnValue(of(undefined)),
+      listKioskCacicElectionSlates: vi.fn().mockReturnValue(of([])),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: kioskApi },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              data: { mode: 'kiosk' },
+              paramMap: {
+                get: vi.fn((name: string) =>
+                  name === 'id' ? 'poll-1' : null,
+                ),
+              },
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const kioskFixture = TestBed.createComponent(PollVotePageComponent);
+    kioskFixture.detectChanges();
+    await kioskFixture.whenStable();
+    kioskFixture.detectChanges();
+    const component = kioskFixture.componentInstance as unknown as {
+      submit(poll: Poll): Promise<void>;
+      shouldShowPublicResults(poll: Poll): boolean;
+    };
+
+    expect(kioskApi.getPublicPoll).not.toHaveBeenCalled();
+    expect(kioskApi.getKioskVotingContext).toHaveBeenCalledWith('poll-1');
+    await vi.waitFor(() => {
+      kioskFixture.detectChanges();
+      expect(kioskApi.getKioskVoterResponse).toHaveBeenCalledWith('poll-1');
+      expect(kioskFixture.nativeElement.textContent).toContain(
+        'Voto autorizado para Pessoa Eleitora',
+      );
+    });
+    expect(component.shouldShowPublicResults(kioskPoll)).toBe(false);
+
+    await component.submit(kioskPoll);
+    expect(kioskApi.submitKioskResponse).toHaveBeenCalledWith('poll-1', {
+      answers: [{ elementId: 'element-1', value: null }],
+    });
+    expect(navigate).toHaveBeenCalledWith(
+      ['/admin/polls', 'poll-1', 'kiosk'],
+      { replaceUrl: true, queryParams: { registered: '1' } },
+    );
   });
 });

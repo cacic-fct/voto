@@ -20,7 +20,7 @@ import {
 } from './poll-contract.mapper';
 import { PollEligibilityService } from './poll-eligibility.service';
 import { normalizeDirectLinkToken } from './poll-identifiers';
-import { PollRecord, pollInclude } from './poll-records';
+import { PollContractOptions, PollRecord, pollInclude } from './poll-records';
 import { publicReadablePollWhere, shouldRequireVotingEligibilityForRead } from './poll-visibility';
 
 @Injectable()
@@ -90,6 +90,20 @@ export class PollQueryService {
   }
 
   async getPublishedPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+    return this.getPublishedPollWithOptions(id, user);
+  }
+
+  async getPublishedPollForKiosk(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+    return this.getPublishedPollWithOptions(id, user, {
+      imageBasePath: `/api/admin/polls/${encodeURIComponent(id)}/kiosk/images`,
+    });
+  }
+
+  private async getPublishedPollWithOptions(
+    id: string,
+    user?: AuthenticatedPrincipal,
+    contractOptions: PollContractOptions = {},
+  ): Promise<Poll> {
     const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
@@ -108,7 +122,7 @@ export class PollQueryService {
       await this.eligibility.ensureVotingAllowed(poll, voter);
     }
 
-    return toContractPoll(poll);
+    return toContractPoll(poll, contractOptions);
   }
 
   async getPublishedPollByDirectLink(directLinkToken: string, user?: AuthenticatedPrincipal): Promise<Poll> {

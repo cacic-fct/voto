@@ -12,6 +12,8 @@ describe('serverRoutes', () => {
       { path: 'polls/direct/:directLinkToken', renderMode: RenderMode.Client },
       { path: 'polls/:id/results', renderMode: RenderMode.Client },
       { path: 'polls/:id', renderMode: RenderMode.Client },
+      { path: 'admin/polls/:id/kiosk/vote', renderMode: RenderMode.Client },
+      { path: 'admin/polls/:id/kiosk', renderMode: RenderMode.Client },
       { path: 'admin', renderMode: RenderMode.Client },
       { path: '**', renderMode: RenderMode.Client },
     ]);

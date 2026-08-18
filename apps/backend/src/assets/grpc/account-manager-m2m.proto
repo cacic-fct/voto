@@ -16,9 +16,9 @@ message TotpSeedResponse { string user_id = 1; string primary_email = 2; string 
 message ValidateTotpRequest { string primary_email = 1; string code = 2; }
 message ValidateTotpResponse { bool valid = 1; string server_time = 2; optional string user_id = 3; optional string primary_email = 4; optional int32 matched_step_offset = 5; }
 message EnrollmentLookupRequest { repeated string enrollment_numbers = 1; }
-message UserProfile { string user_id = 1; optional string enrollment_number = 2; string name = 3; optional string email = 4; }
+message UserProfile { string user_id = 1; optional string enrollment_number = 2; string name = 3; optional string email = 4; repeated string secondary_emails = 5; optional string unesp_role = 6; optional bool unesp_role_verified = 7; }
 message UserLookupResponse { repeated UserProfile users = 1; }
 message IdentifierLookupItem { string request_id = 1; string identifier_type = 2; string identifier_value = 3; }
 message IdentifierLookupRequest { repeated IdentifierLookupItem identifiers = 1; }
-message IdentifierLookupMatch { string request_id = 1; string user_id = 2; optional string enrollment_number = 3; string name = 4; optional string email = 5; }
+message IdentifierLookupMatch { string request_id = 1; string user_id = 2; optional string enrollment_number = 3; string name = 4; optional string email = 5; repeated string secondary_emails = 6; optional string unesp_role = 7; optional bool unesp_role_verified = 8; }
 message IdentifierLookupResponse { repeated IdentifierLookupMatch users = 1; }

@@ -1,10 +1,13 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { EventManagerEvent, Poll, PollEligibilityEnrollment, PollElement, PollResults, PollSummary } from '@org/voting-contracts';
 import { of, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from '../polls/poll-api.service';
+import { PermissionsService } from '../auth/permissions.service';
 import {
   answerValueLabel,
   formatDateLabel,
@@ -53,6 +56,11 @@ describe('AdminPollBuilderPageComponent', () => {
 	  >;
   let snackBar: Pick<MatSnackBar, 'open'>;
   let dialog: Pick<MatDialog, 'open'>;
+  const permissions: Pick<PermissionsService, 'canManageAdmin' | 'canUseKiosk' | 'isAdmin'> = {
+    canManageAdmin: signal(true),
+    canUseKiosk: signal(true),
+    isAdmin: signal(true),
+  };
 
   const event: EventManagerEvent = {
     id: 'event-1',
@@ -150,9 +158,11 @@ describe('AdminPollBuilderPageComponent', () => {
     TestBed.configureTestingModule({
       imports: [AdminPollBuilderPageComponent],
       providers: [
+        provideRouter([]),
         { provide: PollApiService, useValue: api },
         { provide: MatSnackBar, useValue: snackBar },
         { provide: MatDialog, useValue: dialog },
+        { provide: PermissionsService, useValue: permissions },
       ],
     });
     TestBed.overrideProvider(MatSnackBar, { useValue: snackBar });
@@ -175,6 +185,24 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Área restrita');
     expect(fixture.nativeElement.textContent).toContain('Assembleia CACiC');
     expect(fixture.nativeElement.textContent).toContain('Vincular votação a um evento');
+  });
+
+  it('shows the kiosk deep link only for a saved published poll', () => {
+    const component = fixture.componentInstance as unknown as {
+      builder: PollBuilderDraftService;
+    };
+
+    component.builder.setDraft({ ...poll, id: 'poll-1', status: 'published' });
+    fixture.detectChanges();
+    const kioskLink = [...fixture.nativeElement.querySelectorAll('a')].find(
+      (link: HTMLAnchorElement) => link.textContent?.includes('Abrir quiosque'),
+    ) as HTMLAnchorElement | undefined;
+    expect(kioskLink?.getAttribute('href')).toBe('/admin/polls/poll-1/kiosk');
+    expect(kioskLink?.getAttribute('target')).toBe('_blank');
+
+    component.builder.setDraft({ ...poll, id: 'poll-1', status: 'draft' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Abrir quiosque');
   });
 
 	  it('should save a new poll draft', async () => {

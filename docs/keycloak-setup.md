@@ -33,6 +33,7 @@ Users can access `Area restrita` when either of these is true:
   - `poll#edit`
   - `poll#delete`
   - `poll#publish`
+  - `poll#kiosk` (required to authorize kiosk ballots)
 
 Expose roles and permissions in tokens with Keycloak protocol mappers, or keep permissions in the sister authorization resource and let `/api/auth/permissions/evaluate` check them.
 
@@ -49,12 +50,17 @@ Copy its secret into `KEYCLOAK_M2M_CLIENT_SECRET`. Grant the service account:
 
 - Event Manager access for `/internal/voting/events` and attendance checks.
 - Account Manager `users:read` on `cacic-account-manager-audience` for fresh Keycloak user lookups.
+- Account Manager `totp:validate` on `cacic-account-manager-audience` for kiosk voter authorization. Do not grant `totp:relay`.
 
 In local development, use:
 
 ```bash
 EVENT_MANAGER_M2M_AUDIENCE="cacic-event-manager-api"
 ACCOUNT_MANAGER_M2M_AUDIENCE="cacic-account-manager-audience"
+POLL_KIOSK_AUTHORIZATION_TTL_SECONDS="600"
+POLL_KIOSK_ATTEMPT_WINDOW_SECONDS="300"
+POLL_KIOSK_SESSION_ATTEMPT_LIMIT="5"
+POLL_KIOSK_GLOBAL_EMAIL_ATTEMPT_LIMIT="15"
 ```
 
 ## Environment

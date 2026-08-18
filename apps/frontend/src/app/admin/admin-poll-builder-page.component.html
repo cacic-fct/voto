@@ -72,6 +72,17 @@
           </button>
         }
         @if (builder.draft().id) {
+          @if (canOpenKiosk()) {
+            <a
+              mat-stroked-button
+              [routerLink]="['/admin/polls', builder.draft().id, 'kiosk']"
+              target="_blank"
+              rel="noopener"
+            >
+              <mat-icon>point_of_sale</mat-icon>
+              Abrir quiosque
+            </a>
+          }
           <button mat-stroked-button type="button" [disabled]="saving()" (click)="copyPollLink()">
             <mat-icon>content_copy</mat-icon>
             Copiar link

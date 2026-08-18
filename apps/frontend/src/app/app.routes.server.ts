@@ -30,6 +30,14 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Client,
   },
   {
+    path: 'admin/polls/:id/kiosk/vote',
+    renderMode: RenderMode.Client,
+  },
+  {
+    path: 'admin/polls/:id/kiosk',
+    renderMode: RenderMode.Client,
+  },
+  {
     path: 'admin',
     renderMode: RenderMode.Client,
   },

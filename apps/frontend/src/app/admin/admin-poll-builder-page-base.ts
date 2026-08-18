@@ -153,6 +153,14 @@ export abstract class AdminPollBuilderPageBase {
     );
   });
   protected readonly isReadOnlyAdmin = computed(() => this.permissions.isAdmin() && !this.permissions.canManageAdmin());
+  protected readonly canOpenKiosk = computed(() => {
+    const draft = this.builder.draft();
+    return Boolean(
+      draft.id &&
+        draft.status === 'published' &&
+        this.permissions.canUseKiosk(),
+    );
+  });
 
   protected abstract loadEligibilityEnrollments(showLoading?: boolean): Promise<void>;
   protected abstract resetResults(): void;

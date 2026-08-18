@@ -109,9 +109,11 @@ export function toContractImages(images: ImageRecord[], options: PollContractOpt
     .sort((left, right) => left.position - right.position)
     .map((image) => ({
       id: image.id,
-      url: options.imageDirectLinkToken
-        ? `/api/polls/direct/${encodeURIComponent(options.imageDirectLinkToken)}/images/${encodeURIComponent(image.id)}`
-        : `/api/polls/${encodeURIComponent(image.pollId)}/images/${encodeURIComponent(image.id)}`,
+      url: options.imageBasePath
+        ? `${options.imageBasePath}/${encodeURIComponent(image.id)}`
+        : options.imageDirectLinkToken
+          ? `/api/polls/direct/${encodeURIComponent(options.imageDirectLinkToken)}/images/${encodeURIComponent(image.id)}`
+          : `/api/polls/${encodeURIComponent(image.pollId)}/images/${encodeURIComponent(image.id)}`,
       width: image.width,
       height: image.height,
       altText: image.altText ?? undefined,

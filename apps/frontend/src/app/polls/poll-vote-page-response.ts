@@ -30,12 +30,27 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
       const response = await firstValueFrom(
         this.submitPollResponse(poll, { answers }),
       );
+      if (this.isKioskMode) {
+        this.snackBar.open('Voto registrado.', 'OK', { duration: 3000 });
+        await this.router.navigate(
+          ['/admin/polls', poll.id, 'kiosk'],
+          { replaceUrl: true, queryParams: { registered: '1' } },
+        );
+        return;
+      }
       this.applySubmittedResponseState(poll, response);
       this.snackBar.open(this.submitSuccessMessage(poll, wasEditing), 'OK', {
         duration: 3000,
       });
     } catch (error) {
-      this.error.set(this.submitErrorMessage(error));
+      if (this.isKioskMode) {
+        await this.router.navigate(
+          ['/admin/polls', poll.id, 'kiosk'],
+          { replaceUrl: true, queryParams: { reason: 'submit' } },
+        );
+      } else {
+        this.error.set(this.submitErrorMessage(error));
+      }
     } finally {
       this.saving.set(false);
     }
@@ -66,15 +81,29 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
     poll: Poll,
     request: { answers: PollResponseAnswer[] },
   ) {
-    return this.pollAccess?.kind === 'directLink'
+    return this.isKioskMode
+      ? this.api.submitKioskResponse(poll.id, request)
+      : this.pollAccess?.kind === 'directLink'
       ? this.api.submitDirectLinkResponse(this.pollAccess.value, request)
       : this.api.submitResponse(poll.id, request);
   }
 
   private getMyPollResponse(pollId: string) {
-    return this.pollAccess?.kind === 'directLink'
+    return this.isKioskMode
+      ? this.api.getKioskVoterResponse(pollId)
+      : this.pollAccess?.kind === 'directLink'
       ? this.api.getMyDirectLinkPollResponse(this.pollAccess.value)
       : this.api.getMyPollResponse(pollId);
+  }
+
+  protected async cancelKioskVote(pollId: string): Promise<void> {
+    try {
+      await firstValueFrom(this.api.cancelKioskAuthorization(pollId));
+    } finally {
+      await this.router.navigate(['/admin/polls', pollId, 'kiosk'], {
+        replaceUrl: true,
+      });
+    }
   }
 
   private submitErrorMessage(error: unknown): string {

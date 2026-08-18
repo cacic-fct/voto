@@ -175,6 +175,10 @@ export class PollsService {
     return this.query.getPublishedPoll(id, user);
   }
 
+  getPublishedPollForKiosk(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+    return this.query.getPublishedPollForKiosk(id, user);
+  }
+
   getPublishedPollByDirectLink(directLinkToken: string, user?: AuthenticatedPrincipal): Promise<Poll> {
     return this.query.getPublishedPollByDirectLink(directLinkToken, user);
   }

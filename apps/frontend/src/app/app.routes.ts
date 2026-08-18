@@ -1,5 +1,5 @@
 import { Route } from '@angular/router';
-import { adminGuard } from './auth/admin.guard';
+import { adminGuard, pollKioskGuard } from './auth/admin.guard';
 import { authGuard, redirectAuthenticatedGuard } from './auth/auth.guard';
 
 export const appRoutes: Route[] = [
@@ -46,6 +46,23 @@ export const appRoutes: Route[] = [
         path: 'polls/:id',
         loadComponent: () =>
           import('./polls/poll-vote-page.component').then((component) => component.PollVotePageComponent),
+      },
+      {
+        path: 'admin/polls/:id/kiosk/vote',
+        canActivate: [pollKioskGuard],
+        data: { mode: 'kiosk' },
+        loadComponent: () =>
+          import('./polls/poll-vote-page.component').then(
+            (component) => component.PollVotePageComponent,
+          ),
+      },
+      {
+        path: 'admin/polls/:id/kiosk',
+        canActivate: [pollKioskGuard],
+        loadComponent: () =>
+          import('./admin/poll-kiosk-page.component').then(
+            (component) => component.PollKioskPageComponent,
+          ),
       },
       {
         path: 'admin',

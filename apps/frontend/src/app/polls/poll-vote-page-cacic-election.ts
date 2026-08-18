@@ -109,7 +109,11 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
     this.loadingSlates.set(true);
     try {
       this.slates.set(
-        await firstValueFrom(this.api.listPublicCacicElectionSlates(poll.id)),
+        await firstValueFrom(
+          this.isKioskMode
+            ? this.api.listKioskCacicElectionSlates(poll.id)
+            : this.api.listPublicCacicElectionSlates(poll.id),
+        ),
       );
     } catch {
       this.slates.set([]);

@@ -31,6 +31,7 @@ export const VOTING_ADMIN_PERMISSIONS = [
   'poll#edit',
   'poll#delete',
   'poll#publish',
+  'poll#kiosk',
 ] as const;
 
 export type VotingAdminPermission = (typeof VOTING_ADMIN_PERMISSIONS)[number];
@@ -258,6 +259,22 @@ export type PollUserResponseState = {
   response?: PollResponse;
 };
 
+export type PollKioskAuthorizationRequest = {
+  primaryEmail: string;
+  totpCode: string;
+};
+
+export type PollKioskVoter = {
+  displayName: string;
+  maskedPrimaryEmail: string;
+};
+
+export type PollKioskVotingContext = {
+  poll: Poll;
+  voter: PollKioskVoter;
+  expiresAt: string;
+};
+
 export type PollResultsVoter = {
   userId: string;
   name?: string;
@@ -307,6 +324,9 @@ export type AccountManagerPerson = {
   enrollmentNumber?: string | null;
   name: string;
   email?: string | null;
+  secondaryEmails?: string[];
+  unespRole?: string;
+  unespRoleVerified?: boolean;
 };
 
 export type PollEligibilityEnrollment = {
@@ -488,5 +508,15 @@ export function hasVotingAdminWritePermission(
   const granted = new Set(normalizePermissions(permissions));
   return ['poll#create', 'poll#edit', 'poll#delete', 'poll#publish'].some(
     (permission) => granted.has(permission),
+  );
+}
+
+export function hasPollKioskPermission(
+  permissions: readonly string[],
+  roles: readonly string[] = [],
+): boolean {
+  return (
+    hasVotingAdminRole(roles) ||
+    normalizePermissions(permissions).includes('poll#kiosk')
   );
 }

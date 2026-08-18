@@ -1,0 +1,96 @@
+.kiosk-page {
+  display: grid;
+  width: min(100%, 44rem);
+  margin-inline: auto;
+  gap: 1.25rem;
+}
+
+.kiosk-header,
+.success-notice,
+.authorization-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kiosk-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding-bottom: 1rem;
+}
+
+.kiosk-header h1,
+.kiosk-header p,
+.security-note,
+.form-error {
+  margin: 0;
+}
+
+.kiosk-header h1 {
+  font: var(--mat-sys-headline-small);
+  text-wrap: balance;
+}
+
+.kiosk-header p,
+.security-note {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.success-notice {
+  align-items: flex-start;
+  border: 1px solid var(--mat-sys-primary);
+  border-radius: 12px;
+  padding: 1rem;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-primary-container);
+}
+
+.success-notice mat-icon {
+  color: var(--mat-sys-on-primary-container);
+}
+
+.success-notice div,
+.authorization-form {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.success-notice span {
+  color: var(--mat-sys-on-primary-container);
+}
+
+.authorization-card {
+  border-radius: 12px;
+}
+
+.authorization-card mat-card-content {
+  padding-top: 1.25rem;
+}
+
+.authorization-form {
+  gap: 1rem;
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-medium);
+}
+
+.authorization-actions {
+  justify-content: flex-end;
+}
+
+.security-note {
+  max-width: 70ch;
+  font: var(--mat-sys-body-small);
+}
+
+@media (max-width: 37.5rem) {
+  .kiosk-page {
+    gap: 1rem;
+  }
+
+  .authorization-actions button {
+    width: 100%;
+  }
+}

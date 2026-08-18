@@ -9,3 +9,11 @@ export const adminGuard: CanActivateFn = async () => {
   await permissions.evaluateAdminPermissions();
   return permissions.isAdmin() ? true : router.parseUrl('/');
 };
+
+export const pollKioskGuard: CanActivateFn = async () => {
+  const permissions = inject(PermissionsService);
+  const router = inject(Router);
+
+  await permissions.evaluateAdminPermissions();
+  return permissions.canUseKiosk() ? true : router.parseUrl('/admin');
+};

@@ -1,11 +1,12 @@
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
   Poll,
+  PollKioskVoter,
   PollResults,
   PollUserResponseState,
 } from '@org/voting-contracts';
@@ -33,8 +34,11 @@ export abstract class PollVotePageState {
   protected readonly api = inject(PollApiService);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   protected readonly route = inject(ActivatedRoute);
+  protected readonly router = inject(Router);
   protected readonly snackBar = inject(MatSnackBar);
   protected readonly pollAccess = this.resolvePollAccess();
+  protected readonly isKioskMode = this.route.snapshot.data?.['mode'] === 'kiosk';
+  protected readonly kioskVoter = signal<PollKioskVoter | null>(null);
 
   protected readonly poll = signal<Poll | null>(null);
   protected readonly answers = signal<AnswerMap>({});

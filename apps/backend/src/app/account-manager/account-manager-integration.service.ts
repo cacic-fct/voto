@@ -8,6 +8,7 @@ import type {
   M2MUserEnrollmentLookupRequest,
   M2MUserIdentifierLookupRequest,
   M2MUserIdentifierType,
+  M2MTotpValidateRequest,
 } from '@cacic-fct/account-manager-m2m-contracts';
 import { AccountManagerPerson } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
@@ -15,6 +16,13 @@ import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grp
 
 const ENROLLMENT_LOOKUP_BATCH_SIZE = 500;
 const IDENTIFIER_LOOKUP_BATCH_SIZE = 200;
+const KIOSK_TOTP_LOOKUP_REQUEST_ID = 'kiosk-totp-user';
+
+export type ValidatedAccountManagerTotp = {
+  profile: AccountManagerPerson & { userId: string; email: string };
+  serverTime: Date;
+  matchedStepOffset: -1 | 0 | 1;
+};
 @Injectable()
 export class AccountManagerIntegrationService implements OnModuleDestroy {
   private readonly logger = new Logger(AccountManagerIntegrationService.name);
@@ -107,6 +115,75 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
     }
 
     return peopleByRequestId;
+  }
+
+  async validateTotpForPrimaryEmail(
+    primaryEmail: string,
+    code: string,
+  ): Promise<ValidatedAccountManagerTotp | null> {
+    const normalizedPrimaryEmail = primaryEmail.trim().toLowerCase();
+    const accessToken = await this.getAccessToken();
+
+    try {
+      const response = await this.client.call<unknown>(
+        'ValidateTotp',
+        {
+          primaryEmail: normalizedPrimaryEmail,
+          code,
+        } satisfies M2MTotpValidateRequest,
+        authorizationMetadata(accessToken),
+        { idempotent: false, maxAttempts: 1, timeoutMs: 10_000 },
+      );
+      const validation = this.parseTotpValidationResponse(response);
+      if (!validation) {
+        return null;
+      }
+
+      const matches = await this.lookupIdentifierBatch(
+        [
+          {
+            requestId: KIOSK_TOTP_LOOKUP_REQUEST_ID,
+            identifierType: 'email',
+            identifierValue: validation.primaryEmail,
+          },
+        ],
+        accessToken,
+      );
+      const profiles = matches.filter(
+        (profile) =>
+          profile.requestId === KIOSK_TOTP_LOOKUP_REQUEST_ID &&
+          profile.userId === validation.userId &&
+          profile.email?.trim().toLowerCase() === validation.primaryEmail,
+      );
+      if (profiles.length !== 1) {
+        throw new ServiceUnavailableException(
+          'Account Manager returned inconsistent TOTP identity data.',
+        );
+      }
+
+      const [profile] = profiles;
+      return {
+        profile: {
+          ...this.toAccountManagerPerson(profile),
+          userId: validation.userId,
+          email: validation.primaryEmail,
+        },
+        serverTime: validation.serverTime,
+        matchedStepOffset: validation.matchedStepOffset,
+      };
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      this.logger.warn(
+        'Could not validate a TOTP through Account Manager.',
+        error,
+      );
+      throw new ServiceUnavailableException(
+        'Could not validate TOTP through Account Manager.',
+      );
+    }
   }
 
   private getAccessToken(): Promise<string> {
@@ -212,12 +289,24 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
     const name = this.readRequiredString(value, 'name');
     const enrollmentNumber = this.readOptionalString(value, 'enrollmentNumber');
     const email = this.readOptionalString(value, 'email') ?? null;
+    const secondaryEmails = this.readOptionalStringArray(
+      value,
+      'secondaryEmails',
+    );
+    const unespRole = this.readOptionalString(value, 'unespRole');
+    const unespRoleVerified = this.readOptionalBoolean(
+      value,
+      'unespRoleVerified',
+    );
 
     return {
       ...(userId ? { userId } : {}),
       ...(enrollmentNumber ? { enrollmentNumber } : {}),
       name,
       email,
+      ...(secondaryEmails.length > 0 ? { secondaryEmails } : {}),
+      ...(unespRole ? { unespRole } : {}),
+      ...(unespRoleVerified === undefined ? {} : { unespRoleVerified }),
     };
   }
 
@@ -231,6 +320,53 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
         : {}),
       name: user.name,
       email: user.email ?? null,
+      ...(user.secondaryEmails?.length
+        ? { secondaryEmails: user.secondaryEmails }
+        : {}),
+      ...(user.unespRole ? { unespRole: user.unespRole } : {}),
+      ...(user.unespRoleVerified === undefined
+        ? {}
+        : { unespRoleVerified: user.unespRoleVerified }),
+    };
+  }
+
+  private parseTotpValidationResponse(value: unknown): {
+    userId: string;
+    primaryEmail: string;
+    serverTime: Date;
+    matchedStepOffset: -1 | 0 | 1;
+  } | null {
+    if (!this.isRecord(value) || typeof value['valid'] !== 'boolean') {
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid TOTP response.',
+      );
+    }
+    if (!value['valid']) {
+      return null;
+    }
+
+    const userId = this.readRequiredString(value, 'userId');
+    const primaryEmail = this.readRequiredString(value, 'primaryEmail')
+      .toLowerCase();
+    const serverTimeValue = this.readRequiredString(value, 'serverTime');
+    const serverTime = new Date(serverTimeValue);
+    const matchedStepOffset = value['matchedStepOffset'];
+    if (
+      Number.isNaN(serverTime.getTime()) ||
+      (matchedStepOffset !== -1 &&
+        matchedStepOffset !== 0 &&
+        matchedStepOffset !== 1)
+    ) {
+      throw new ServiceUnavailableException(
+        'Account Manager returned invalid TOTP verification metadata.',
+      );
+    }
+
+    return {
+      userId,
+      primaryEmail,
+      serverTime,
+      matchedStepOffset,
     };
   }
 
@@ -256,6 +392,33 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
     return typeof rawValue === 'string' && rawValue.trim()
       ? rawValue.trim()
       : undefined;
+  }
+
+  private readOptionalStringArray(
+    value: Record<string, unknown>,
+    key: string,
+  ): string[] {
+    const rawValue = value[key];
+    if (!Array.isArray(rawValue)) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        rawValue
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private readOptionalBoolean(
+    value: Record<string, unknown>,
+    key: string,
+  ): boolean | undefined {
+    const rawValue = value[key];
+    return typeof rawValue === 'boolean' ? rawValue : undefined;
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

@@ -170,6 +170,7 @@ export type PollUserResponseStateRecord = {
 export type PollContractOptions = {
   includeDirectLinkToken?: boolean;
   imageDirectLinkToken?: string;
+  imageBasePath?: string;
 };
 
 export type PollResultResponseRecord = Prisma.PollResponseGetPayload<{

@@ -117,6 +117,54 @@ describe('PollApiService', () => {
     });
   });
 
+  it('uses the isolated kiosk endpoints and marks every kiosk mutation', async () => {
+    const pollId = 'poll/1';
+    const authorization = { primaryEmail: 'votante@unesp.br', totpCode: '123456' };
+    const context = {
+      poll,
+      voter: { displayName: 'Votante', maskedPrimaryEmail: 'v***@unesp.br' },
+      expiresAt: '2026-06-01T10:10:00.000Z',
+    };
+
+    const authorize = firstValueFrom(service.authorizeKioskVote(pollId, authorization));
+    const authorizeRequest = http.expectOne('/api/admin/polls/poll%2F1/kiosk/authorization');
+    expect(authorizeRequest.request.method).toBe('POST');
+    expect(authorizeRequest.request.body).toEqual(authorization);
+    expect(authorizeRequest.request.headers.get('X-CACiC-Voto-Kiosk')).toBe('1');
+    authorizeRequest.flush(context);
+    await expect(authorize).resolves.toEqual(context);
+
+    const loadContext = firstValueFrom(service.getKioskVotingContext(pollId));
+    http.expectOne('/api/admin/polls/poll%2F1/kiosk/context').flush(context);
+    await expect(loadContext).resolves.toEqual(context);
+
+    const loadState = firstValueFrom(service.getKioskVoterResponse(pollId));
+    http.expectOne('/api/admin/polls/poll%2F1/kiosk/responses/me').flush({ hasSubmitted: false });
+    await expect(loadState).resolves.toEqual({ hasSubmitted: false });
+
+    const submitRequest: SubmitPollResponseRequest = {
+      answers: [{ elementId: 'element-1', value: 'Sim' }],
+    };
+    const submit = firstValueFrom(service.submitKioskResponse(pollId, submitRequest));
+    const submitHttp = http.expectOne('/api/admin/polls/poll%2F1/kiosk/responses');
+    expect(submitHttp.request.method).toBe('POST');
+    expect(submitHttp.request.body).toEqual(submitRequest);
+    expect(submitHttp.request.headers.get('X-CACiC-Voto-Kiosk')).toBe('1');
+    submitHttp.flush({ id: 'response-1' });
+    await expect(submit).resolves.toEqual({ id: 'response-1' });
+
+    const slates = firstValueFrom(service.listKioskCacicElectionSlates(pollId));
+    http.expectOne('/api/admin/polls/poll%2F1/kiosk/cacic-election/slates').flush([]);
+    await expect(slates).resolves.toEqual([]);
+
+    const cancel = firstValueFrom(service.cancelKioskAuthorization(pollId));
+    const cancelHttp = http.expectOne('/api/admin/polls/poll%2F1/kiosk/authorization');
+    expect(cancelHttp.request.method).toBe('DELETE');
+    expect(cancelHttp.request.headers.get('X-CACiC-Voto-Kiosk')).toBe('1');
+    cancelHttp.flush(null);
+    await expect(cancel).resolves.toBeNull();
+  });
+
   it('loads and mutates admin poll data through the admin API', async () => {
     const saveRequest: SavePollRequest = {
       title: 'Votação',

@@ -5,9 +5,20 @@
 
   @if (poll(); as currentPoll) {
     <header class="page-header">
-      <a matIconButton routerLink="/polls" aria-label="Voltar para votações">
-        <mat-icon>arrow_back</mat-icon>
-      </a>
+      @if (isKioskMode) {
+        <button
+          matIconButton
+          type="button"
+          aria-label="Cancelar este voto e voltar ao quiosque"
+          (click)="cancelKioskVote(currentPoll.id)"
+        >
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+      } @else {
+        <a matIconButton routerLink="/polls" aria-label="Voltar para votações">
+          <mat-icon>arrow_back</mat-icon>
+        </a>
+      }
       <div>
         <h1>{{ currentPoll.title }}</h1>
         @if (currentPoll.description || currentPoll.descriptionImages?.length) {
@@ -18,6 +29,16 @@
         }
       </div>
     </header>
+
+    @if (isKioskMode && kioskVoter(); as voter) {
+      <div class="kiosk-context" role="status">
+        <mat-icon aria-hidden="true">verified_user</mat-icon>
+        <div>
+          <strong>Voto autorizado para {{ voter.displayName }}</strong>
+          <span>{{ voter.maskedPrimaryEmail }} · autorização válida para um único envio</span>
+        </div>
+      </div>
+    }
 
     <section class="metadata-panel" aria-labelledby="metadata-title">
       <div class="metadata-heading">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminGuard } from './auth/admin.guard';
+import { adminGuard, pollKioskGuard } from './auth/admin.guard';
 import { authGuard, redirectAuthenticatedGuard } from './auth/auth.guard';
 import { appRoutes } from './app.routes';
 
@@ -18,10 +18,14 @@ describe('appRoutes', () => {
       'polls/direct/:directLinkToken',
       'polls/:id/results',
       'polls/:id',
+      'admin/polls/:id/kiosk/vote',
+      'admin/polls/:id/kiosk',
       'admin',
     ]);
     expect(children[0]).toMatchObject({ pathMatch: 'full', redirectTo: 'polls' });
-    expect(children[6]?.canActivate).toEqual([adminGuard]);
+    expect(children[6]).toMatchObject({ canActivate: [pollKioskGuard], data: { mode: 'kiosk' } });
+    expect(children[7]?.canActivate).toEqual([pollKioskGuard]);
+    expect(children[8]?.canActivate).toEqual([adminGuard]);
   });
 
   it('lazy-loads route components', async () => {
@@ -35,5 +39,7 @@ describe('appRoutes', () => {
     await expect(children[4]?.loadComponent?.()).resolves.toBeTruthy();
     await expect(children[5]?.loadComponent?.()).resolves.toBeTruthy();
     await expect(children[6]?.loadComponent?.()).resolves.toBeTruthy();
+    await expect(children[7]?.loadComponent?.()).resolves.toBeTruthy();
+    await expect(children[8]?.loadComponent?.()).resolves.toBeTruthy();
   }, 15000);
 });

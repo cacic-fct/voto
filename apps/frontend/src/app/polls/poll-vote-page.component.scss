@@ -17,9 +17,28 @@
 .actions,
 .ballot-card-heading,
 .ballot-card-title,
-.scheduling-summary {
+.scheduling-summary,
+.kiosk-context {
   display: flex;
   gap: 1rem;
+}
+
+.kiosk-context {
+  align-items: flex-start;
+  border: 1px solid var(--mat-sys-primary);
+  border-radius: 12px;
+  padding: 1rem;
+  color: var(--mat-sys-on-primary-container);
+  background: var(--mat-sys-primary-container);
+}
+
+.kiosk-context div {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.kiosk-context mat-icon {
+  flex: 0 0 auto;
 }
 
 .page-stack {

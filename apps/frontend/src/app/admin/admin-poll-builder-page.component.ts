@@ -14,6 +14,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { PollStatus } from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
+import { RouterLink } from '@angular/router';
 import { CacicElectionSlateFormComponent } from '../polls/cacic-election-slate-form.component';
 import { PollDescriptionContentComponent } from '../polls/poll-description-content.component';
 import { AdminPollBuilderPageSlates } from './admin-poll-builder-page-slates';
@@ -38,6 +39,7 @@ import { PollBuilderDraftService } from './poll-builder-draft.service';
     MatSnackBarModule,
     MatTabsModule,
     MatTooltipModule,
+    RouterLink,
     AdminPollElementsEditorComponent,
     AdminPollResultsPanelComponent,
     CacicElectionSlateFormComponent,

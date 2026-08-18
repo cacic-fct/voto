@@ -7,6 +7,8 @@ import {
   EventManagerEvent,
   ImportPollEligibilityEnrollmentsRequest,
   Poll,
+  PollKioskAuthorizationRequest,
+  PollKioskVotingContext,
   PollEligibilityEnrollmentImportResult,
   PollEligibilityEnrollmentList,
   PollImage,
@@ -28,6 +30,7 @@ import { Observable } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class PollApiService {
   private readonly http = inject(HttpClient);
+  private readonly kioskHeaders = { 'X-CACiC-Voto-Kiosk': '1' } as const;
 
   listPublicPolls(): Observable<PollSummary[]> {
     return this.http.get<PollSummary[]>('/api/polls');
@@ -54,6 +57,53 @@ export class PollApiService {
 
   getMyPollResponse(id: string): Observable<PollUserResponseState> {
     return this.http.get<PollUserResponseState>(`/api/polls/${id}/responses/me`);
+  }
+
+  authorizeKioskVote(
+    id: string,
+    request: PollKioskAuthorizationRequest,
+  ): Observable<PollKioskVotingContext> {
+    return this.http.post<PollKioskVotingContext>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/authorization`,
+      request,
+      { headers: this.kioskHeaders },
+    );
+  }
+
+  getKioskVotingContext(id: string): Observable<PollKioskVotingContext> {
+    return this.http.get<PollKioskVotingContext>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/context`,
+    );
+  }
+
+  getKioskVoterResponse(id: string): Observable<PollUserResponseState> {
+    return this.http.get<PollUserResponseState>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/responses/me`,
+    );
+  }
+
+  submitKioskResponse(
+    id: string,
+    request: SubmitPollResponseRequest,
+  ): Observable<PollResponse> {
+    return this.http.post<PollResponse>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/responses`,
+      request,
+      { headers: this.kioskHeaders },
+    );
+  }
+
+  cancelKioskAuthorization(id: string): Observable<void> {
+    return this.http.delete<void>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/authorization`,
+      { headers: this.kioskHeaders },
+    );
+  }
+
+  listKioskCacicElectionSlates(id: string): Observable<CacicElectionSlate[]> {
+    return this.http.get<CacicElectionSlate[]>(
+      `/api/admin/polls/${encodeURIComponent(id)}/kiosk/cacic-election/slates`,
+    );
   }
 
   listPublicCacicElectionSlates(id: string): Observable<CacicElectionSlate[]> {

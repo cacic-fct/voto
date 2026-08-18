@@ -49,7 +49,7 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
   }
 
   protected shouldShowPublicResults(poll: Poll): boolean {
-    return canShowPublicResults(poll);
+    return !this.isKioskMode && canShowPublicResults(poll);
   }
 
   protected resultsLink(poll: Poll): unknown[] {

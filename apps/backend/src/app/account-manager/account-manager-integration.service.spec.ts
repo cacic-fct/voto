@@ -72,6 +72,106 @@ describe('AccountManagerIntegrationService', () => {
     );
   });
 
+  it('validates TOTP once and resolves the same fresh Account Manager identity', async () => {
+    call
+      .mockResolvedValueOnce({
+        valid: true,
+        userId: 'u1',
+        primaryEmail: 'user@example.com',
+        serverTime: '2026-08-16T15:00:00.000Z',
+        matchedStepOffset: 0,
+      })
+      .mockResolvedValueOnce({
+        users: [
+          {
+            requestId: 'kiosk-totp-user',
+            userId: 'u1',
+            name: 'Usuário',
+            email: 'user@example.com',
+            enrollmentNumber: '261200001',
+            secondaryEmails: ['USER@UNESP.BR'],
+            unespRole: 'aluno-graduacao',
+            unespRoleVerified: true,
+          },
+        ],
+      });
+
+    await expect(
+      service.validateTotpForPrimaryEmail(' User@Example.com ', '123456'),
+    ).resolves.toEqual({
+      profile: {
+        userId: 'u1',
+        name: 'Usuário',
+        email: 'user@example.com',
+        enrollmentNumber: '261200001',
+        secondaryEmails: ['user@unesp.br'],
+        unespRole: 'aluno-graduacao',
+        unespRoleVerified: true,
+      },
+      serverTime: new Date('2026-08-16T15:00:00.000Z'),
+      matchedStepOffset: 0,
+    });
+    expect(call).toHaveBeenNthCalledWith(
+      1,
+      'ValidateTotp',
+      { primaryEmail: 'user@example.com', code: '123456' },
+      authenticatedMetadata('token'),
+      { idempotent: false, maxAttempts: 1, timeoutMs: 10_000 },
+    );
+    expect(call).toHaveBeenNthCalledWith(
+      2,
+      'LookupUsersByIdentifier',
+      {
+        identifiers: [
+          {
+            requestId: 'kiosk-totp-user',
+            identifierType: 'email',
+            identifierValue: 'user@example.com',
+          },
+        ],
+      },
+      authenticatedMetadata('token'),
+      { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+    );
+  });
+
+  it('returns false TOTP validation without looking up a user', async () => {
+    call.mockResolvedValue({
+      valid: false,
+      serverTime: '2026-08-16T15:00:00.000Z',
+    });
+
+    await expect(
+      service.validateTotpForPrimaryEmail('user@example.com', '000000'),
+    ).resolves.toBeNull();
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects inconsistent identities returned after a valid TOTP', async () => {
+    call
+      .mockResolvedValueOnce({
+        valid: true,
+        userId: 'u1',
+        primaryEmail: 'user@example.com',
+        serverTime: '2026-08-16T15:00:00.000Z',
+        matchedStepOffset: 0,
+      })
+      .mockResolvedValueOnce({
+        users: [
+          {
+            requestId: 'kiosk-totp-user',
+            userId: 'different-user',
+            name: 'Outra pessoa',
+            email: 'user@example.com',
+          },
+        ],
+      });
+
+    await expect(
+      service.validateTotpForPrimaryEmail('user@example.com', '123456'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
   it('wraps gRPC failures as service unavailable', async () => {
     call.mockRejectedValue(new Error('unavailable'));
     await expect(service.lookupPeopleByEnrollmentNumbers(['123'])).rejects.toBeInstanceOf(

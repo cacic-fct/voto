@@ -5,6 +5,7 @@ import { EventManagerIntegrationService } from '../event-manager/event-manager-i
 import { FeatureFlagsModule } from '../feature-flags/feature-flags.module';
 import { S3Service } from '../s3/s3.service';
 import { AdminPollsController } from './admin-polls.controller';
+import { AdminPollKioskController } from './admin-poll-kiosk.controller';
 import { PollCacicElectionElementsService } from './poll-cacic-election-elements.service';
 import { PollCacicElectionService } from './poll-cacic-election.service';
 import { PollCacicElectionSlateValidatorService } from './poll-cacic-election-slate-validator.service';
@@ -12,6 +13,7 @@ import { PollEligibilityService } from './poll-eligibility.service';
 import { PollElementMutationsService } from './poll-element-mutations.service';
 import { PollImageMutationsService } from './poll-image-mutations.service';
 import { PollImagesService } from './poll-images.service';
+import { PollKioskAuthorizationService } from './poll-kiosk-authorization.service';
 import { PollMutationOptionsService } from './poll-mutation-options.service';
 import { PollMutationValidationService } from './poll-mutation-validation.service';
 import { PollMutationsService } from './poll-mutations.service';
@@ -25,7 +27,7 @@ import { PublicPollsController } from './public-polls.controller';
 
 @Module({
   imports: [AuthModule, FeatureFlagsModule],
-  controllers: [AdminPollsController, PublicPollsController],
+  controllers: [AdminPollKioskController, AdminPollsController, PublicPollsController],
   providers: [
     AccountManagerIntegrationService,
     EventManagerIntegrationService,
@@ -36,6 +38,7 @@ import { PublicPollsController } from './public-polls.controller';
     PollElementMutationsService,
     PollImageMutationsService,
     PollImagesService,
+    PollKioskAuthorizationService,
     PollMutationOptionsService,
     PollMutationValidationService,
     PollMutationsService,

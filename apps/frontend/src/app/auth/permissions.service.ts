@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   VOTING_ADMIN_PERMISSIONS,
+  hasPollKioskPermission,
   hasVotingAdminPermission,
   hasVotingAdminWritePermission,
 } from '@org/voting-contracts';
@@ -25,6 +26,9 @@ export class PermissionsService {
   readonly isAdmin = computed(() => hasVotingAdminPermission(this.rawPermissions(), this.auth.roles()));
   readonly canManageAdmin = computed(() =>
     hasVotingAdminWritePermission(this.rawPermissions(), this.auth.roles()),
+  );
+  readonly canUseKiosk = computed(() =>
+    hasPollKioskPermission(this.rawPermissions(), this.auth.roles()),
   );
 
   async evaluateAdminPermissions(): Promise<void> {

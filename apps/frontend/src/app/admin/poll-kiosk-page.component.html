@@ -1,0 +1,99 @@
+<section class="kiosk-page" aria-labelledby="kiosk-title">
+  @if (loading() || authorizing()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  <header class="kiosk-header">
+    <a matIconButton routerLink="/admin" aria-label="Voltar para a área restrita">
+      <mat-icon>arrow_back</mat-icon>
+    </a>
+    <div>
+      <h1 id="kiosk-title">Modo quiosque</h1>
+      <p>
+        @if (poll(); as currentPoll) {
+          {{ currentPoll.title }}
+        } @else {
+          Identificação do eleitor
+        }
+      </p>
+    </div>
+  </header>
+
+  @if (voteRegistered) {
+    <div class="success-notice" role="status">
+      <mat-icon aria-hidden="true">check_circle</mat-icon>
+      <div>
+        <strong>Voto registrado</strong>
+        <span>O quiosque está pronto para a próxima pessoa.</span>
+      </div>
+    </div>
+  }
+
+  <mat-card appearance="outlined" class="authorization-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar aria-hidden="true">how_to_reg</mat-icon>
+      <mat-card-title>Identifique a pessoa que vai votar</mat-card-title>
+      <mat-card-subtitle>
+        A autorização vale para um único envio e expira em poucos minutos.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <form
+        class="authorization-form"
+        [formGroup]="form"
+        autocomplete="off"
+        (ngSubmit)="authorize()"
+      >
+        <mat-form-field appearance="outline">
+          <mat-label>E-mail principal</mat-label>
+          <input
+            matInput
+            type="email"
+            formControlName="primaryEmail"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+          />
+          <mat-hint>Use o endereço principal cadastrado na Conta CACiC.</mat-hint>
+          @if (form.controls.primaryEmail.touched && form.controls.primaryEmail.invalid) {
+            <mat-error>Informe um e-mail válido.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Código TOTP</mat-label>
+          <input
+            matInput
+            type="text"
+            formControlName="totpCode"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            aria-describedby="totp-help"
+            (input)="normalizeTotpCode($event)"
+          />
+          <mat-hint id="totp-help">Código de seis dígitos exibido na carteira CACiC.</mat-hint>
+          @if (form.controls.totpCode.touched && form.controls.totpCode.invalid) {
+            <mat-error>Informe os seis dígitos do código.</mat-error>
+          }
+        </mat-form-field>
+
+        @if (error()) {
+          <p class="form-error" role="alert">{{ error() }}</p>
+        }
+
+        <div class="authorization-actions">
+          <button mat-flat-button type="submit" [disabled]="!canAuthorize()">
+            <mat-icon>how_to_vote</mat-icon>
+            Autorizar voto
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <p class="security-note">
+    O código é validado pela Conta CACiC e não é armazenado neste dispositivo.
+    Confirme que a pessoa permanece diante do quiosque durante todo o voto.
+  </p>
+</section>
