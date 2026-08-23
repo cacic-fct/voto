@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
-  Injectable,
   PLATFORM_ID,
+  Service,
   computed,
   inject,
   isDevMode,
@@ -15,7 +15,7 @@ const UNLEASH_URL = 'https://unleash.cacic.com.br/api/frontend';
 const PRODUCTION_CLIENT_KEY =
   'default:production.h8sn3hzUSF07msdHkuXubAVRxSgtAdGsBCXiXXhcs8I4boeXozEue0Tx0lwq';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class CookieBannerFeatureFlagService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly enabledSignal = signal(true);

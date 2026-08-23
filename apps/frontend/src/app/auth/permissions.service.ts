@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Service, computed, inject, signal } from '@angular/core';
 import {
   VOTING_ADMIN_PERMISSIONS,
   hasPollKioskPermission,
@@ -8,7 +8,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class PermissionsService {
   private readonly auth = inject(AuthService);
   private readonly evaluatedPermissions = signal<Set<string>>(new Set());

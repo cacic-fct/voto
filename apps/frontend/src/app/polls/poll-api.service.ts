@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import {
   AddPollEligibilityEnrollmentsRequest,
   AdminCacicElectionSlate,
@@ -27,7 +27,7 @@ import {
 } from '@org/voting-contracts';
 import { Observable } from 'rxjs';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class PollApiService {
   private readonly http = inject(HttpClient);
   private readonly kioskHeaders = { 'X-CACiC-Voto-Kiosk': '1' } as const;

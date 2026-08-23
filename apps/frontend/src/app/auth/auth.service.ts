@@ -1,8 +1,8 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import {
-  Injectable,
   PLATFORM_ID,
+  Service,
   computed,
   inject,
   signal,
@@ -23,7 +23,7 @@ import {
   throwError,
 } from 'rxjs';
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class AuthService {
   private readonly accountTrackingClearUrl =
     'https://account.cacic.com.br/api/tracking/clear';
