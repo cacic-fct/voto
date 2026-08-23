@@ -119,10 +119,14 @@ describe('KeycloakTokenVerifier', () => {
     });
 
     expect(axiosGet).toHaveBeenCalledTimes(1);
-    expect(axiosGet).toHaveBeenCalledWith(`${TEST_ISSUER}/protocol/openid-connect/certs`, {
-      headers: { accept: 'application/json' },
-      validateStatus: expect.any(Function),
-    });
+    expect(axiosGet).toHaveBeenCalledWith(
+      `${TEST_ISSUER}/protocol/openid-connect/certs`,
+      expect.objectContaining({
+        headers: { accept: 'application/json' },
+        timeout: 10_000,
+        validateStatus: expect.any(Function),
+      }),
+    );
   });
 
   it('rejects malformed token structure and decoded JSON', async () => {

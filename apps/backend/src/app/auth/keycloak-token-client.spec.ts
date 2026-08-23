@@ -55,7 +55,7 @@ describe('KeycloakTokenClient', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://sso.example/realms/cacic/protocol/openid-connect/token',
       expect.any(String),
-      { headers: { 'content-type': 'application/x-www-form-urlencoded' } },
+      expect.objectContaining({ headers: { 'content-type': 'application/x-www-form-urlencoded' }, timeout: 10_000 }),
     );
     expect(payload).toContain('grant_type=authorization_code');
     expect(payload).toContain('code=code-1');

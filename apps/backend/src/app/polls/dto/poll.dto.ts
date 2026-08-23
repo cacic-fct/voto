@@ -311,10 +311,13 @@ export class SavePollDto {
   @Type(() => PollImageReferenceDto)
   descriptionImages?: PollImageReferenceDto[];
 
-  @ApiPropertyOptional({ enum: POLL_STATUSES, example: 'draft' })
+  @ApiPropertyOptional({
+    example: '2026-06-27T12:30:00.000Z',
+    description: 'Updated-at version returned by the last read. Required for poll replacement updates.',
+  })
   @IsOptional()
-  @IsIn(POLL_STATUSES)
-  status?: PollStatus;
+  @IsISO8601()
+  expectedUpdatedAt?: string;
 
   @ApiPropertyOptional({ enum: POLL_MODES, example: 'regular' })
   @IsOptional()
@@ -428,6 +431,14 @@ export class PollStatusDto {
   @ApiProperty({ enum: POLL_STATUSES, example: 'published' })
   @IsIn(POLL_STATUSES)
   status!: PollStatus;
+
+  @ApiPropertyOptional({
+    example: '2026-06-27T12:30:00.000Z',
+    description: 'Updated-at version returned by the last read.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  expectedUpdatedAt?: string;
 }
 
 export class PollResponseAnswerDto {

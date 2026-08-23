@@ -119,7 +119,11 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
 
     this.saving.set(true);
     try {
-      this.builder.setDraft(await firstValueFrom(this.api.updatePollStatus(id, status)));
+      this.builder.setDraft(
+        await firstValueFrom(
+          this.api.updatePollStatus(id, status, this.builder.draft().updatedAt),
+        ),
+      );
       await this.loadCacicElectionSlates(false);
       await this.loadPolls(false);
       this.snackBar.open('Status atualizado.', 'OK', { duration: 3000 });

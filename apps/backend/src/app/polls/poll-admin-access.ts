@@ -99,15 +99,43 @@ export function isObserverReadableElectionPoll(
 }
 
 function observerElectionWindow(now: Date): { previousMonthStart: Date; nextMonthStart: Date } {
-  const currentMonthStart = new Date(now);
-  currentMonthStart.setDate(1);
-  currentMonthStart.setHours(0, 0, 0, 0);
-
-  const previousMonthStart = new Date(currentMonthStart);
-  previousMonthStart.setMonth(previousMonthStart.getMonth() - 1);
-
-  const nextMonthStart = new Date(currentMonthStart);
-  nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const previous = new Date(Date.UTC(year, month - 2, 1));
+  const next = new Date(Date.UTC(year, month, 1));
+  const previousMonthStart = zonedDateTimeToInstant(previous.getUTCFullYear(), previous.getUTCMonth() + 1, 1);
+  const nextMonthStart = zonedDateTimeToInstant(next.getUTCFullYear(), next.getUTCMonth() + 1, 1);
 
   return { previousMonthStart, nextMonthStart };
+}
+
+function zonedDateTimeToInstant(year: number, month: number, day: number): Date {
+  const target = Date.UTC(year, month - 1, day);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  for (let offsetMinutes = -14 * 60; offsetMinutes <= 14 * 60; offsetMinutes += 15) {
+    const candidate = new Date(target - offsetMinutes * 60_000);
+    const values = Object.fromEntries(
+      formatter.formatToParts(candidate)
+        .filter(({ type }) => ['year', 'month', 'day', 'hour', 'minute', 'second'].includes(type))
+        .map(({ type, value }) => [type, Number(value)]),
+    ) as Record<string, number>;
+    if (values.year === year && values.month === month && values.day === day && values.hour === 0 && values.minute === 0) {
+      return candidate;
+    }
+  }
+  return new Date(target);
 }

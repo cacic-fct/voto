@@ -23,6 +23,7 @@ export type AuthSession = {
   idTokenHint?: string;
   accessTokenExpiresAt: number;
   sessionExpiresAt: number;
+  sessionAbsoluteDeadline?: number;
 };
 
 export type TokenResponse = {

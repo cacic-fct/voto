@@ -15,6 +15,7 @@ import {
   pollInclude,
 } from './poll-records';
 import { pollResponseInclude, toContractPollResponse } from './poll-response.mapper';
+import { toElementSnapshotJson } from './poll-contract.mapper';
 import { PollResultsService } from './poll-results.service';
 import { validatePollResponse } from './poll-response.validator';
 import {
@@ -57,7 +58,7 @@ export class PollResponsesService {
     await this.eligibility.ensureVotingAllowed(poll, voter);
     const answers = validatePollResponse(poll, input);
 
-    const response = await this.saveResponse(poll, voter.sub, answers);
+    const response = await this.saveResponse(poll, voter, answers, undefined, input);
     await this.publishResultsBestEffort(poll.id);
 
     return toContractPollResponse(response);
@@ -88,7 +89,7 @@ export class PollResponsesService {
     const voter = requireAuthenticatedVoter(user);
     const answers = validatePollResponse(poll, input);
 
-    const response = await this.saveResponse(poll, voter.sub, answers);
+    const response = await this.saveResponse(poll, voter, answers, normalizedToken, input);
     await this.publishResultsBestEffort(poll.id);
 
     return toContractPollResponse(response);
@@ -206,14 +207,47 @@ export class PollResponsesService {
 
   async saveResponse(
     poll: PollRecord,
-    userId: string,
+    voter: AuthenticatedVoter,
     answers: PollResponseAnswer[],
+    directLinkToken?: string,
+    rawInput?: SubmitPollResponseDto,
   ): Promise<PollResultResponseRecord> {
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const isAnonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
+        const currentPoll = await tx.poll.findFirst({
+          where: {
+            id: poll.id,
+            status: DbPollStatus.PUBLISHED,
+            ...pollVotingOpenWhere(new Date()),
+            ...(directLinkToken
+              ? { directLinkEnabled: true, directLinkToken }
+              : {}),
+          },
+          include: pollInclude,
+        });
+        if (!currentPoll) {
+          throw new ConflictException('Poll is no longer accepting responses.');
+        }
+        if (poll.updatedAt && currentPoll.updatedAt.getTime() !== poll.updatedAt.getTime()) {
+          throw new ConflictException('Poll definition or eligibility changed. Please reload and try again.');
+        }
 
-        if (poll.allowMultipleResponses) {
+        const currentAnswers = validatePollResponse(
+          currentPoll,
+          rawInput ?? {
+            answers: answers.map((answer) => ({
+              elementId: answer.elementId,
+              value: answer.value,
+            })),
+          },
+        );
+        if (!directLinkToken) {
+          await this.eligibility.ensureVotingAllowed(currentPoll, voter, tx);
+        }
+        const isAnonymous = currentPoll.votingStyle === DbPollVotingStyle.ANONYMOUS;
+        const userId = voter.sub;
+
+        if (currentPoll.allowMultipleResponses) {
           await tx.pollVoter.upsert({
             where: {
               pollId_userId: {
@@ -228,7 +262,7 @@ export class PollResponsesService {
             },
           });
 
-          return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
+          return this.createResponse(tx, currentPoll, userId, currentAnswers, isAnonymous);
         }
 
         const existingVoter = await tx.pollVoter.findUnique({
@@ -244,7 +278,7 @@ export class PollResponsesService {
         });
 
         if (existingVoter) {
-          if (!poll.allowResponseEditing || isAnonymous) {
+          if (!currentPoll.allowResponseEditing || isAnonymous) {
             throw new ConflictException('User already voted in this poll.');
           }
 
@@ -276,9 +310,10 @@ export class PollResponsesService {
             data: {
               submittedAt: new Date(),
               answers: {
-                create: answers.map((answer) => ({
+                create: currentAnswers.map((answer) => ({
                   elementId: answer.elementId,
                   value: answer.value as Prisma.InputJsonValue,
+                  elementSnapshot: this.snapshotForAnswer(currentPoll, answer.elementId),
                 })),
               },
             },
@@ -293,8 +328,8 @@ export class PollResponsesService {
           },
         });
 
-        return this.createResponse(tx, poll.id, userId, answers, isAnonymous);
-      });
+        return this.createResponse(tx, currentPoll, userId, currentAnswers, isAnonymous);
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -304,20 +339,24 @@ export class PollResponsesService {
         throw new ConflictException('User already voted in this poll.');
       }
 
+      if (this.isSerializationConflict(error)) {
+        throw new ConflictException('The poll changed concurrently. Please reload and retry.');
+      }
+
       throw error;
     }
   }
 
   createResponse(
     tx: Prisma.TransactionClient,
-    pollId: string,
+    poll: PollRecord,
     userId: string,
     answers: PollResponseAnswer[],
     isAnonymous: boolean,
   ): Promise<PollResultResponseRecord> {
     return tx.pollResponse.create({
       data: {
-        pollId,
+        pollId: poll.id,
         ...(isAnonymous
           ? {
               id: randomUUID(),
@@ -332,6 +371,7 @@ export class PollResponsesService {
             ...(isAnonymous ? { id: randomUUID() } : {}),
             elementId: answer.elementId,
             value: answer.value as Prisma.InputJsonValue,
+            elementSnapshot: this.snapshotForAnswer(poll, answer.elementId),
           })),
         },
       },
@@ -348,5 +388,18 @@ export class PollResponsesService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: pollResponseInclude,
     });
+  }
+
+  private snapshotForAnswer(poll: PollRecord, elementId: string): Prisma.InputJsonValue {
+    const element = poll.elements.find((candidate) => candidate.id === elementId);
+    if (!element) {
+      throw new ConflictException('Poll definition changed while submitting the response.');
+    }
+    return toElementSnapshotJson(element, poll.id);
+  }
+
+  private isSerializationConflict(error: unknown): error is { code: 'P2034' } {
+    return typeof error === 'object' && error !== null && 'code' in error &&
+      (error as { code?: unknown }).code === 'P2034';
   }
 }

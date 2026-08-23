@@ -241,18 +241,17 @@ export class PollApiService {
     return this.http.get<PollResults>(`/api/polls/direct/${encodeURIComponent(directLinkToken)}/results`);
   }
 
-  openAdminPollResultsEvents(id: string, after: number): EventSource {
-    return this.openResultsEvents(`/api/admin/polls/${encodeURIComponent(id)}/results/events`, after);
+  openAdminPollResultsEvents(id: string): EventSource {
+    return this.openResultsEvents(`/api/admin/polls/${encodeURIComponent(id)}/results/events`);
   }
 
-  openPublicPollResultsEvents(id: string, after: number): EventSource {
-    return this.openResultsEvents(`/api/polls/${encodeURIComponent(id)}/results/events`, after);
+  openPublicPollResultsEvents(id: string): EventSource {
+    return this.openResultsEvents(`/api/polls/${encodeURIComponent(id)}/results/events`);
   }
 
-  openDirectLinkPollResultsEvents(directLinkToken: string, after: number): EventSource {
+  openDirectLinkPollResultsEvents(directLinkToken: string): EventSource {
     return this.openResultsEvents(
       `/api/polls/direct/${encodeURIComponent(directLinkToken)}/results/events`,
-      after,
     );
   }
 
@@ -274,8 +273,11 @@ export class PollApiService {
     return this.http.delete<void>(`/api/admin/polls/${id}/images/${imageId}`);
   }
 
-  updatePollStatus(id: string, status: PollStatus): Observable<Poll> {
-    return this.http.patch<Poll>(`/api/admin/polls/${id}/status`, { status });
+  updatePollStatus(id: string, status: PollStatus, expectedUpdatedAt: string): Observable<Poll> {
+    return this.http.patch<Poll>(`/api/admin/polls/${id}/status`, {
+      status,
+      expectedUpdatedAt,
+    });
   }
 
   deletePoll(id: string): Observable<void> {
@@ -290,8 +292,7 @@ export class PollApiService {
     }
   }
 
-  private openResultsEvents(path: string, _after: number): EventSource {
-    void _after;
+  private openResultsEvents(path: string): EventSource {
     const url = new URL(path, globalThis.location.origin);
     return new EventSource(url, { withCredentials: true });
   }

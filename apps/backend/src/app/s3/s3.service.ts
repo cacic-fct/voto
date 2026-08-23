@@ -1,13 +1,14 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Readable } from 'node:stream';
 
 @Injectable()
-export class S3Service {
+export class S3Service implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(S3Service.name);
   private readonly s3Client?: S3Client;
   private readonly bucketName?: string;
+  private readonly requestTimeoutMs = this.positiveInteger(process.env.S3_REQUEST_TIMEOUT_MS, 15_000);
 
   constructor() {
     const endpoint = process.env.S3_ENDPOINT;
@@ -32,6 +33,10 @@ export class S3Service {
         secretAccessKey,
       },
       forcePathStyle: true,
+      requestHandler: {
+        connectionTimeout: this.requestTimeoutMs,
+        socketTimeout: this.requestTimeoutMs,
+      },
     });
 
     this.logger.log(`S3Service initialized with endpoint: ${endpoint}, bucket: ${bucketName}`);
@@ -57,12 +62,32 @@ export class S3Service {
     });
 
     await upload.done();
-    const headResult = await s3Client.send(
-      new HeadObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-      }),
-    );
+    // Buffer uploads already carry their exact byte length. Avoiding a
+    // post-upload HEAD removes a failure window in which the object exists
+    // but the caller never receives its key and cannot compensate.
+    if (body instanceof Buffer) {
+      this.logger.log(`File uploaded successfully: ${key}`);
+      return { key, size: body.length };
+    }
+
+    let headResult: { ContentLength?: number };
+    try {
+      headResult = await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: bucketName,
+          Key: key,
+        }),
+      );
+    } catch (error) {
+      try {
+        await this.deleteFile(key);
+      } catch (cleanupError) {
+        this.logger.error(
+          `Uploaded object ${key} could not be compensated after metadata lookup failure: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      }
+      throw error;
+    }
 
     this.logger.log(`File uploaded successfully: ${key}`);
     return {
@@ -97,6 +122,17 @@ export class S3Service {
     };
   }
 
+  async onModuleDestroy(): Promise<void> {
+    this.s3Client?.destroy();
+  }
+
+  onModuleInit(): void {
+    const required = process.env.S3_REQUIRED?.trim().toLowerCase() !== 'false';
+    if (process.env.NODE_ENV === 'production' && required && (!this.s3Client || !this.bucketName)) {
+      throw new Error('S3 configuration is required in production.');
+    }
+  }
+
   async deleteFile(key: string): Promise<void> {
     const { s3Client, bucketName } = this.requireConfig();
     await s3Client.send(
@@ -120,5 +156,10 @@ export class S3Service {
       s3Client: this.s3Client,
       bucketName: this.bucketName,
     };
+  }
+
+  private positiveInteger(rawValue: string | undefined, fallback: number): number {
+    const value = Number.parseInt(rawValue ?? '', 10);
+    return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 }

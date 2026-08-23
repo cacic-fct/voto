@@ -4,6 +4,7 @@ import { Observable, Subject } from 'rxjs';
 import { SseReplayService } from '../realtime/sse-replay.service';
 
 const REDIS_CHANNEL = 'poll-results:realtime:v1';
+const MAX_PUBLICATION_ATTEMPTS = 3;
 
 interface Envelope { scope: string; event: MessageEvent }
 
@@ -51,22 +52,44 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
   }
 
   async publish(scope: string, data: object): Promise<void> {
-    let event: MessageEvent;
-    try {
-      event = await this.replay.record(scope, { data, retry: 3_000 });
-    } catch (error) {
-      this.logger.warn(`Poll result replay recording failed for scope ${scope}.`, error);
-      this.channels.get(scope)?.next({ data, retry: 3_000 });
-      return;
+    let event: MessageEvent | undefined;
+    for (let attempt = 1; attempt <= MAX_PUBLICATION_ATTEMPTS; attempt += 1) {
+      try {
+        event = await this.replay.record(scope, { data, retry: 3_000 });
+        break;
+      } catch (error) {
+        if (attempt === MAX_PUBLICATION_ATTEMPTS) {
+          this.logger.warn(`Poll result replay recording failed for scope ${scope}.`, error);
+          this.channels.get(scope)?.next({ data, retry: 3_000 });
+          return;
+        }
+        await this.delay(25 * 2 ** (attempt - 1));
+      }
     }
 
-    try {
-      const subscribers = await this.redis.publish(REDIS_CHANNEL, JSON.stringify({ scope, event } satisfies Envelope));
-      if (subscribers === 0) this.channels.get(scope)?.next(event);
-    } catch (error) {
-      this.logger.warn(`Poll result pub/sub delivery failed for scope ${scope}.`, error);
-      this.channels.get(scope)?.next(event);
+    if (!event) {
+      return;
     }
+    const publishedEvent = event;
+    const payload = JSON.stringify({ scope, event: publishedEvent } satisfies Envelope);
+    for (let attempt = 1; attempt <= MAX_PUBLICATION_ATTEMPTS; attempt += 1) {
+      try {
+        const subscribers = await this.redis.publish(REDIS_CHANNEL, payload);
+        if (subscribers === 0) this.channels.get(scope)?.next(publishedEvent);
+        return;
+      } catch (error) {
+        if (attempt === MAX_PUBLICATION_ATTEMPTS) {
+          this.logger.warn(`Poll result pub/sub delivery failed for scope ${scope}.`, error);
+          this.channels.get(scope)?.next(publishedEvent);
+          return;
+        }
+        await this.delay(25 * 2 ** (attempt - 1));
+      }
+    }
+  }
+
+  private delay(durationMs: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, durationMs));
   }
 
   private parseEnvelope(payload: string): Envelope | null {

@@ -5,6 +5,7 @@ import { responseVoterLabel } from './admin-poll-results';
 import { AdminPollBuilderPageBase } from './admin-poll-builder-page-base';
 
 export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBase {
+  private resultsRefreshTimer?: ReturnType<typeof setTimeout>;
   protected updateSelectedResultsElement(event: MatSelectChange): void {
     this.selectedResultsElementId.set(typeof event.value === 'string' ? event.value : null);
   }
@@ -68,6 +69,10 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
   }
 
   protected closeResultsEvents(): void {
+    if (this.resultsRefreshTimer) {
+      clearTimeout(this.resultsRefreshTimer);
+      this.resultsRefreshTimer = undefined;
+    }
     this.resultsEvents?.close();
     this.resultsEvents = undefined;
   }
@@ -91,17 +96,32 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
       return;
     }
 
-    const source = this.api.openAdminPollResultsEvents(pollId, 0);
+    const source = this.api.openAdminPollResultsEvents(pollId);
     source.onmessage = (event) => {
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
         if (delta.final) {
           void this.reconcileFinalResults(pollId);
+        } else if (delta.refreshRequired) {
+          this.scheduleResultsRefresh(pollId);
         }
       }
     };
     this.resultsEvents = source;
+  }
+
+  private scheduleResultsRefresh(pollId: string): void {
+    if (this.resultsRefreshTimer) {
+      return;
+    }
+
+    this.resultsRefreshTimer = setTimeout(() => {
+      this.resultsRefreshTimer = undefined;
+      void firstValueFrom(this.api.getAdminPollResults(pollId))
+        .then((results) => this.results.set(results))
+        .catch(() => this.snackBar.open('A atualização dos resultados está temporariamente indisponível.', 'OK', { duration: 3000 }));
+    }, 250);
   }
 
   private applyResultsDelta(delta: PollResultsDelta): void {
@@ -116,7 +136,8 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
         responseCount: delta.responseCount,
         voterCount: delta.voterCount ?? current.voterCount,
         voters: delta.voters ?? current.voters,
-        responses: delta.responses,
+        aggregates: delta.aggregates ?? current.aggregates,
+        responses: delta.refreshRequired ? current.responses : delta.responses,
       };
     });
 

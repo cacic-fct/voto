@@ -1,4 +1,11 @@
-import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { hasElectionsObserverRole, hasVotingAdminRole, normalizePermissions } from '@org/voting-contracts';
 import { Prisma } from '@prisma/client';
 import axios from 'axios';
@@ -16,6 +23,7 @@ import {
   extractPermissionClaims,
   extractPermissions,
   extractRoles,
+  isRecord,
   readNumberClaim,
   readStringClaim,
 } from './keycloak-claims.utils';
@@ -27,6 +35,36 @@ type CachedUser = {
   expiresAt: number;
   user: AuthenticatedPrincipal;
 };
+
+const MAX_PERMISSION_REQUESTS = 50;
+const MAX_PERMISSION_LENGTH = 128;
+const MAX_AUTHORIZATION_SCOPE_LENGTH = 128;
+const MAX_AUTHORIZATION_SCOPE_COUNT = 8;
+const ALLOWED_OIDC_SCOPES = new Set(['openid', 'profile', 'email']);
+const ALLOWED_OIDC_PROMPTS = new Set(['none', 'login', 'consent', 'select_account']);
+const DEFAULT_SESSION_MAX_AGE_MS = 60 * 60 * 1000;
+const MAX_USER_CACHE_ENTRIES = 1_000;
+const MAX_REFRESH_LOCK_RENEWAL_MS = 5_000;
+const PERSISTED_CLAIM_KEYS = new Set([
+  'sub',
+  'preferred_username',
+  'email',
+  'name',
+  'given_name',
+  'family_name',
+  'enrollmentNumber',
+  'enrollment_number',
+  'academicId',
+  'academic_id',
+  'secondary_emails',
+  'secondaryEmails',
+  'unesp_role',
+  'unespRole',
+  'unesp_role_verified',
+  'is_unesp_role_verified',
+  'unespRoleVerified',
+  'isUnespRoleVerified',
+]);
 
 @Injectable()
 export class KeycloakAuthService {
@@ -46,6 +84,18 @@ export class KeycloakAuthService {
     process.env.KEYCLOAK_PRINCIPAL_CACHE_TTL_MS ?? process.env.KEYCLOAK_INTROSPECTION_CACHE_TTL_MS,
     10_000,
   );
+  private readonly maxUserCacheEntries = this.parsePositiveIntegerEnv(
+    process.env.KEYCLOAK_PRINCIPAL_CACHE_MAX_ENTRIES,
+    MAX_USER_CACHE_ENTRIES,
+  );
+  private readonly keycloakRequestTimeoutMs = this.parsePositiveIntegerEnv(
+    process.env.KEYCLOAK_REQUEST_TIMEOUT_MS,
+    10_000,
+  );
+  private readonly refreshLockRenewalMs = Math.min(
+    this.parsePositiveIntegerEnv(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_RENEWAL_MS, MAX_REFRESH_LOCK_RENEWAL_MS),
+    Math.max(1, Math.floor(this.parsePositiveIntegerEnv(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_TTL_MS, 5_000) / 3)),
+  );
   private readonly jwksCacheTtlMs = this.parsePositiveIntegerEnv(process.env.KEYCLOAK_JWKS_CACHE_TTL_MS, 600_000);
   private readonly jwtClockSkewSeconds = this.parsePositiveIntegerEnv(
     process.env.KEYCLOAK_JWT_CLOCK_SKEW_SECONDS,
@@ -55,6 +105,7 @@ export class KeycloakAuthService {
     realmUrl: this.realmUrl,
     jwksCacheTtlMs: this.jwksCacheTtlMs,
     jwtClockSkewSeconds: this.jwtClockSkewSeconds,
+    requestTimeoutMs: this.keycloakRequestTimeoutMs,
     logger: this.logger,
   });
   private readonly tokenClient = new KeycloakTokenClient({
@@ -64,6 +115,7 @@ export class KeycloakAuthService {
     tokenEndpointAuthMethod: this.tokenEndpointAuthMethod,
     defaultPostLogoutRedirectUri: this.defaultPostLogoutRedirectUri,
     failureLogSuppressionMs: this.keycloakFailureLogSuppressionMs,
+    requestTimeoutMs: this.keycloakRequestTimeoutMs,
     logger: this.logger,
   });
 
@@ -85,19 +137,22 @@ export class KeycloakAuthService {
       throw new UnauthorizedException('Missing Keycloak redirect URI.');
     }
 
+    const scope = this.normalizeAuthorizationScope(options?.scope);
+    const prompt = this.normalizeAuthorizationPrompt(options?.prompt);
+
     const state = await this.authorizationState.create({
       redirectUri,
       returnTo: options?.returnTo,
       state: options?.state,
-      prompt: options?.prompt,
+      prompt,
     });
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: options?.scope ?? 'openid profile email',
+      scope,
       state,
-      ...(options?.prompt ? { prompt: options.prompt } : {}),
+      ...(prompt ? { prompt } : {}),
       ...(process.env.KEYCLOAK_IDP_HINT ? { kc_idp_hint: process.env.KEYCLOAK_IDP_HINT } : {}),
     });
 
@@ -128,7 +183,8 @@ export class KeycloakAuthService {
     }
 
     const accessTokenExpiresAt = this.resolveAccessTokenExpiration(tokenResponse.access_token, tokenResponse.expires_in);
-    const sessionExpiresAt = this.resolveRefreshTokenExpiration(tokenResponse, accessTokenExpiresAt);
+    const sessionAbsoluteDeadline = this.resolveInitialSessionDeadline(tokenResponse, accessTokenExpiresAt);
+    const sessionExpiresAt = sessionAbsoluteDeadline;
     const sessionId = randomBytes(32).toString('base64url');
     const principal = await this.getOrCreatePrincipal(tokenResponse.access_token);
     await this.syncUser(principal);
@@ -139,6 +195,7 @@ export class KeycloakAuthService {
       idTokenHint: tokenResponse.id_token,
       accessTokenExpiresAt,
       sessionExpiresAt,
+      sessionAbsoluteDeadline,
     });
 
     return { sessionId, expiresAt: accessTokenExpiresAt, sessionExpiresAt };
@@ -220,7 +277,11 @@ export class KeycloakAuthService {
       throw new ForbiddenException('Service account client is not allowed.');
     }
 
-    const missingRoles = requiredRoles.filter((role) => !principal.roleSet.has(role));
+    const missingRoles = requiredRoles.filter(
+      (role) =>
+        !principal.roleSet.has(role) &&
+        !allowedClientIds.some((clientId) => principal.roleSet.has(`${clientId}:${role}`)),
+    );
     if (missingRoles.length > 0) {
       throw new ForbiddenException(`Missing required role(s): ${missingRoles.join(', ')}.`);
     }
@@ -234,8 +295,10 @@ export class KeycloakAuthService {
       throw new UnauthorizedException('Missing authenticated session.');
     }
 
-    const principal = await this.getOrCreatePrincipal(session.accessToken);
+    this.assertPermissionRequest(requiredPermissions);
     const normalized = normalizePermissions(requiredPermissions);
+    this.assertPermissionRequest(normalized);
+    const principal = await this.getOrCreatePrincipal(session.accessToken);
     if (hasVotingAdminRole(principal.roles)) {
       return normalized;
     }
@@ -318,7 +381,7 @@ export class KeycloakAuthService {
     }
 
     try {
-      return await this.refreshStoredSessionWithLock(sessionId, refreshToken);
+      return await this.refreshStoredSessionWithLock(sessionId, refreshToken, lockOwner);
     } finally {
       await this.sessions.releaseRefreshLock(sessionId, lockOwner);
     }
@@ -335,25 +398,63 @@ export class KeycloakAuthService {
         throw new UnauthorizedException('Missing authenticated session.');
       }
 
-      return session;
+      if (!this.shouldRefreshSessionAccessToken(session.accessTokenExpiresAt)) {
+        return session;
+      }
+
+      throw new ServiceUnavailableException('Authentication refresh is still in progress.');
     }
 
     try {
-      return await this.refreshStoredSessionWithLock(sessionId, refreshToken);
+      return await this.refreshStoredSessionWithLock(sessionId, refreshToken, lockOwner);
     } finally {
       await this.sessions.releaseRefreshLock(sessionId, lockOwner);
     }
   }
 
-  private async refreshStoredSessionWithLock(sessionId: string, refreshToken: string): Promise<AuthSession> {
-    const tokenResponse = await this.refreshAccessToken(refreshToken);
+  private async refreshStoredSessionWithLock(sessionId: string, refreshToken: string, lockOwner: string): Promise<AuthSession> {
+    let lockLost = false;
+    let renewalInFlight: Promise<void> | undefined;
+    const renewLock = async (): Promise<void> => {
+      try {
+        const renewed = await this.sessions.renewRefreshLock(sessionId, lockOwner);
+        if (!renewed) {
+          lockLost = true;
+          this.logger.warn('Authentication refresh lock ownership was lost.');
+        }
+      } catch {
+        lockLost = true;
+        this.logger.warn('Could not renew the authentication refresh lock.');
+      }
+    };
+
+    await renewLock();
+    if (lockLost) {
+      throw new ServiceUnavailableException('Authentication refresh lock was lost.');
+    }
+
+    // The caller already holds the lock. Keep the lease alive for a slow
+    // Keycloak response so a second request cannot reuse a rotating token.
+    const lockRenewal: ReturnType<typeof setInterval> = setInterval(() => {
+      renewalInFlight = renewLock();
+    }, this.refreshLockRenewalMs);
+    const tokenResponse = await this.refreshAccessToken(refreshToken).finally(() => {
+      clearInterval(lockRenewal);
+    });
+    if (renewalInFlight) {
+      await renewalInFlight;
+    }
+    if (lockLost) {
+      throw new ServiceUnavailableException('Authentication refresh lock was lost.');
+    }
     const currentSession = await this.sessions.get(sessionId);
     if (!currentSession || !tokenResponse.access_token) {
       throw new UnauthorizedException('Missing authenticated session.');
     }
 
     const accessTokenExpiresAt = this.resolveAccessTokenExpiration(tokenResponse.access_token, tokenResponse.expires_in);
-    const sessionExpiresAt = this.resolveRefreshTokenExpiration(tokenResponse, currentSession.sessionExpiresAt);
+    const sessionAbsoluteDeadline = currentSession.sessionAbsoluteDeadline ?? currentSession.sessionExpiresAt;
+    const sessionExpiresAt = this.resolveRefreshTokenExpiration(tokenResponse, sessionAbsoluteDeadline);
     const principal = await this.getOrCreatePrincipal(tokenResponse.access_token);
     await this.syncUser(principal);
 
@@ -363,6 +464,7 @@ export class KeycloakAuthService {
       idTokenHint: tokenResponse.id_token ?? currentSession.idTokenHint,
       accessTokenExpiresAt,
       sessionExpiresAt,
+      sessionAbsoluteDeadline,
     };
 
     await this.sessions.set(sessionId, updatedSession);
@@ -373,8 +475,11 @@ export class KeycloakAuthService {
     const now = Date.now();
     const cachedUser = this.userCache.get(accessToken);
     if (cachedUser && cachedUser.expiresAt > now) {
+      this.userCache.delete(accessToken);
+      this.userCache.set(accessToken, cachedUser);
       return cachedUser.user;
     }
+    this.pruneUserCache(now);
 
     const mergedClaims = await this.tokenVerifier.verifyAccessTokenClaims(accessToken);
 
@@ -404,6 +509,7 @@ export class KeycloakAuthService {
       user: principal,
       expiresAt: Math.min(expBasedCache, now + this.cacheTtlMs),
     });
+    this.pruneUserCache(now);
 
     return principal;
   }
@@ -430,6 +536,7 @@ export class KeycloakAuthService {
           Authorization: `Bearer ${accessToken}`,
           'content-type': 'application/x-www-form-urlencoded',
         },
+        timeout: this.keycloakRequestTimeoutMs,
       });
 
       const grantedPermissions = new Set<string>();
@@ -440,8 +547,13 @@ export class KeycloakAuthService {
         return [];
       }
 
-      this.logger.warn('Keycloak authorization permission evaluation failed.');
-      return [];
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      this.logger.warn(`Keycloak authorization permission evaluation failed. status=${status ?? 'none'}.`);
+      if (status === 401) {
+        return [];
+      }
+
+      throw new ServiceUnavailableException('Keycloak authorization service is unavailable.');
     }
   }
 
@@ -465,7 +577,7 @@ export class KeycloakAuthService {
         name,
         roles: principal.roles,
         permissions: principal.permissions,
-        claims: principal.claims as Prisma.InputJsonValue,
+        claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
         lastLoginAt: new Date(),
       },
       update: {
@@ -474,7 +586,7 @@ export class KeycloakAuthService {
         name,
         roles: principal.roles,
         permissions: principal.permissions,
-        claims: principal.claims as Prisma.InputJsonValue,
+        claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
         lastLoginAt: new Date(),
       },
     });
@@ -509,17 +621,108 @@ export class KeycloakAuthService {
   private resolveRefreshTokenExpiration(tokens: TokenResponse, fallbackExpiresAt: number): number {
     const now = Date.now();
     if (typeof tokens.refresh_expires_in === 'number' && tokens.refresh_expires_in > 0) {
-      return now + tokens.refresh_expires_in * 1000;
+      return Math.min(fallbackExpiresAt, now + tokens.refresh_expires_in * 1000);
     }
 
+    if (tokens.refresh_token) {
+      const exp = readNumberClaim(decodeJwtPayload(tokens.refresh_token), 'exp');
+      if (exp) {
+        return Math.min(fallbackExpiresAt, exp * 1000);
+      }
+    }
+
+    return fallbackExpiresAt;
+  }
+
+  private resolveInitialSessionDeadline(tokens: TokenResponse, accessTokenExpiresAt: number): number {
+    const now = Date.now();
+    if (typeof tokens.refresh_expires_in === 'number' && tokens.refresh_expires_in > 0) {
+      return now + tokens.refresh_expires_in * 1000;
+    }
     if (tokens.refresh_token) {
       const exp = readNumberClaim(decodeJwtPayload(tokens.refresh_token), 'exp');
       if (exp) {
         return exp * 1000;
       }
     }
+    return Math.max(accessTokenExpiresAt, Date.now() + DEFAULT_SESSION_MAX_AGE_MS);
+  }
 
-    return Math.max(fallbackExpiresAt, now + 60 * 60 * 1000);
+  private assertPermissionRequest(permissions: readonly string[]): void {
+    if (!Array.isArray(permissions) || permissions.some((permission) => typeof permission !== 'string')) {
+      throw new BadRequestException('Permissions must be an array of strings.');
+    }
+    if (permissions.length > MAX_PERMISSION_REQUESTS || permissions.some((permission) => permission.length > MAX_PERMISSION_LENGTH)) {
+      throw new BadRequestException('Too many or oversized permissions requested.');
+    }
+  }
+
+  private normalizeAuthorizationScope(rawScope?: string): string {
+    if (rawScope !== undefined && typeof rawScope !== 'string') {
+      throw new BadRequestException('Authorization scope is invalid.');
+    }
+    const scope = rawScope?.trim() || 'openid profile email';
+    if (scope.length > MAX_AUTHORIZATION_SCOPE_LENGTH) {
+      throw new BadRequestException('Authorization scope is too long.');
+    }
+
+    const normalized = [...new Set(scope.split(/\s+/).filter(Boolean))];
+    if (normalized.length > MAX_AUTHORIZATION_SCOPE_COUNT || normalized.some((item) => !ALLOWED_OIDC_SCOPES.has(item))) {
+      throw new BadRequestException('Authorization scope contains an unsupported value.');
+    }
+    return normalized.join(' ');
+  }
+
+  private normalizeAuthorizationPrompt(rawPrompt?: string): string | undefined {
+    if (rawPrompt !== undefined && typeof rawPrompt !== 'string') {
+      throw new BadRequestException('Authorization prompt is invalid.');
+    }
+    const prompt = rawPrompt?.trim();
+    if (!prompt) {
+      return undefined;
+    }
+    if (!ALLOWED_OIDC_PROMPTS.has(prompt)) {
+      throw new BadRequestException('Authorization prompt contains an unsupported value.');
+    }
+    return prompt;
+  }
+
+  private minimizePersistedClaims(claims: Record<string, unknown>): Record<string, unknown> {
+    const persisted: Record<string, unknown> = {};
+    for (const key of PERSISTED_CLAIM_KEYS) {
+      if (claims[key] !== undefined) {
+        persisted[key] = claims[key];
+      }
+    }
+
+    if (isRecord(claims['attributes'])) {
+      const attributes: Record<string, unknown> = {};
+      for (const key of PERSISTED_CLAIM_KEYS) {
+        if (claims['attributes'][key] !== undefined) {
+          attributes[key] = claims['attributes'][key];
+        }
+      }
+      if (Object.keys(attributes).length > 0) {
+        persisted.attributes = attributes;
+      }
+    }
+
+    return persisted;
+  }
+
+  private pruneUserCache(now: number): void {
+    for (const [token, cached] of this.userCache) {
+      if (cached.expiresAt <= now) {
+        this.userCache.delete(token);
+      }
+    }
+    while (this.userCache.size > this.maxUserCacheEntries) {
+      const oldest = this.userCache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.userCache.delete(oldest);
+    }
   }
 
   private parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {

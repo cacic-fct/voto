@@ -209,7 +209,7 @@ export type SavePollRequest = {
   title: string;
   description?: string;
   descriptionImages?: PollImageReference[];
-  status?: PollStatus;
+  expectedUpdatedAt?: string;
   mode?: PollMode;
   cacicElectionPhase?: CacicElectionPhase;
   votingStyle?: PollVotingStyle;
@@ -291,6 +291,26 @@ export type PollResultsResponse = {
   answers: PollResponseAnswer[];
 };
 
+/**
+ * A question-level aggregate used when individual ballots cannot be exposed.
+ * `key` is an option/slot identifier (or a canonical scalar value), never a
+ * response or voter identifier. Free-text answers intentionally have no
+ * buckets and expose only their answered count.
+ */
+export type PollResultsAggregateBucket = {
+  key: string;
+  count: number;
+};
+
+export type PollResultsAggregate = {
+  elementId: string;
+  versionKey?: string;
+  /** Immutable, sanitized question/option definition for historical answers. */
+  elementSnapshot?: PollElement;
+  answeredCount: number;
+  buckets?: PollResultsAggregateBucket[];
+};
+
 export type PollResults = {
   pollId: string;
   anonymous: boolean;
@@ -298,16 +318,20 @@ export type PollResults = {
   responseCount: number;
   voterCount?: number;
   voters?: PollResultsVoter[];
+  aggregates?: PollResultsAggregate[];
   responses: PollResultsResponse[];
 };
 
 export type PollResultsDelta = {
   pollId: string;
   final?: boolean;
+  /** The publisher intentionally omitted the full snapshot; refetch it. */
+  refreshRequired?: boolean;
   answersReleased?: boolean;
   responseCount: number;
   voterCount?: number;
   voters?: PollResultsVoter[];
+  aggregates?: PollResultsAggregate[];
   responses: PollResultsResponse[];
 };
 

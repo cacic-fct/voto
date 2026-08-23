@@ -1,17 +1,17 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   EventManagerEvent,
   Poll,
   PollElementSettings,
   PollStatus,
 } from '@org/voting-contracts';
-import { PollStatus as DbPollStatus } from '@prisma/client';
+import { PollStatus as DbPollStatus, Prisma } from '@prisma/client';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SavePollDto } from './dto/poll.dto';
 import { PollCacicElectionService } from './poll-cacic-election.service';
-import { cleanOptionalText, toContractPoll, toContractStatus, toDbStatus } from './poll-contract.mapper';
+import { cleanOptionalText, toContractPoll, toDbStatus } from './poll-contract.mapper';
 import { PollElementMutationsService } from './poll-element-mutations.service';
 import { PollImageMutationsService } from './poll-image-mutations.service';
 import { PollImagesService } from './poll-images.service';
@@ -27,30 +27,16 @@ import {
 
 @Injectable()
 export class PollMutationsService {
-  private readonly validation: PollMutationValidationService;
-  private readonly options: PollMutationOptionsService;
-  private readonly elementMutations: PollElementMutationsService;
-  private readonly imageMutations: PollImageMutationsService;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventManager: EventManagerIntegrationService,
     private readonly cacicElection: PollCacicElectionService,
-    private readonly pollImages?: PollImagesService,
-    @Optional()
-    pollValidation?: PollMutationValidationService,
-    @Optional()
-    pollOptions?: PollMutationOptionsService,
-    @Optional()
-    pollElementMutations?: PollElementMutationsService,
-    @Optional()
-    pollImageMutations?: PollImageMutationsService,
-  ) {
-    this.validation = pollValidation ?? new PollMutationValidationService();
-    this.options = pollOptions ?? new PollMutationOptionsService(eventManager);
-    this.elementMutations = pollElementMutations ?? new PollElementMutationsService(this.options);
-    this.imageMutations = pollImageMutations ?? new PollImageMutationsService(this.validation);
-  }
+    private readonly pollImages: PollImagesService,
+    private readonly validation: PollMutationValidationService,
+    private readonly options: PollMutationOptionsService,
+    private readonly elementMutations: PollElementMutationsService,
+    private readonly imageMutations: PollImageMutationsService,
+  ) {}
 
   listLinkableEvents(): Promise<EventManagerEvent[]> {
     return this.eventManager.listLinkableEvents();
@@ -58,14 +44,16 @@ export class PollMutationsService {
 
   async createPoll(input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {
     this.validatePollInput(input);
+    if (this.readSubmittedStatus(input) !== undefined) {
+      throw new ConflictException('Poll status changes must use the publish endpoint.');
+    }
     const metadata = await this.resolvePollMetadata(input);
     const resultVisibility = this.resolvePollResultVisibility(input, undefined, metadata);
     const responseOptions = this.resolvePollResponseOptions(input, undefined, metadata);
     const directLink = this.options.resolvePollDirectLink(input, undefined, metadata);
     const publicationSchedule = this.resolvePollPublicationSchedule(input, undefined);
     this.validatePollPublicationSchedule(publicationSchedule);
-    const status = toDbStatus(input.status ?? 'draft');
-    const now = new Date();
+    const status = DbPollStatus.DRAFT;
 
     const removedImageObjectKeys: string[] = [];
     const poll = await this.prisma.$transaction(async (tx) => {
@@ -79,8 +67,8 @@ export class PollMutationsService {
           ...responseOptions,
           ...directLink,
           ...publicationSchedule,
-          publishedAt: status === DbPollStatus.PUBLISHED ? now : undefined,
-          closedAt: status === DbPollStatus.CLOSED ? now : undefined,
+          publishedAt: null,
+          closedAt: null,
           createdById: user.sub,
           updatedById: user.sub,
         },
@@ -99,44 +87,45 @@ export class PollMutationsService {
       });
     });
 
-    await this.pollImages?.deleteObjectKeysBestEffort(removedImageObjectKeys);
+    await this.pollImages.deleteObjectKeysBestEffort(removedImageObjectKeys);
     return toContractPoll(poll, { includeDirectLinkToken: true });
   }
 
   async updatePoll(id: string, input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {
     this.validatePollInput(input);
+    if (this.readSubmittedStatus(input) !== undefined) {
+      throw new ConflictException('Poll status changes must use the publish endpoint.');
+    }
+    const expectedUpdatedAt = this.parseExpectedUpdatedAt(input.expectedUpdatedAt);
     const existing = await this.prisma.poll.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Poll not found.');
     }
 
-    const status = toDbStatus(input.status ?? toContractStatus(existing.status));
     const metadata = await this.resolvePollMetadata(input, existing);
     const resultVisibility = this.resolvePollResultVisibility(input, existing, metadata);
     const responseOptions = this.resolvePollResponseOptions(input, existing, metadata);
     const directLink = this.options.resolvePollDirectLink(input, existing, metadata);
     const publicationSchedule = this.resolvePollPublicationSchedule(input, existing);
     this.validatePollPublicationSchedule(publicationSchedule);
-    const now = new Date();
-
     const removedImageObjectKeys: string[] = [];
     const poll = await this.prisma.$transaction(async (tx) => {
-      await tx.poll.update({
-        where: { id },
-        data: {
-          title: input.title.trim(),
-          description: cleanOptionalText(input.description),
-          status,
-          ...metadata,
-          ...resultVisibility,
-          ...responseOptions,
-          ...directLink,
-          ...publicationSchedule,
-          publishedAt: status === DbPollStatus.PUBLISHED ? existing.publishedAt ?? now : existing.publishedAt,
-          closedAt: status === DbPollStatus.CLOSED ? existing.closedAt ?? now : null,
-          updatedById: user.sub,
-        },
+      const updated = await this.updatePollWithVersion(tx, id, expectedUpdatedAt, {
+        title: input.title.trim(),
+        description: cleanOptionalText(input.description),
+        status: existing.status,
+        ...metadata,
+        ...resultVisibility,
+        ...responseOptions,
+        ...directLink,
+        ...publicationSchedule,
+        publishedAt: existing.publishedAt,
+        closedAt: existing.closedAt,
+        updatedById: user.sub,
       });
+      if (!updated) {
+        throw new ConflictException('Poll was changed by another administrator. Reload before saving.');
+      }
 
       await this.elementMutations.backfillAnswerElementSnapshots(tx, id);
       await this.elementMutations.syncElements(
@@ -152,30 +141,79 @@ export class PollMutationsService {
       });
     });
 
-    await this.pollImages?.deleteObjectKeysBestEffort(removedImageObjectKeys);
+    await this.pollImages.deleteObjectKeysBestEffort(removedImageObjectKeys);
     return toContractPoll(poll, { includeDirectLinkToken: true });
   }
 
-  async updatePollStatus(id: string, status: PollStatus, user: AuthenticatedPrincipal): Promise<Poll> {
+  async updatePollStatus(
+    id: string,
+    status: PollStatus,
+    user: AuthenticatedPrincipal,
+    expectedUpdatedAt?: string,
+  ): Promise<Poll> {
     const existing = await this.prisma.poll.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Poll not found.');
     }
 
     const dbStatus = toDbStatus(status);
+    this.assertValidStatusTransition(existing.status, dbStatus);
+    const expectedVersion = this.parseExpectedUpdatedAt(expectedUpdatedAt);
     const now = new Date();
-    const poll = await this.prisma.poll.update({
-      where: { id },
-      data: {
+    const poll = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.updatePollWithVersion(tx, id, expectedVersion, {
         status: dbStatus,
         publishedAt: dbStatus === DbPollStatus.PUBLISHED ? existing.publishedAt ?? now : existing.publishedAt,
-        closedAt: dbStatus === DbPollStatus.CLOSED ? existing.closedAt ?? now : null,
+        closedAt: dbStatus === DbPollStatus.CLOSED ? now : null,
         updatedById: user.sub,
-      },
-      include: pollInclude,
+      });
+      if (!updated) {
+        throw new ConflictException('Poll was changed by another administrator. Reload before updating status.');
+      }
+      return tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
     });
 
     return toContractPoll(poll, { includeDirectLinkToken: true });
+  }
+
+  private parseExpectedUpdatedAt(value: string | undefined): Date {
+    if (!value) {
+      throw new ConflictException('A current poll version is required for this mutation.');
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new ConflictException('The poll version is invalid. Reload before retrying.');
+    }
+    return date;
+  }
+
+  private assertValidStatusTransition(current: DbPollStatus, next: DbPollStatus): void {
+    const allowed =
+      (current === DbPollStatus.DRAFT && next === DbPollStatus.PUBLISHED) ||
+      (current === DbPollStatus.PUBLISHED && next === DbPollStatus.CLOSED) ||
+      (current === DbPollStatus.CLOSED && next === DbPollStatus.PUBLISHED);
+    if (!allowed) {
+      throw new ConflictException(`Poll cannot transition from ${current.toLowerCase()} to ${next.toLowerCase()}.`);
+    }
+  }
+
+  private async updatePollWithVersion(
+    tx: Prisma.TransactionClient,
+    id: string,
+    expectedUpdatedAt: Date,
+    data: Prisma.PollUncheckedUpdateManyInput,
+  ): Promise<boolean> {
+    const result = await tx.poll.updateMany({
+      where: { id, updatedAt: expectedUpdatedAt },
+      data,
+    });
+    return result.count === 1;
+  }
+
+  private readSubmittedStatus(input: SavePollDto): PollStatus | undefined {
+    const value = (input as SavePollDto & { status?: unknown }).status;
+    return typeof value === 'string' ? (value as PollStatus) : undefined;
   }
 
   async deletePoll(id: string): Promise<void> {
@@ -184,7 +222,7 @@ export class PollMutationsService {
       select: { objectKey: true },
     });
     await this.prisma.poll.deleteMany({ where: { id } });
-    await this.pollImages?.deleteObjectKeysBestEffort(images.map((image) => image.objectKey));
+    await this.pollImages.deleteObjectKeysBestEffort(images.map((image) => image.objectKey));
   }
 
   validatePollInput(input: SavePollDto): void {

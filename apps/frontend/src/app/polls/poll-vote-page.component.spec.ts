@@ -156,6 +156,27 @@ describe('PollVotePageComponent', () => {
     });
   });
 
+  it('blocks submission when prior response state is unknown and allows an explicit retry', async () => {
+    const component = fixture.componentInstance as unknown as {
+      loadUserResponseState(poll: Poll): Promise<void>;
+      retryResponseState(poll: Poll): void;
+      responseStateError: { (): string | null };
+      canVote: { (): boolean };
+    };
+    vi.mocked(api.getMyPollResponse)
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })))
+      .mockReturnValueOnce(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }));
+
+    await component.loadUserResponseState(poll);
+    expect(component.responseStateError()).toContain('Não foi possível confirmar');
+    expect(component.canVote()).toBe(false);
+
+    component.retryResponseState(poll);
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    expect(component.responseStateError()).toBeNull();
+    expect(api.getMyPollResponse).toHaveBeenCalledTimes(3);
+  });
+
   it('should load and submit CACiC election slates during slate submission', async () => {
     const component = fixture.componentInstance as unknown as {
       slates: { (): CacicElectionSlate[] };
@@ -729,11 +750,11 @@ describe('PollVotePageComponent', () => {
     vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(eventSource as unknown as EventSource);
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce(delta);
 
-    await component.loadPublicResults({ ...poll, resultsPublic: true, resultsLive: true });
+    await component.loadPublicResults({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true });
     eventSource.onmessage?.({ data: JSON.stringify(delta) } as MessageEvent<string>);
 
     expect(api.getPublicPollResults).toHaveBeenCalledWith(poll.id);
-    expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith(poll.id, 0);
+    expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith(poll.id);
     expect(component.results()?.responseCount).toBe(2);
     expect(component.results()?.responses.map((item) => item.id)).toEqual(['response-1', 'response-2']);
     expect(component.resultsError()).toBeNull();
@@ -785,7 +806,7 @@ describe('PollVotePageComponent', () => {
 
     await component.loadPublicResults({ ...poll, status: 'closed', resultsPublic: true, resultsLive: false });
 
-    expect(component.resultsError()).toBe('Não foi possível carregar os resultados públicos.');
+    expect(component.resultsError()).toBe('Não foi possível carregar os resultados públicos. Verifique sua conexão e tente novamente.');
     expect(component.loadingResults()).toBe(false);
   });
 
@@ -1005,7 +1026,7 @@ describe('PollVotePageComponent', () => {
     };
     const directApi = {
       ...api,
-      getDirectLinkPoll: vi.fn().mockReturnValue(of({ ...poll, resultsPublic: true, resultsLive: true })),
+      getDirectLinkPoll: vi.fn().mockReturnValue(of({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true })),
       getMyDirectLinkPollResponse: vi.fn().mockReturnValue(
         of({
           hasSubmitted: false,
@@ -1063,14 +1084,14 @@ describe('PollVotePageComponent', () => {
 	    };
 
 	    await new Promise<void>((resolve) => setTimeout(resolve));
-	    await component.loadPublicResults({ ...poll, resultsPublic: true, resultsLive: true });
+	    await component.loadPublicResults({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true });
 	    eventSource.onmessage?.({ data: '{}' } as MessageEvent<string>);
 	    await component.submit(poll);
 
     expect(directApi.getDirectLinkPoll).toHaveBeenCalledWith('direct-token');
     expect(directApi.getMyDirectLinkPollResponse).toHaveBeenCalledWith('direct-token');
     expect(directApi.getDirectLinkPollResults).toHaveBeenCalledWith('direct-token');
-    expect(directApi.openDirectLinkPollResultsEvents).toHaveBeenCalledWith('direct-token', 0);
+    expect(directApi.openDirectLinkPollResultsEvents).toHaveBeenCalledWith('direct-token');
     expect(directApi.submitDirectLinkResponse).toHaveBeenCalledWith('direct-token', {
       answers: [{ elementId: 'element-1', value: null }],
     });

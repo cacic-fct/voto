@@ -1,4 +1,4 @@
-import { Injectable, Logger, MessageEvent, Optional } from '@nestjs/common';
+import { Injectable, Logger, MessageEvent } from '@nestjs/common';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -29,11 +29,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { Observable } from 'rxjs';
-import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
-import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
-import { FeatureFlagService } from '../feature-flags/feature-flags.service';
-import { PrismaService } from '../prisma/prisma.service';
 import {
   AddPollEligibilityEnrollmentsDto,
   ImportPollEligibilityEnrollmentsDto,
@@ -61,11 +57,6 @@ import {
   toDbVotingStyle,
 } from './poll-contract.mapper';
 import { PollEligibilityService } from './poll-eligibility.service';
-import { PollElementMutationsService } from './poll-element-mutations.service';
-import { PollImageMutationsService } from './poll-image-mutations.service';
-import { PollImagesService } from './poll-images.service';
-import { PollMutationOptionsService } from './poll-mutation-options.service';
-import { PollMutationValidationService } from './poll-mutation-validation.service';
 import { PollMutationsService } from './poll-mutations.service';
 import { PollQueryService } from './poll-query.service';
 import {
@@ -95,65 +86,15 @@ import { parseStringList, toPollResultsVoter } from './poll-user-claims';
 @Injectable()
 export class PollsService {
   private readonly logger = new Logger(PollsService.name);
-  private readonly eligibility: PollEligibilityService;
-  private readonly mutations: PollMutationsService;
-  private readonly query: PollQueryService;
-  private readonly responses: PollResponsesService;
-  private readonly results: PollResultsService;
-  private readonly cacicElection: PollCacicElectionService;
 
   constructor(
-    prisma: PrismaService,
-    eventManager: EventManagerIntegrationService,
-    accountManager: AccountManagerIntegrationService,
-    pollImages?: PollImagesService,
-    @Optional()
-    featureFlags?: FeatureFlagService,
-    @Optional()
-    pollEligibility?: PollEligibilityService,
-    @Optional()
-    pollMutationOptions?: PollMutationOptionsService,
-    @Optional()
-    pollMutationValidation?: PollMutationValidationService,
-    @Optional()
-    pollElementMutations?: PollElementMutationsService,
-    @Optional()
-    pollImageMutations?: PollImageMutationsService,
-    @Optional()
-    pollCacicElection?: PollCacicElectionService,
-    @Optional()
-    pollMutations?: PollMutationsService,
-    @Optional()
-    pollQuery?: PollQueryService,
-    @Optional()
-    pollResults?: PollResultsService,
-    @Optional()
-    pollResponses?: PollResponsesService,
-  ) {
-    const mutationValidation = pollMutationValidation ?? new PollMutationValidationService();
-    const mutationOptions = pollMutationOptions ?? new PollMutationOptionsService(eventManager);
-    const elementMutations = pollElementMutations ?? new PollElementMutationsService(mutationOptions);
-    const imageMutations = pollImageMutations ?? new PollImageMutationsService(mutationValidation);
-
-    this.eligibility =
-      pollEligibility ?? new PollEligibilityService(prisma, eventManager, featureFlags, accountManager);
-    this.cacicElection = pollCacicElection ?? new PollCacicElectionService(prisma, accountManager);
-    this.results = pollResults ?? new PollResultsService(prisma, this.eligibility);
-    this.responses = pollResponses ?? new PollResponsesService(prisma, this.eligibility, this.results);
-    this.mutations =
-      pollMutations ??
-      new PollMutationsService(
-        prisma,
-        eventManager,
-        this.cacicElection,
-        pollImages,
-        mutationValidation,
-        mutationOptions,
-        elementMutations,
-        imageMutations,
-      );
-    this.query = pollQuery ?? new PollQueryService(prisma, eventManager, this.eligibility);
-  }
+    private readonly eligibility: PollEligibilityService,
+    private readonly mutations: PollMutationsService,
+    private readonly query: PollQueryService,
+    private readonly responses: PollResponsesService,
+    private readonly results: PollResultsService,
+    private readonly cacicElection: PollCacicElectionService,
+  ) {}
 
   listLinkableEvents(): Promise<EventManagerEvent[]> {
     return this.query.listLinkableEvents();
@@ -163,8 +104,8 @@ export class PollsService {
     return this.query.listAdminPolls(user);
   }
 
-  listPublicPolls(): Promise<PollSummary[]> {
-    return this.query.listPublicPolls();
+  listPublicPolls(user?: AuthenticatedPrincipal | null): Promise<PollSummary[]> {
+    return this.query.listPublicPolls(user);
   }
 
   getAdminPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
@@ -245,8 +186,13 @@ export class PollsService {
     return this.mutations.updatePoll(id, input, user);
   }
 
-  async updatePollStatus(id: string, status: PollStatus, user: AuthenticatedPrincipal): Promise<Poll> {
-    const poll = await this.mutations.updatePollStatus(id, status, user);
+  async updatePollStatus(
+    id: string,
+    status: PollStatus,
+    user: AuthenticatedPrincipal,
+    expectedUpdatedAt?: string,
+  ): Promise<Poll> {
+    const poll = await this.mutations.updatePollStatus(id, status, user, expectedUpdatedAt);
     if (status === 'closed') {
       try {
         await this.results.publishPollResultsForResponse(id, true);

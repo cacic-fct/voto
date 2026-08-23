@@ -42,7 +42,7 @@ export class VotingGrpcServerLifecycle implements OnApplicationShutdown {
 
   async onApplicationShutdown(): Promise<void> {
     if (!this.server) return;
-    await new Promise<void>((resolve) => this.server?.tryShutdown(() => resolve()));
+    await shutdownVotingGrpcServer(this.server);
     this.server = undefined;
   }
 }
@@ -67,12 +67,48 @@ export async function startVotingGrpcServer(app: INestApplication): Promise<Serv
   );
 
   const bindUrl = process.env.VOTING_GRPC_BIND_URL?.trim() || '0.0.0.0:50051';
+  app.get(VotingGrpcServerLifecycle).register(server);
   await new Promise<void>((resolve, reject) => {
     server.bindAsync(bindUrl, ServerCredentials.createInsecure(), (error) => (error ? reject(error) : resolve()));
   });
-  app.get(VotingGrpcServerLifecycle).register(server);
   logger.log(`CACiC Voto LGPD gRPC server is listening on ${bindUrl}.`);
   return server;
+}
+
+export async function shutdownVotingGrpcServer(server: Server): Promise<void> {
+  const timeoutMs = parsePositiveIntegerEnv(process.env.VOTING_GRPC_SHUTDOWN_TIMEOUT_MS, 10_000);
+  let settled = false;
+  let resolveShutdown: (() => void) | undefined;
+  const shutdown = new Promise<void>((resolve) => {
+    resolveShutdown = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    server.tryShutdown(() => resolveShutdown?.());
+  });
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timeoutHandle = setTimeout(resolve, timeoutMs);
+    timeoutHandle.unref?.();
+  });
+  try {
+    await Promise.race([shutdown, timeout]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+  if (!settled) {
+    server.forceShutdown();
+    resolveShutdown?.();
+  }
+}
+
+function parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {
+  const value = Number.parseInt(rawValue ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 export function createVotingGrpcHandlers(dependencies: VotingGrpcDependencies): UntypedServiceImplementation {
@@ -144,7 +180,15 @@ function requiredString(value: GrpcRequest, key: string): string {
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new BadRequestException(`${key} is required.`);
   }
-  return raw.trim();
+  const normalized = raw.trim();
+  const maxLength = key === 'requestId' ? 128 : 256;
+  if (normalized.length > maxLength || containsControlCharacters(normalized)) {
+    throw new BadRequestException(`${key} is invalid.`);
+  }
+  if (key === 'requestId' && !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(normalized)) {
+    throw new BadRequestException('requestId is invalid.');
+  }
+  return normalized;
 }
 
 function optionalStringFields<T extends readonly string[]>(
@@ -154,9 +198,29 @@ function optionalStringFields<T extends readonly string[]>(
   return Object.fromEntries(
     keys.flatMap((key) => {
       const raw = value[key];
-      return typeof raw === 'string' && raw.trim() ? [[key, raw.trim()]] : [];
+      if (raw === undefined || raw === null || (typeof raw === 'string' && !raw.trim())) {
+        return [];
+      }
+      if (typeof raw !== 'string') {
+        throw new BadRequestException(`${key} is invalid.`);
+      }
+      const normalized = raw.trim();
+      if (normalized.length > 320 || containsControlCharacters(normalized)) {
+        throw new BadRequestException(`${key} is invalid.`);
+      }
+      if (key === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        throw new BadRequestException('email is invalid.');
+      }
+      return [[key, normalized]];
     }),
   ) as Partial<Record<T[number], string>>;
+}
+
+function containsControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
 }
 
 export function toServiceError(error: unknown): ServiceError {

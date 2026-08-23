@@ -466,6 +466,7 @@ describe('PollBuilderDraftService', () => {
     service.setDraft({
       ...service.draft(),
       id: 'poll-1',
+      updatedAt: '2026-06-01T10:00:00.000Z',
       title: 'Votação',
       votingStyle: 'anonymous',
       resultsPublic: false,
@@ -480,13 +481,16 @@ describe('PollBuilderDraftService', () => {
       },
     });
 
-    expect(service.toSaveRequest()).toMatchObject({
+    const request = service.toSaveRequest();
+    expect(request).toMatchObject({
       title: 'Votação',
+      expectedUpdatedAt: '2026-06-01T10:00:00.000Z',
       resultsPublic: false,
       resultsLive: false,
       allowResponseEditing: false,
       allowMultipleResponses: true,
       linkedEventId: 'event-1',
     });
+    expect(request).not.toHaveProperty('status');
   });
 });

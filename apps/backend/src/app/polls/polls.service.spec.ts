@@ -29,22 +29,36 @@ import { EventManagerIntegrationService } from '../event-manager/event-manager-i
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacicElectionSlateMemberDto, SavePollDto } from './dto/poll.dto';
+import { PollCacicElectionElementsService } from './poll-cacic-election-elements.service';
+import { PollCacicElectionSlateValidatorService } from './poll-cacic-election-slate-validator.service';
+import { PollCacicElectionService } from './poll-cacic-election.service';
+import { PollEligibilityService } from './poll-eligibility.service';
+import { PollElementMutationsService } from './poll-element-mutations.service';
+import { PollImageMutationsService } from './poll-image-mutations.service';
+import { PollMutationOptionsService } from './poll-mutation-options.service';
+import { PollMutationValidationService } from './poll-mutation-validation.service';
+import { PollMutationsService } from './poll-mutations.service';
+import { PollQueryService } from './poll-query.service';
 import { ElementRecord, PollPublicationScheduleData } from './poll-records';
+import { PollResponsesService } from './poll-responses.service';
+import { PollResultsService } from './poll-results.service';
 import { PollsService } from './polls.service';
 
 type PrismaMock = {
-  $transaction: jest.Mock<Promise<unknown>, [(tx: PrismaMock) => Promise<unknown>]>;
+  $transaction: jest.Mock<Promise<unknown>, [(tx: PrismaMock) => Promise<unknown>, unknown?]>;
   poll: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown?]>;
     findUnique: jest.Mock<Promise<unknown>, [unknown]>;
     findFirst: jest.Mock<Promise<unknown>, [unknown]>;
     create: jest.Mock<Promise<{ id: string }>, [unknown]>;
     update: jest.Mock<Promise<unknown>, [unknown]>;
+    updateMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
     findUniqueOrThrow: jest.Mock<Promise<unknown>, [unknown]>;
   };
   pollElement: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
+    findUnique: jest.Mock<Promise<unknown>, [unknown]>;
     findFirst: jest.Mock<Promise<unknown>, [unknown]>;
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
     create: jest.Mock<Promise<unknown>, [unknown]>;
@@ -54,6 +68,12 @@ type PrismaMock = {
     findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
     update: jest.Mock<Promise<unknown>, [unknown]>;
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+  };
+  pollElementOption: {
+    findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
+    findUnique: jest.Mock<Promise<unknown>, [unknown]>;
+    deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+    createMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
   };
   pollEligibilityEnrollment: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
@@ -182,12 +202,14 @@ function createPrismaMock(): PrismaMock {
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       deleteMany: jest.fn(),
       findUniqueOrThrow: jest.fn(),
     },
     pollElement: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue(null),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       create: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({}),
@@ -196,6 +218,12 @@ function createPrismaMock(): PrismaMock {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    pollElementOption: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     pollEligibilityEnrollment: {
       findMany: jest.fn(),
@@ -254,9 +282,20 @@ function createEventManagerMock(): EventManagerMock {
 }
 
 function createAccountManagerMock(): AccountManagerMock {
+  const roles = ['president', 'vicePresident', 'financialDirector', 'communicationDirector', 'eventsDirector', 'publicRelationsDirector'];
   return {
     lookupPeopleByEnrollmentNumbers: jest.fn().mockResolvedValue([]),
-    lookupPeopleByIdentifiers: jest.fn().mockResolvedValue(new Map()),
+    lookupPeopleByIdentifiers: jest.fn().mockImplementation(async (identifiers) => new Map(
+      identifiers.map((identifier: { requestId: string; identifierValue: string }, index: number) => [
+        identifier.requestId,
+        [{
+          userId: identifier.requestId,
+          name: `${roles[index] ?? 'member'} Member`,
+          email: identifier.identifierValue,
+          enrollmentNumber: `2612345${index}`,
+        }],
+      ]),
+    )),
   };
 }
 
@@ -333,6 +372,7 @@ function pollRecord(overrides: Record<string, unknown> = {}) {
     createdAt,
     updatedAt,
     publishedAt,
+    closedAt: null,
     visibleFrom: null,
     votingStartsAt: null,
     votingEndsAt: null,
@@ -409,11 +449,10 @@ function pollVoterRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function savePoll(overrides: Partial<SavePollDto> = {}): SavePollDto {
+function savePoll(overrides: Record<string, unknown> = {}): SavePollDto & { status?: string } {
   return {
     title: ' Poll ',
     description: ' Description ',
-    status: 'draft',
     votingStyle: 'secret',
     voterEligibilitySource: 'authenticatedUsers',
     requireVerifiedUnespRole: false,
@@ -425,6 +464,7 @@ function savePoll(overrides: Partial<SavePollDto> = {}): SavePollDto {
     visibleFrom: undefined,
     votingStartsAt: undefined,
     votingEndsAt: undefined,
+    expectedUpdatedAt: updatedAt.toISOString(),
     elements: [
       {
         id: 'question-1',
@@ -466,9 +506,11 @@ function cacicElectionSlateMemberInput(
   role: CacicElectionSlateMemberDto['role'],
   overrides: Record<string, unknown> = {},
 ): CacicElectionSlateMemberDto {
+  const roleIndex = ['president', 'vicePresident', 'financialDirector', 'communicationDirector', 'eventsDirector', 'publicRelationsDirector']
+    .indexOf(role);
   return {
     fullName: `${role} Member`,
-    enrollmentNumber: '26123456',
+    enrollmentNumber: `2612345${Math.max(0, roleIndex)}`,
     role,
     customRole: undefined,
     isRepresentative: role === 'president',
@@ -555,6 +597,67 @@ describe('PollsService', () => {
   let service: PollsService;
   let internals: PollsInternals;
 
+  function createServiceUnderTest(
+    pollImages: { deleteObjectKeysBestEffort: jest.Mock } = {
+      deleteObjectKeysBestEffort: jest.fn().mockResolvedValue(undefined),
+    },
+  ): PollsService {
+    const validation = new PollMutationValidationService();
+    const options = new PollMutationOptionsService(
+      eventManager as unknown as EventManagerIntegrationService,
+    );
+    const elementMutations = new PollElementMutationsService(options);
+    const imageMutations = new PollImageMutationsService(validation);
+    const eligibility = new PollEligibilityService(
+      prisma as unknown as PrismaService,
+      eventManager as unknown as EventManagerIntegrationService,
+      featureFlags as unknown as FeatureFlagService,
+      accountManager as unknown as AccountManagerIntegrationService,
+    );
+    const cacicElection = new PollCacicElectionService(
+      prisma as unknown as PrismaService,
+      accountManager as unknown as AccountManagerIntegrationService,
+      new PollCacicElectionElementsService(),
+      new PollCacicElectionSlateValidatorService(
+        accountManager as unknown as AccountManagerIntegrationService,
+      ),
+    );
+    const results = new PollResultsService(
+      prisma as unknown as PrismaService,
+      eligibility,
+      undefined as never,
+      undefined as never,
+    );
+    const responses = new PollResponsesService(
+      prisma as unknown as PrismaService,
+      eligibility,
+      results,
+    );
+    const mutations = new PollMutationsService(
+      prisma as unknown as PrismaService,
+      eventManager as unknown as EventManagerIntegrationService,
+      cacicElection,
+      pollImages as never,
+      validation,
+      options,
+      elementMutations,
+      imageMutations,
+    );
+    const query = new PollQueryService(
+      prisma as unknown as PrismaService,
+      eventManager as unknown as EventManagerIntegrationService,
+      eligibility,
+    );
+    return new PollsService(
+      eligibility,
+      mutations,
+      query,
+      responses,
+      results,
+      cacicElection,
+    );
+  }
+
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
     prisma = createPrismaMock();
@@ -563,13 +666,7 @@ describe('PollsService', () => {
     featureFlags = {
       isUndergraduateUnespRoleVerificationDisabled: jest.fn<Promise<boolean>, []>().mockResolvedValue(false),
     };
-    service = new PollsService(
-      prisma as unknown as PrismaService,
-      eventManager as unknown as EventManagerIntegrationService,
-      accountManager as unknown as AccountManagerIntegrationService,
-      undefined,
-      featureFlags as unknown as FeatureFlagService,
-    );
+    service = createServiceUnderTest();
     internals = service as unknown as PollsInternals;
   });
 
@@ -788,7 +885,7 @@ describe('PollsService', () => {
   });
 
   it('submits public CACiC election slates as pending and keeps identifiers private in the response', async () => {
-    prisma.poll.findUnique.mockResolvedValueOnce({
+    prisma.poll.findUnique.mockResolvedValue({
       id: 'poll-1',
       mode: DbPollMode.CACIC_ELECTION,
       cacicElectionPhase: DbCacicElectionPhase.SLATE_SUBMISSION,
@@ -833,7 +930,7 @@ describe('PollsService', () => {
         expect.objectContaining({
           slateId: 'slate-1',
           fullName: 'president Member',
-          enrollmentNumber: '26123456',
+          enrollmentNumber: '26123450',
           role: DbCacicElectionSlateMemberRole.PRESIDENT,
           identifierValue: 'president@example.com',
         }),
@@ -848,7 +945,7 @@ describe('PollsService', () => {
   });
 
   it('lets public submitters edit their own CACiC election slate until it is approved', async () => {
-    prisma.poll.findUnique.mockResolvedValueOnce({
+    prisma.poll.findUnique.mockResolvedValue({
       id: 'poll-1',
       mode: DbPollMode.CACIC_ELECTION,
       cacicElectionPhase: DbCacicElectionPhase.SLATE_SUBMISSION,
@@ -898,10 +995,23 @@ describe('PollsService', () => {
 
   it('lets admins create slates and refreshes CACiC election ballot options', async () => {
     prisma.poll.findUnique
-      .mockResolvedValueOnce({ id: 'poll-1', mode: DbPollMode.CACIC_ELECTION })
+      .mockResolvedValueOnce({
+        id: 'poll-1',
+        mode: DbPollMode.CACIC_ELECTION,
+        status: DbPollStatus.DRAFT,
+        _count: { responses: 0 },
+      })
+      .mockResolvedValueOnce({
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        status: DbPollStatus.DRAFT,
+        _count: { responses: 0 },
+      })
       .mockResolvedValueOnce({ mode: DbPollMode.CACIC_ELECTION, cacicElectionPhase: DbCacicElectionPhase.ELECTION });
     prisma.cacicElectionSlate.create.mockResolvedValueOnce({ id: 'slate-1' });
-    prisma.cacicElectionSlate.findMany.mockResolvedValueOnce([{ id: 'slate-1', name: 'Chapa Aurora' }]);
+    prisma.cacicElectionSlate.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 'slate-1', name: 'Chapa Aurora' }]);
     prisma.pollElement.findFirst.mockResolvedValueOnce({ id: 'cacic-election-vote' });
     prisma.cacicElectionSlate.findUniqueOrThrow.mockResolvedValueOnce(
       dbCacicElectionSlate({
@@ -937,9 +1047,9 @@ describe('PollsService', () => {
         options: {
           deleteMany: {},
           create: [
-            expect.objectContaining({ id: 'slate:slate-1', label: 'Chapa Aurora' }),
-            expect.objectContaining({ id: 'cacic-election-blank', label: 'Branco' }),
-            expect.objectContaining({ id: 'cacic-election-null', label: 'Nulo' }),
+            expect.objectContaining({ id: expect.stringMatching(/^_cacic_option_/), label: 'Chapa Aurora' }),
+            expect.objectContaining({ id: expect.stringMatching(/^_cacic_option_/), label: 'Branco' }),
+            expect.objectContaining({ id: expect.stringMatching(/^_cacic_option_/), label: 'Nulo' }),
           ],
         },
       }),
@@ -972,6 +1082,8 @@ describe('PollsService', () => {
         id: 'poll-1',
         mode: DbPollMode.CACIC_ELECTION,
         cacicElectionPhase: DbCacicElectionPhase.ELECTION,
+        status: DbPollStatus.DRAFT,
+        _count: { responses: 0 },
       });
     prisma.pollElement.findMany.mockResolvedValue([]);
     prisma.cacicElectionSlate.findMany.mockResolvedValue([{ id: 'slate-1', name: 'Chapa Aurora' }]);
@@ -1056,7 +1168,7 @@ describe('PollsService', () => {
   });
 
   it('rejects invalid CACiC election slate submissions before persistence', async () => {
-    prisma.poll.findUnique.mockResolvedValueOnce({
+    prisma.poll.findUnique.mockResolvedValue({
       id: 'poll-1',
       mode: DbPollMode.CACIC_ELECTION,
       cacicElectionPhase: DbCacicElectionPhase.SLATE_SUBMISSION,
@@ -1079,7 +1191,12 @@ describe('PollsService', () => {
   });
 
   it('keeps anonymous admin voter audits separate from live individual answers', async () => {
-    prisma.poll.findUnique.mockResolvedValue(pollResultsMetadata({ votingStyle: DbPollVotingStyle.ANONYMOUS }));
+    prisma.poll.findUnique
+      .mockResolvedValueOnce(pollResultsMetadata({ votingStyle: DbPollVotingStyle.ANONYMOUS }))
+      .mockResolvedValueOnce(pollResultsMetadata({
+        votingStyle: DbPollVotingStyle.ANONYMOUS,
+        status: DbPollStatus.CLOSED,
+      }));
     prisma.pollResponse.findMany.mockResolvedValue([responseRecord()]);
     prisma.pollResponse.count.mockResolvedValue(1);
     prisma.pollVoter.findMany.mockResolvedValue([pollVoterRecord()]);
@@ -1109,14 +1226,8 @@ describe('PollsService', () => {
       anonymous: true,
       answersReleased: true,
       responseCount: 1,
-      responses: [
-        {
-          id: 'response-1',
-          submittedAt: undefined,
-          voter: undefined,
-          answers: [{ elementId: 'question-1', value: 'answer' }],
-        },
-      ],
+      aggregates: [],
+      responses: [],
     });
   });
 
@@ -1231,8 +1342,10 @@ describe('PollsService', () => {
       pollResultsMetadata({
         votingStyle: DbPollVotingStyle.ANONYMOUS,
         voterEligibilitySource: DbPollVoterEligibilitySource.ENROLLMENT_LIST,
+        status: DbPollStatus.CLOSED,
       }),
     );
+    prisma.pollResponse.count.mockResolvedValueOnce(1);
     prisma.pollResponse.findMany.mockResolvedValueOnce([responseRecord()]);
 
     await expect(service.getDirectLinkPublicPollResults(token, createUser())).resolves.toEqual({
@@ -1240,21 +1353,15 @@ describe('PollsService', () => {
       anonymous: true,
       answersReleased: true,
       responseCount: 1,
-      responses: [
-        {
-          id: 'response-1',
-          submittedAt: undefined,
-          voter: undefined,
-          answers: [{ elementId: 'question-1', value: 'answer' }],
-        },
-      ],
+      aggregates: [],
+      responses: [],
     });
     expect(prisma.pollEligibilityEnrollment.findUnique).not.toHaveBeenCalled();
 
     prisma.poll.findFirst.mockResolvedValueOnce(null);
     await expect(service.getDirectLinkPublicPollResults(token, createUser())).rejects.toBeInstanceOf(NotFoundException);
 
-    prisma.poll.findFirst.mockResolvedValueOnce(pollResultsMetadata());
+    prisma.poll.findFirst.mockResolvedValueOnce(pollResultsMetadata({ status: DbPollStatus.CLOSED }));
     await expect(service.getDirectLinkPublicPollResults(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
@@ -1420,29 +1527,24 @@ describe('PollsService', () => {
     prisma.pollResponse.findMany.mockResolvedValueOnce([
       responseRecord({ userId: null, submittedAt: null, user: null }),
     ]);
+    prisma.pollResponse.count.mockResolvedValueOnce(1);
 
     await expect(service.getPublicPollResults('poll-1', createUser())).resolves.toEqual({
       pollId: 'poll-1',
       anonymous: true,
       answersReleased: true,
       responseCount: 1,
-      responses: [
-        {
-          id: 'response-1',
-          submittedAt: undefined,
-          voter: undefined,
-          answers: [{ elementId: 'question-1', value: 'answer' }],
-        },
-      ],
+      aggregates: [],
+      responses: [],
     });
   });
 
   it('streams catch-up result deltas and published updates', async () => {
-    prisma.poll.findUnique.mockResolvedValue(pollResultsMetadata());
+    prisma.poll.findUnique.mockResolvedValue(pollResultsMetadata({ votingStyle: DbPollVotingStyle.PUBLIC }));
     prisma.pollResponse.count.mockResolvedValue(2);
     prisma.pollResponse.findMany.mockResolvedValue([responseRecord({ id: 'response-2' })]);
 
-    const firstEvent = await firstValueFrom(service.streamAdminPollResults('poll-1', -5).pipe(take(1)));
+    const firstEvent = await firstValueFrom(service.streamAdminPollResults('poll-1', '-5').pipe(take(1)));
     expect(firstEvent.data).toMatchObject({
       pollId: 'poll-1',
       answersReleased: true,
@@ -1454,21 +1556,21 @@ describe('PollsService', () => {
     expect(prisma.pollResponse.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0 }));
 
     prisma.pollResponse.findMany.mockResolvedValue([]);
-    await expect(firstValueFrom(service.streamPublicPollResults('poll-1', 0, createUser()).pipe(take(1)))).resolves.toMatchObject({
+    await expect(firstValueFrom(service.streamPublicPollResults('poll-1', '0', createUser()).pipe(take(1)))).resolves.toMatchObject({
       data: { pollId: 'poll-1', answersReleased: true, responseCount: 2 },
     });
 
     prisma.poll.findUnique.mockRejectedValueOnce(new Error('boom'));
-    await expect(firstValueFrom(service.streamAdminPollResults('poll-1', 0))).rejects.toThrow('boom');
+    await expect(firstValueFrom(service.streamAdminPollResults('poll-1', '0'))).rejects.toThrow('boom');
   });
 
   it('streams direct-link public result catch-up deltas', async () => {
     const token = '018f47b1-5c4e-7c7b-9e6f-0c8c2f7281ad';
-    prisma.poll.findFirst.mockResolvedValue(pollResultsMetadata());
+    prisma.poll.findFirst.mockResolvedValue(pollResultsMetadata({ votingStyle: DbPollVotingStyle.PUBLIC }));
     prisma.pollResponse.count.mockResolvedValue(1);
     prisma.pollResponse.findMany.mockResolvedValue([responseRecord()]);
 
-    await expect(firstValueFrom(service.streamDirectLinkPublicPollResults(token, 0, createUser()).pipe(take(1)))).resolves.toMatchObject({
+    await expect(firstValueFrom(service.streamDirectLinkPublicPollResults(token, '0', createUser()).pipe(take(1)))).resolves.toMatchObject({
       data: {
         pollId: 'poll-1',
         answersReleased: true,
@@ -1478,7 +1580,7 @@ describe('PollsService', () => {
     });
 
     prisma.poll.findFirst.mockRejectedValueOnce(new Error('direct-link down'));
-    await expect(firstValueFrom(service.streamDirectLinkPublicPollResults(token, 0, createUser()))).rejects.toThrow(
+    await expect(firstValueFrom(service.streamDirectLinkPublicPollResults(token, '0', createUser()))).rejects.toThrow(
       'direct-link down',
     );
   });
@@ -1487,7 +1589,7 @@ describe('PollsService', () => {
     prisma.poll.create.mockResolvedValue({ id: 'poll-1' });
     prisma.poll.findUniqueOrThrow.mockResolvedValue(
       pollRecord({
-        status: DbPollStatus.PUBLISHED,
+        status: DbPollStatus.DRAFT,
         linkedEventId: 'event-1',
         linkedEventName: 'CACiC',
         linkedEventStartDate: new Date('2026-06-21T10:00:00.000Z'),
@@ -1499,7 +1601,6 @@ describe('PollsService', () => {
     await expect(
       service.createPoll(
         savePoll({
-          status: 'published',
           linkedEventId: ' event-1 ',
           voterEligibilitySource: 'eventAttendance',
         resultsPublic: true,
@@ -1511,22 +1612,22 @@ describe('PollsService', () => {
       }),
       createUser(),
       ),
-    ).resolves.toMatchObject({ status: 'published', linkedEvent: expect.objectContaining({ id: 'event-1' }) });
+    ).resolves.toMatchObject({ status: 'draft', linkedEvent: expect.objectContaining({ id: 'event-1' }) });
 
     expect(prisma.poll.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         title: 'Poll',
         description: 'Description',
-        status: DbPollStatus.PUBLISHED,
+        status: DbPollStatus.DRAFT,
         linkedEventId: 'event-1',
         linkedEventName: 'CACiC',
         resultsPublic: true,
         resultsLive: true,
         allowResponseEditing: true,
-        visibleFrom: new Date('2026-06-21T11:22:00.000Z'),
-        votingStartsAt: new Date('2026-06-21T12:34:00.000Z'),
-        votingEndsAt: new Date('2026-06-21T13:45:00.000Z'),
-        publishedAt: new Date('2026-06-21T12:00:00.000Z'),
+        visibleFrom: new Date('2026-06-21T11:22:33.456Z'),
+        votingStartsAt: new Date('2026-06-21T12:34:56.789Z'),
+        votingEndsAt: new Date('2026-06-21T13:45:59.999Z'),
+        publishedAt: null,
       }),
     });
     expect(prisma.pollElement.findMany).toHaveBeenCalledWith({
@@ -1620,40 +1721,17 @@ describe('PollsService', () => {
         status: DbPollStatus.DRAFT,
         votingStyle: DbPollVotingStyle.SECRET,
         voterEligibilitySource: DbPollVoterEligibilitySource.AUTHENTICATED_USERS,
-        publishedAt: undefined,
-        closedAt: undefined,
+        publishedAt: null,
+        closedAt: null,
       }),
     });
 
     await expect(
       service.createPoll(
-        savePoll({
-          status: 'closed',
-          elements: [
-            {
-              id: 'scale',
-              type: 'linearScale',
-              title: 'Scale',
-              required: false,
-              options: [],
-              settings: { linearScale: { min: 1, max: 5, maxLabel: ' High ' } },
-            },
-          ],
-        }),
+        savePoll({ status: 'closed' }),
         createUser(),
       ),
-    ).resolves.toMatchObject({ status: 'closed' });
-    expect(prisma.poll.create).toHaveBeenLastCalledWith({
-      data: expect.objectContaining({
-        status: DbPollStatus.CLOSED,
-        closedAt: new Date('2026-06-21T12:00:00.000Z'),
-      }),
-    });
-    expect(prisma.pollElement.create).toHaveBeenLastCalledWith({
-      data: expect.objectContaining({
-        settings: { linearScale: { min: 1, max: 5, maxLabel: 'High' } },
-      }),
-    });
+    ).rejects.toThrow(ConflictException);
   });
 
   it('updates polls, preserves existing linked event metadata, and toggles publication dates', async () => {
@@ -1667,23 +1745,24 @@ describe('PollsService', () => {
       publishedAt: null,
     });
     prisma.poll.findUnique.mockResolvedValueOnce(existing);
-    prisma.poll.findUniqueOrThrow.mockResolvedValue(pollRecord({ status: DbPollStatus.PUBLISHED }));
+    prisma.poll.findUniqueOrThrow.mockResolvedValue(pollRecord({ status: DbPollStatus.DRAFT }));
+    eventManager.listLinkableEvents.mockResolvedValueOnce([]);
 
     await expect(
       service.updatePoll(
         'poll-1',
-        savePoll({ status: 'published', linkedEventId: 'event-1', voterEligibilitySource: 'eventAttendance' }),
+        savePoll({ linkedEventId: 'event-1', voterEligibilitySource: 'eventAttendance' }),
         createUser(),
       ),
-    ).resolves.toMatchObject({ status: 'published' });
+    ).resolves.toMatchObject({ status: 'draft' });
 
-    expect(eventManager.listLinkableEvents).not.toHaveBeenCalled();
-    expect(prisma.poll.update).toHaveBeenCalledWith({
-      where: { id: 'poll-1' },
+    expect(eventManager.listLinkableEvents).toHaveBeenCalled();
+    expect(prisma.poll.updateMany).toHaveBeenCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
-        status: DbPollStatus.PUBLISHED,
+        status: DbPollStatus.DRAFT,
         linkedEventName: 'Existing Event',
-        publishedAt: new Date('2026-06-21T12:00:00.000Z'),
+        publishedAt: null,
         closedAt: null,
       }),
     });
@@ -1698,8 +1777,8 @@ describe('PollsService', () => {
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ visibleFrom: null }));
 
     await service.updatePoll('poll-1', savePoll({ visibleFrom: null }), createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         visibleFrom: null,
         votingStartsAt: new Date('2026-06-21T12:00:00.000Z'),
@@ -1723,8 +1802,8 @@ describe('PollsService', () => {
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED, publishedAt }));
 
     await service.updatePoll('poll-1', inputWithoutStatus, createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.PUBLISHED,
         publishedAt,
@@ -1741,9 +1820,9 @@ describe('PollsService', () => {
     );
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
 
-    await service.updatePoll('poll-1', savePoll({ status: 'closed' }), createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    await service.updatePoll('poll-1', savePoll(), createUser());
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.CLOSED,
         closedAt: existingClosedAt,
@@ -1758,28 +1837,27 @@ describe('PollsService', () => {
     );
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
 
-    await service.updatePoll('poll-1', savePoll({ status: 'closed' }), createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    await service.updatePoll('poll-1', savePoll(), createUser());
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.CLOSED,
-        closedAt: new Date('2026-06-21T12:00:00.000Z'),
+        closedAt: null,
       }),
     });
   });
 
   it('updates status and deletes polls', async () => {
     prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ publishedAt: null }));
-    prisma.poll.update.mockResolvedValue(pollRecord({ status: DbPollStatus.CLOSED }));
+    prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
 
-    await expect(service.updatePollStatus('poll-1', 'closed', createUser())).resolves.toMatchObject({ status: 'closed' });
-    expect(prisma.poll.update).toHaveBeenCalledWith({
-      where: { id: 'poll-1' },
+    await expect(service.updatePollStatus('poll-1', 'closed', createUser(), updatedAt.toISOString())).resolves.toMatchObject({ status: 'closed' });
+    expect(prisma.poll.updateMany).toHaveBeenCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.CLOSED,
         closedAt: new Date('2026-06-21T12:00:00.000Z'),
       }),
-      include: expect.any(Object),
     });
 
     prisma.poll.findUnique.mockResolvedValueOnce(null);
@@ -1793,13 +1871,7 @@ describe('PollsService', () => {
     const pollImages = {
       deleteObjectKeysBestEffort: jest.fn<Promise<void>, [string[]]>().mockResolvedValue(undefined),
     };
-    const serviceWithImages = new PollsService(
-      prisma as unknown as PrismaService,
-      eventManager as unknown as EventManagerIntegrationService,
-      accountManager as unknown as AccountManagerIntegrationService,
-      pollImages as never,
-      featureFlags as unknown as FeatureFlagService,
-    );
+    const serviceWithImages = createServiceUnderTest(pollImages);
     prisma.pollImage.findMany.mockResolvedValueOnce([{ objectKey: 'polls/poll-1/images/image-1.avif' }]);
 
     await serviceWithImages.deletePoll('poll-1');
@@ -1809,47 +1881,42 @@ describe('PollsService', () => {
   });
 
   it('preserves existing status transition timestamps', async () => {
-    const existingClosedAt = new Date('2026-06-20T12:00:00.000Z');
-
-    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ publishedAt }));
-    prisma.poll.update.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED, publishedAt }));
-    await service.updatePollStatus('poll-1', 'published', createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED, publishedAt }));
+    prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED, publishedAt }));
+    await service.updatePollStatus('poll-1', 'published', createUser(), updatedAt.toISOString());
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.PUBLISHED,
         publishedAt,
       }),
-      include: expect.any(Object),
     });
 
-    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ closedAt: existingClosedAt }));
-    prisma.poll.update.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
-    await service.updatePollStatus('poll-1', 'closed', createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED, closedAt: null }));
+    prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
+    await service.updatePollStatus('poll-1', 'closed', createUser(), updatedAt.toISOString());
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.CLOSED,
-        closedAt: existingClosedAt,
+        closedAt: new Date('2026-06-21T12:00:00.000Z'),
       }),
-      include: expect.any(Object),
     });
 
-    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ publishedAt: null }));
-    prisma.poll.update.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED }));
-    await service.updatePollStatus('poll-1', 'published', createUser());
-    expect(prisma.poll.update).toHaveBeenLastCalledWith({
-      where: { id: 'poll-1' },
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.DRAFT, publishedAt: null }));
+    prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED }));
+    await service.updatePollStatus('poll-1', 'published', createUser(), updatedAt.toISOString());
+    expect(prisma.poll.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'poll-1', updatedAt },
       data: expect.objectContaining({
         status: DbPollStatus.PUBLISHED,
         publishedAt: new Date('2026-06-21T12:00:00.000Z'),
       }),
-      include: expect.any(Object),
     });
   });
 
   it('lists, enriches, clears, and deletes eligibility enrollments', async () => {
-    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
+    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', status: DbPollStatus.DRAFT });
     prisma.pollEligibilityEnrollment.findMany.mockResolvedValue([
       { pollId: 'poll-1', enrollmentNumber: '20240001', createdAt },
     ]);
@@ -1879,7 +1946,7 @@ describe('PollsService', () => {
   });
 
   it('groups multiple Account Manager people under the same enrollment', async () => {
-    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
+    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', status: DbPollStatus.DRAFT });
     prisma.pollEligibilityEnrollment.findMany.mockResolvedValue([
       { pollId: 'poll-1', enrollmentNumber: '20240001', createdAt },
     ]);
@@ -1902,7 +1969,7 @@ describe('PollsService', () => {
   });
 
   it('handles eligibility enrollment import modes, duplicates, invalid values, and enrichment failures', async () => {
-    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
+    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', status: DbPollStatus.DRAFT });
     prisma.pollEligibilityEnrollment.createMany.mockResolvedValue({ count: 1 });
     prisma.pollEligibilityEnrollment.deleteMany.mockResolvedValue({ count: 3 });
     prisma.pollEligibilityEnrollment.findMany.mockResolvedValue([
@@ -1952,7 +2019,7 @@ describe('PollsService', () => {
     prisma.poll.findUnique.mockResolvedValueOnce(null);
     await expect(service.listEligibilityEnrollments('missing')).rejects.toBeInstanceOf(NotFoundException);
 
-    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
+    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', status: DbPollStatus.DRAFT });
     await expect(service.deleteEligibilityEnrollment('poll-1', '  ')).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.addEligibilityEnrollments('poll-1', { enrollmentNumbers: [' '] }, createUser()),
@@ -1979,11 +2046,15 @@ describe('PollsService', () => {
     });
     expect(prisma.pollVoter.create).toHaveBeenCalledWith({ data: { pollId: 'poll-1', userId: 'user-1' } });
 
-    prisma.poll.findFirst.mockResolvedValueOnce(pollRecord({ allowMultipleResponses: true }));
+    prisma.poll.findFirst
+      .mockResolvedValueOnce(pollRecord({ allowMultipleResponses: true }))
+      .mockResolvedValueOnce(pollRecord({ allowMultipleResponses: true }));
     await service.submitResponse('poll-1', { answers: [{ elementId: 'question-1', value: 'answer' }] }, createUser());
     expect(prisma.pollVoter.upsert).toHaveBeenCalled();
 
-    prisma.poll.findFirst.mockResolvedValueOnce(pollRecord({ allowResponseEditing: true }));
+    prisma.poll.findFirst
+      .mockResolvedValueOnce(pollRecord({ allowResponseEditing: true }))
+      .mockResolvedValueOnce(pollRecord({ allowResponseEditing: true }));
     prisma.pollVoter.findUnique.mockResolvedValueOnce({ userId: 'user-1' });
     prisma.pollResponse.findFirst.mockResolvedValueOnce({ id: 'response-1' });
     prisma.pollResponse.update.mockResolvedValueOnce(baseResponse);
@@ -1991,7 +2062,9 @@ describe('PollsService', () => {
     expect(prisma.pollAnswer.deleteMany).toHaveBeenCalledWith({ where: { responseId: 'response-1' } });
     expect(prisma.pollResponse.update).toHaveBeenCalled();
 
-    prisma.poll.findFirst.mockResolvedValueOnce(pollRecord({ votingStyle: DbPollVotingStyle.ANONYMOUS }));
+    prisma.poll.findFirst
+      .mockResolvedValueOnce(pollRecord({ votingStyle: DbPollVotingStyle.ANONYMOUS }))
+      .mockResolvedValueOnce(pollRecord({ votingStyle: DbPollVotingStyle.ANONYMOUS }));
     prisma.pollVoter.findUnique.mockResolvedValueOnce(null);
     prisma.pollResponse.create.mockResolvedValueOnce(responseRecord({ userId: null, submittedAt: null, user: null }));
     await service.submitResponse('poll-1', { answers: [{ elementId: 'question-1', value: 'secret' }] }, createUser());
@@ -2059,13 +2132,21 @@ describe('PollsService', () => {
     });
     expect(prisma.pollEligibilityEnrollment.findUnique).not.toHaveBeenCalled();
 
-    prisma.poll.findFirst.mockResolvedValueOnce(
+    prisma.poll.findFirst
+      .mockResolvedValueOnce(
       pollRecord({
         voterEligibilitySource: DbPollVoterEligibilitySource.ENROLLMENT_LIST,
         directLinkEnabled: true,
         directLinkToken: token,
       }),
-    );
+    )
+      .mockResolvedValueOnce(
+        pollRecord({
+          voterEligibilitySource: DbPollVoterEligibilitySource.ENROLLMENT_LIST,
+          directLinkEnabled: true,
+          directLinkToken: token,
+        }),
+      );
     prisma.pollVoter.findUnique.mockResolvedValueOnce(null);
     prisma.pollResponse.create.mockResolvedValueOnce(responseRecord());
 
@@ -2531,10 +2612,10 @@ describe('PollsService', () => {
   });
 
   it('normalizes answers for every poll element type', () => {
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SECTION }), 'ignored')).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.STATEMENT }), 'ignored')).toBeNull();
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.SECTION }), 'ignored')).toThrow(BadRequestException);
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.STATEMENT }), 'ignored')).toThrow(BadRequestException);
     expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SHORT_TEXT }), ' text ')).toBe('text');
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.LONG_TEXT }), 1)).toBeNull();
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.LONG_TEXT }), 1)).toThrow(BadRequestException);
     expect(
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_CHOICE, options: [option('a'), option('b')] }), 'a'),
     ).toBe('a');
@@ -2547,12 +2628,12 @@ describe('PollsService', () => {
     expect(
       internals.normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a'), option('b')] }),
-        ['a', 'a', '', 1, 'b'],
+        ['a', 'a', '', 'b'],
       ),
     ).toEqual(['a', 'b']);
-    expect(
+    expect(() =>
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), 'a'),
-    ).toBeNull();
+    ).toThrow(BadRequestException);
     expect(() =>
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a')] }), ['x']),
     ).toThrow(BadRequestException);
@@ -2591,7 +2672,7 @@ describe('PollsService', () => {
     expect(
       internals.normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }),
-        { 'row-1': ['col-1', 'col-1', ''], 'row-2': 'ignored' },
+        { 'row-1': ['col-1', 'col-1', ''] },
       ),
     ).toEqual({ 'row-1': ['col-1'] });
     expect(() =>
@@ -2644,14 +2725,14 @@ describe('PollsService', () => {
     expect(
       internals.normalizeAnswer(element, {
         slotId: ' window-1:09:05 ',
-        invitees: [{ name: ' Grace ', email: ' grace@example.com ' }, {}, null],
+        invitees: [{ name: ' Grace ', email: ' grace@example.com ' }],
       }),
     ).toEqual({
       slotId: 'window-1:09:05',
       invitees: [{ name: 'Grace', email: 'grace@example.com' }],
     });
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: {} }), {})).toBeNull();
-    expect(internals.normalizeAnswer(element, { slotId: ' ' })).toBeNull();
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: {} }), {})).toThrow(BadRequestException);
+    expect(() => internals.normalizeAnswer(element, { slotId: ' ' })).toThrow(BadRequestException);
     expect(() => internals.normalizeAnswer(element, { slotId: 'bad-slot' })).toThrow(BadRequestException);
     expect(() => internals.normalizeAnswer(element, { slotId: 'window-1:09:05', invitees: 'invalid' })).toThrow(
       BadRequestException,
@@ -3173,39 +3254,11 @@ describe('PollsService', () => {
 
     await service.submitResponse('poll-1', { answers: [{ elementId: 'question-1', value: 'answer' }] }, createUser());
 
-    expect(listener).toHaveBeenCalledWith({
-      admin: {
-        pollId: 'poll-1',
-        answersReleased: true,
-        responseCount: 1,
-        voterCount: 0,
-        voters: [],
-        responses: [expect.objectContaining({ id: 'response-1', submittedAt: '2026-06-21T12:00:00.000Z' })],
-      },
-      observer: {
-        pollId: 'poll-1',
-        answersReleased: true,
-        responseCount: 1,
-        voterCount: 0,
-        voters: [],
-        responses: [
-          expect.objectContaining({
-            id: 'response-1',
-            submittedAt: '2026-06-21T12:00:00.000Z',
-            voter: {
-              userId: 'enrollment:24123456',
-              enrollmentNumber: '24123456',
-            },
-          }),
-        ],
-      },
-      public: {
-        pollId: 'poll-1',
-        answersReleased: true,
-        responseCount: 1,
-        responses: [expect.objectContaining({ id: 'response-1', submittedAt: undefined, voter: undefined })],
-      },
-    });
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+      admin: expect.objectContaining({ pollId: 'poll-1', responseCount: 1, refreshRequired: true, responses: [] }),
+      observer: expect.objectContaining({ pollId: 'poll-1', responseCount: 1, refreshRequired: true, responses: [] }),
+      public: expect.objectContaining({ pollId: 'poll-1', responseCount: 1, refreshRequired: true, responses: [] }),
+    }));
 
     unsubscribe();
   });
@@ -3254,8 +3307,8 @@ describe('PollsService', () => {
       data: expect.objectContaining({
         options: {
           create: [
-            { id: 'a', label: 'A', description: 'First', position: 0 },
-            { id: 'b', label: 'B', description: undefined, position: 1 },
+            expect.objectContaining({ id: expect.stringMatching(/^_cacic_option_/), label: 'A', description: 'First', position: 0 }),
+            expect.objectContaining({ id: expect.stringMatching(/^_cacic_option_/), label: 'B', description: undefined, position: 1 }),
           ],
         },
       }),
@@ -3443,7 +3496,7 @@ describe('PollsService', () => {
     prisma.pollResponse.findMany.mockResolvedValue([]);
 
     const events: unknown[] = [];
-    const subscription = service.streamAdminPollResults('poll-1', 0).subscribe((event) => events.push(event));
+    const subscription = service.streamAdminPollResults('poll-1', '0').subscribe((event) => events.push(event));
     for (let index = 0; index < 10 && !internals.resultSubscribers.has('poll-1'); index += 1) {
       await Promise.resolve();
     }
@@ -3487,7 +3540,7 @@ describe('PollsService', () => {
 
     const events: unknown[] = [];
     const errors: unknown[] = [];
-    const subscription = service.streamPublicPollResults('poll-1', 0, createUser()).subscribe({
+    const subscription = service.streamPublicPollResults('poll-1', '0', createUser()).subscribe({
       next: (event) => events.push(event),
       error: (error) => errors.push(error),
     });
@@ -3542,7 +3595,7 @@ describe('PollsService', () => {
   });
 
   it('covers empty enrollment enrichment and result-voter fallbacks', async () => {
-    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
+    prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1', status: DbPollStatus.DRAFT });
     prisma.pollEligibilityEnrollment.findMany.mockResolvedValue([]);
 
     await expect(service.listEligibilityEnrollments('poll-1')).resolves.toEqual({ totalCount: 0, entries: [] });
@@ -3580,13 +3633,13 @@ describe('PollsService', () => {
       },
     };
 
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: null }), {})).toBeNull();
+    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: null }), null)).toBeNull();
     expect(
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': '',
       }),
     ).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: null }), {})).toBeNull();
+    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: null }), null)).toBeNull();
     expect(() =>
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         bad: ['col-1'],
@@ -3598,8 +3651,8 @@ describe('PollsService', () => {
         null,
       ),
     ).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 1)).toBeNull();
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), 1)).toBeNull();
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.DATE }), 1)).toThrow(BadRequestException);
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.TIME }), 1)).toThrow(BadRequestException);
     expect(
       internals.buildSchedulingSlots({
         durationMinutes: 30,
@@ -3624,22 +3677,22 @@ describe('PollsService', () => {
       },
     };
 
-    expect(
+    expect(() =>
       internals.normalizeAnswer(
         dbElement({ type: DbPollElementType.MULTIPLE_CHOICE, options: [option('a'), option('b')] }),
         ['', 1],
       ),
-    ).toBeNull();
+    ).toThrow(BadRequestException);
     expect(
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': [],
       }),
     ).toBeNull();
-    expect(
+    expect(() =>
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.MULTIPLE_SELECTION_GRID, settings: gridSettings }), {
         'row-1': 'ignored',
       }),
-    ).toBeNull();
+    ).toThrow(BadRequestException);
     expect(() =>
       internals.normalizeAnswer(
         dbElement({ type: DbPollElementType.SINGLE_SELECTION_GRID, settings: gridSettings, required: true }),
@@ -3679,7 +3732,7 @@ describe('PollsService', () => {
         ' ',
       ),
     ).toThrow(BadRequestException);
-    expect(internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), { slotId: 1 })).toBeNull();
+    expect(() => internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), { slotId: 1 })).toThrow(BadRequestException);
     expect(
       internals.normalizeAnswer(dbElement({ type: DbPollElementType.SCHEDULING, settings: { scheduling: schedulingSettings() } }), {
         slotId: 'window-1:09:05',

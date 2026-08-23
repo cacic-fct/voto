@@ -47,6 +47,7 @@ export abstract class PollVotePageState {
   protected readonly mySlate = signal<AdminCacicElectionSlate | null>(null);
   protected readonly responseState =
     signal<PollUserResponseState>(emptyResponseState);
+  protected readonly responseStateError = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly loadingResults = signal(false);
   protected readonly loadingSlates = signal(false);
@@ -55,6 +56,7 @@ export abstract class PollVotePageState {
   protected readonly savingSlate = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly resultsError = signal<string | null>(null);
+  protected readonly resultsConnectionState = signal<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting');
   protected resultsEvents?: EventSource;
 
   protected readonly metadataSummaryItems = computed<PollMetadataSummaryItem[]>(
@@ -74,6 +76,7 @@ export abstract class PollVotePageState {
       this.poll(),
       this.responseState(),
       this.loadingResponseState(),
+      this.responseStateError(),
     );
   });
   protected readonly canSubmitSlate = computed(() => {
@@ -95,11 +98,12 @@ export abstract class PollVotePageState {
   protected readonly publicQuestionSummaries = computed(() => {
     const poll = this.poll();
     const responses = this.results()?.responses ?? [];
+    const aggregates = this.results()?.aggregates ?? [];
     if (!poll) {
       return [];
     }
 
-    return buildPublicQuestionSummaries(poll.elements, responses);
+    return buildPublicQuestionSummaries(poll.elements, responses, aggregates);
   });
 
   private resolvePollAccess(): PublicPollAccess | null {

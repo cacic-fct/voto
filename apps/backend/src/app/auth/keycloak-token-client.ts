@@ -15,8 +15,12 @@ export type KeycloakTokenClientOptions = {
   tokenEndpointAuthMethod: KeycloakTokenEndpointAuthMethod;
   defaultPostLogoutRedirectUri?: string;
   failureLogSuppressionMs: number;
+  requestTimeoutMs?: number;
   logger: Logger;
 };
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const MAX_FAILURE_LOG_ENTRIES = 1_024;
 
 export class KeycloakTokenClient {
   private readonly failureLogs = new Map<
@@ -41,7 +45,7 @@ export class KeycloakTokenClient {
       const { data } = await axios.post<TokenResponse>(
         `${this.options.realmUrl}/protocol/openid-connect/token`,
         payload.toString(),
-        { headers },
+        { headers, timeout: this.requestTimeoutMs },
       );
 
       return data;
@@ -68,7 +72,7 @@ export class KeycloakTokenClient {
       const { data } = await axios.post<TokenResponse>(
         `${this.options.realmUrl}/protocol/openid-connect/token`,
         payload.toString(),
-        { headers },
+        { headers, timeout: this.requestTimeoutMs },
       );
 
       return data;
@@ -93,7 +97,7 @@ export class KeycloakTokenClient {
       await axios.post(
         `${this.options.realmUrl}/protocol/openid-connect/revoke`,
         payload.toString(),
-        { headers },
+        { headers, timeout: this.requestTimeoutMs },
       );
       return true;
     } catch (error) {
@@ -204,6 +208,7 @@ export class KeycloakTokenClient {
     const summary = summarizeKeycloakFailure(error);
     const logKey = `${operation}|${summary.dedupeKey}`;
     const now = Date.now();
+    this.pruneFailureLogs(now);
     const previousLog = this.failureLogs.get(logKey);
 
     if (
@@ -219,6 +224,13 @@ export class KeycloakTokenClient {
       loggedAt: now,
       suppressed: 0,
     });
+    while (this.failureLogs.size > MAX_FAILURE_LOG_ENTRIES) {
+      const oldest = this.failureLogs.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.failureLogs.delete(oldest);
+    }
 
     const continuationMessage = continuation ? ` ${continuation}` : '';
     const suppressionMessage =
@@ -231,5 +243,19 @@ export class KeycloakTokenClient {
     this.options.logger.warn(
       `Keycloak ${operation} failed. ${summary.message}.${continuationMessage}${suppressionMessage}`,
     );
+  }
+
+  private get requestTimeoutMs(): number {
+    return this.options.requestTimeoutMs && this.options.requestTimeoutMs > 0
+      ? this.options.requestTimeoutMs
+      : DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+
+  private pruneFailureLogs(now: number): void {
+    for (const [key, entry] of this.failureLogs) {
+      if (now - entry.loggedAt >= this.options.failureLogSuppressionMs * 2) {
+        this.failureLogs.delete(key);
+      }
+    }
   }
 }

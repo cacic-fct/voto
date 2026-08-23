@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { EventManagerEvent, Poll, PollSummary } from '@org/voting-contracts';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
@@ -43,7 +43,7 @@ export class PollQueryService {
       include: {
         _count: {
           select: {
-            elements: true,
+            elements: { where: { retiredAt: null } },
             responses: true,
           },
         },
@@ -53,7 +53,7 @@ export class PollQueryService {
     return polls.map((poll) => this.toPollSummary(poll));
   }
 
-  async listPublicPolls(): Promise<PollSummary[]> {
+  async listPublicPolls(user?: AuthenticatedPrincipal | null): Promise<PollSummary[]> {
     const now = new Date();
     const polls = await this.prisma.poll.findMany({
       where: publicReadablePollWhere(now),
@@ -61,14 +61,35 @@ export class PollQueryService {
       include: {
         _count: {
           select: {
-            elements: true,
+            elements: { where: { retiredAt: null } },
             responses: true,
           },
         },
       },
     });
 
-    return polls.map((poll) => this.toPollSummary(poll));
+    // `undefined` is retained for internal callers that already performed
+    // authorization. HTTP controllers pass either a principal or null so
+    // anonymous catalog requests are filtered instead of leaking metadata.
+    if (user === undefined) {
+      return polls.map((poll) => this.toPollSummary(poll));
+    }
+
+    const readablePolls = await Promise.all(
+      polls.map(async (poll) => {
+        try {
+          await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user ?? undefined));
+          return poll;
+        } catch (error: unknown) {
+          if (error instanceof ForbiddenException || error instanceof UnauthorizedException) {
+            return null;
+          }
+          throw error;
+        }
+      }),
+    );
+
+    return readablePolls.filter((poll): poll is (typeof polls)[number] => poll !== null).map((poll) => this.toPollSummary(poll));
   }
 
   async getAdminPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {

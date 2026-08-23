@@ -21,12 +21,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import type { Request, Response } from 'express';
 import type { PermissionEvaluationResponse } from '@org/voting-contracts';
 import {
-  AUTH_SESSION_COOKIE_NAME,
-  AUTH_STATE_COOKIE_NAME,
+  getAuthStateCookieName,
+  getAuthStateCookiePath,
+  getAuthSessionCookieName,
 } from './auth.constants';
 import { Public } from './decorators/public.decorator';
 import type {
@@ -66,7 +67,9 @@ class PermissionEvaluationRequestDto {
     type: [String],
   })
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
+  @MaxLength(128, { each: true })
   permissions!: string[];
 }
 
@@ -155,6 +158,7 @@ export class AuthController {
     @Query('error') error?: string,
     @Query('state') state?: string,
   ): Promise<void> {
+    this.assertSecureRequest(request);
     const authorizationState = await this.consumeAuthorizationState(
       request,
       response,
@@ -178,7 +182,8 @@ export class AuthController {
     );
     const session = await this.auth.createSession(tokenResponse);
 
-    response.cookie(AUTH_SESSION_COOKIE_NAME, session.sessionId, {
+    this.assertSecureRequest(request);
+    response.cookie(getAuthSessionCookieName(), session.sessionId, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureRequest(request),
@@ -192,7 +197,7 @@ export class AuthController {
 
   @Get('me')
   @Public()
-  @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
+  @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({
     summary: 'Read the authenticated identity for the current session',
   })
@@ -204,20 +209,21 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
-  @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
+  @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({ summary: 'Refresh the current session' })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const sessionId = this.readCookie(request, AUTH_SESSION_COOKIE_NAME);
+    const sessionId = this.readCookie(request, getAuthSessionCookieName());
     if (!sessionId) {
       throw new ForbiddenException('Missing session.');
     }
 
     const result = await this.auth.refreshSession(sessionId);
 
-    response.cookie(AUTH_SESSION_COOKIE_NAME, sessionId, {
+    this.assertSecureRequest(request);
+    response.cookie(getAuthSessionCookieName(), sessionId, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureRequest(request),
@@ -231,7 +237,7 @@ export class AuthController {
 
   @Post('logout')
   @Public()
-  @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
+  @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({
     summary: 'Clear the local session and return a Keycloak logout URL',
   })
@@ -241,7 +247,8 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Body() body?: LogoutDto,
   ) {
-    const sessionId = this.readCookie(request, AUTH_SESSION_COOKIE_NAME);
+    this.assertSecureRequest(request);
+    const sessionId = this.readCookie(request, getAuthSessionCookieName());
     const sessionLogoutInput = sessionId
       ? await this.auth.getSessionLogoutInput(sessionId)
       : null;
@@ -250,7 +257,7 @@ export class AuthController {
       await this.auth.clearSession(sessionId);
     }
 
-    response.clearCookie(AUTH_SESSION_COOKIE_NAME, {
+    response.clearCookie(getAuthSessionCookieName(), {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureRequest(request),
@@ -268,7 +275,7 @@ export class AuthController {
   }
 
   @Post('permissions/evaluate')
-  @ApiCookieAuth(AUTH_SESSION_COOKIE_NAME)
+  @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({ summary: 'Evaluate permissions for the current session' })
   async evaluatePermissions(
     @Req() request: AuthenticatedRequest,
@@ -315,7 +322,12 @@ export class AuthController {
         continue;
       }
 
-      return decodeURIComponent(rest.join('='));
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        this.logger.warn(`Ignoring malformed ${name} cookie.`);
+        return null;
+      }
     }
 
     return null;
@@ -326,7 +338,7 @@ export class AuthController {
     response: Response,
     state?: string,
   ): Promise<AuthorizationState | undefined> {
-    const cookieState = this.readCookie(request, AUTH_STATE_COOKIE_NAME);
+    const cookieState = this.readCookie(request, getAuthStateCookieName());
     this.clearAuthorizationStateCookie(response, request);
 
     if (!state || !cookieState || state !== cookieState) {
@@ -346,12 +358,13 @@ export class AuthController {
     request: Request,
     state: string,
   ): void {
-    response.cookie(AUTH_STATE_COOKIE_NAME, state, {
+    this.assertSecureRequest(request);
+    response.cookie(getAuthStateCookieName(), state, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureRequest(request),
       maxAge: 10 * 60 * 1000,
-      path: '/api/auth/callback',
+      path: getAuthStateCookiePath(),
     });
   }
 
@@ -359,22 +372,19 @@ export class AuthController {
     response: Response,
     request: Request,
   ): void {
-    response.clearCookie(AUTH_STATE_COOKIE_NAME, {
+    response.clearCookie(getAuthStateCookieName(), {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureRequest(request),
-      path: '/api/auth/callback',
+      path: getAuthStateCookiePath(),
     });
   }
 
   private getCallbackRedirectUri(request: Request): string {
-    const protocol = this.readForwardedHeader(request, 'x-forwarded-proto')
-      ?.split(',')[0]
-      ?.trim();
-    const host = this.readForwardedHeader(request, 'x-forwarded-host')
-      ?.split(',')[0]
-      ?.trim();
-    const origin = `${protocol || request.protocol}://${host || request.get('host')}`;
+    const canonicalOrigin = this.readCanonicalOrigin();
+    const forwardedProtocol = this.isProduction() ? undefined : this.readForwardedHeader(request, 'x-forwarded-proto');
+    const forwardedHost = this.isProduction() ? undefined : this.readForwardedHeader(request, 'x-forwarded-host');
+    const origin = canonicalOrigin ?? `${forwardedProtocol ?? request.protocol}://${forwardedHost ?? request.get('host')}`;
     return new URL('/api/auth/callback', origin).toString();
   }
 
@@ -397,6 +407,10 @@ export class AuthController {
       throw new BadRequestException(
         'Callback redirect URI origin is not allowed.',
       );
+    }
+    const canonicalOrigin = this.readCanonicalOrigin();
+    if (this.isProduction() && canonicalOrigin && url.origin !== canonicalOrigin) {
+      throw new BadRequestException('Callback redirect URI must use the canonical origin.');
     }
 
     url.username = '';
@@ -474,25 +488,23 @@ export class AuthController {
   private readAllowedCallbackRedirectOrigins(): Set<string> {
     return this.readAllowedOrigins(
       'KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS',
-      [
-        'http://localhost:3000',
-        'http://localhost:4200',
-        'https://voto.cacic.com.br',
-      ],
+      this.isProduction()
+        ? ['https://voto.cacic.com.br']
+        : ['http://localhost:3000', 'http://localhost:4200', 'https://voto.cacic.com.br'],
     );
   }
 
   private readAllowedPostLoginRedirectOrigins(): Set<string> {
     return this.readAllowedOrigins(
       'KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS',
-      ['http://localhost:4200', 'https://voto.cacic.com.br'],
+      this.isProduction() ? ['https://voto.cacic.com.br'] : ['http://localhost:4200', 'https://voto.cacic.com.br'],
     );
   }
 
   private readAllowedPostLogoutRedirectOrigins(): Set<string> {
     return this.readAllowedOrigins(
       'KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS',
-      ['http://localhost:4200', 'https://voto.cacic.com.br'],
+      this.isProduction() ? ['https://voto.cacic.com.br'] : ['http://localhost:4200', 'https://voto.cacic.com.br'],
     );
   }
 
@@ -512,14 +524,6 @@ export class AuthController {
     }
 
     return origins;
-  }
-
-  private readForwardedHeader(
-    request: Request,
-    headerName: string,
-  ): string | undefined {
-    const value = request.headers[headerName];
-    return Array.isArray(value) ? value[0] : value;
   }
 
   private getFailedAuthorizationRedirectUri(
@@ -569,15 +573,46 @@ export class AuthController {
   }
 
   private isSecureRequest(request: Request): boolean {
-    if (request.secure) {
+    if (request.secure === true) {
       return true;
     }
+    if (this.isProduction()) {
+      return false;
+    }
+    const forwardedProto = this.readForwardedHeader(request, 'x-forwarded-proto');
+    return forwardedProto === 'https';
+  }
 
-    const forwardedProto = request.headers['x-forwarded-proto'];
-    if (Array.isArray(forwardedProto)) {
-      return forwardedProto[0] === 'https';
+  private readForwardedHeader(request: Request, headerName: string): string | undefined {
+    const value = request.headers[headerName];
+    return (Array.isArray(value) ? value[0] : value)?.split(',')[0]?.trim();
+  }
+
+  private assertSecureRequest(request: Request): void {
+    if (process.env.NODE_ENV === 'production' && !this.isSecureRequest(request)) {
+      throw new BadRequestException('HTTPS is required for authentication cookies.');
+    }
+  }
+
+  private readCanonicalOrigin(): string | undefined {
+    const rawOrigin = process.env.PUBLIC_ORIGIN?.trim() ?? process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
+    if (!rawOrigin) {
+      return undefined;
     }
 
-    return forwardedProto === 'https';
+    try {
+      const url = new URL(rawOrigin);
+      if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && url.protocol === 'http:')) {
+        return undefined;
+      }
+      return url.origin;
+    } catch {
+      this.logger.warn('Ignoring invalid PUBLIC_ORIGIN/KEYCLOAK_CANONICAL_ORIGIN value.');
+      return undefined;
+    }
+  }
+
+  private isProduction(): boolean {
+    return process.env.NODE_ENV === 'production';
   }
 }

@@ -1,4 +1,4 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
 import { generateKeyPairSync, type JsonWebKey, sign as signToken } from 'node:crypto';
 import { AuthSessionStoreService } from './auth-session-store.service';
@@ -23,7 +23,7 @@ const publicJwk = {
 type SessionStoreMock = jest.Mocked<
   Pick<
     AuthSessionStoreService,
-    'get' | 'set' | 'delete' | 'acquireRefreshLock' | 'releaseRefreshLock' | 'waitForRefreshLockRelease'
+    'get' | 'set' | 'delete' | 'acquireRefreshLock' | 'releaseRefreshLock' | 'renewRefreshLock' | 'waitForRefreshLockRelease'
   >
 >;
 
@@ -60,6 +60,7 @@ function createSessionStoreMock(): SessionStoreMock {
     delete: jest.fn().mockResolvedValue(undefined),
     acquireRefreshLock: jest.fn().mockResolvedValue(true),
     releaseRefreshLock: jest.fn().mockResolvedValue(undefined),
+    renewRefreshLock: jest.fn().mockResolvedValue(true),
     waitForRefreshLockRelease: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -191,6 +192,15 @@ describe('KeycloakAuthService', () => {
     await expect(service.buildAuthorizationUrl()).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('rejects unsupported or oversized OIDC authorization inputs before storing state', async () => {
+    const service = createService();
+
+    await expect(service.buildAuthorizationUrl({ prompt: 'arbitrary-value' })).rejects.toThrow('unsupported');
+    await expect(service.buildAuthorizationUrl({ scope: 'openid unknown' })).rejects.toThrow('unsupported');
+    await expect(service.buildAuthorizationUrl({ scope: 'x'.repeat(129) })).rejects.toThrow('too long');
+    expect(authorizationState.create).not.toHaveBeenCalled();
+  });
+
   it('exchanges authorization codes for tokens and includes client secrets when configured', async () => {
     process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
     const service = createService();
@@ -282,6 +292,44 @@ describe('KeycloakAuthService', () => {
     ).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+
+    const namespacedServiceToken = tokenWithClaims({
+      azp: 'cacic-account-manager-m2m',
+      preferred_username: 'service-account-cacic-account-manager-m2m',
+      resource_access: { 'cacic-account-manager-m2m': { roles: ['lgpd:read'] } },
+      sub: 'namespaced-service-account-id',
+    });
+    await expect(
+      service.authenticateMachineToMachineToken(namespacedServiceToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).resolves.toMatchObject({ sub: 'namespaced-service-account-id' });
+
+    const unrelatedClientRoleToken = tokenWithClaims({
+      azp: 'cacic-account-manager-m2m',
+      preferred_username: 'service-account-cacic-account-manager-m2m',
+      resource_access: { 'other-client': { roles: ['lgpd:read'] } },
+      sub: 'unrelated-client-role-id',
+    });
+    await expect(
+      service.authenticateMachineToMachineToken(unrelatedClientRoleToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('does not treat a same-named role on an unrelated client as a voting administrator role', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      sub: 'other-client-admin',
+      exp: Math.floor(Date.now() / 1000) + 120,
+      resource_access: { 'other-client': { roles: ['super-admin'] } },
+    });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    mockUserInfo({ sub: 'other-client-admin' });
+    mockedAxios.post.mockResolvedValue({ data: [] });
+
+    await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
@@ -323,11 +371,15 @@ describe('KeycloakAuthService', () => {
           preferredUsername: 'ada',
           email: 'ada@example.com',
           name: 'Ada Lovelace',
-          roles: ['voter', 'poll-admin'],
+          roles: ['voter', 'voting:poll-admin'],
           permissions: ['poll#read'],
+          claims: expect.objectContaining({ sub: 'user-1', email: 'ada@example.com' }),
         }),
       }),
     );
+    const persistedClaims = (prisma.user.upsert.mock.calls[0][0] as { create: { claims: Record<string, unknown> } }).create.claims;
+    expect(persistedClaims.resource_access).toBeUndefined();
+    expect(persistedClaims.permissions).toBeUndefined();
   });
 
   it('rejects session creation when token response lacks an access token', async () => {
@@ -520,6 +572,23 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
+  it('rejects oversized permission evaluation requests before contacting Keycloak', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({ sub: 'bounded-permission-user' });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    mockUserInfo({ sub: 'bounded-permission-user' });
+
+    await expect(service.evaluateSessionPermissions('session-1', Array.from({ length: 51 }, () => 'poll#read'))).rejects.toThrow(
+      'oversized',
+    );
+    await expect(service.evaluateSessionPermissions('session-1', ['x'.repeat(129)])).rejects.toThrow('oversized');
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
   it('returns all requested permissions for super-admins and rejects missing sessions', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
@@ -686,7 +755,7 @@ describe('KeycloakAuthService', () => {
         sessionExpiresAt: Date.now() + 600000,
       });
     sessions.acquireRefreshLock.mockResolvedValue(false);
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('throws when refresh lock wait ends with a missing session or an invalid refresh result', async () => {
@@ -869,11 +938,15 @@ describe('KeycloakAuthService', () => {
 
     mockedAxios.isAxiosError.mockReturnValueOnce(true);
     mockedAxios.post.mockRejectedValueOnce({});
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#comment'])).resolves.toEqual([]);
+    await expect(service.evaluateSessionPermissions('session-1', ['poll#comment'])).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    mockedAxios.isAxiosError.mockReturnValueOnce(true);
+    mockedAxios.post.mockRejectedValueOnce({ response: { status: 429 } });
+    await expect(service.evaluateSessionPermissions('session-1', ['poll#kiosk'])).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValueOnce(false);
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#edit'])).resolves.toEqual([]);
+    await expect(service.evaluateSessionPermissions('session-1', ['poll#edit'])).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('includes client secrets when evaluating permissions', async () => {
@@ -1002,6 +1075,67 @@ describe('KeycloakAuthService', () => {
         sessionExpiresAt: Date.now() + 3600000,
       }),
     );
+  });
+
+  it('preserves a long Keycloak refresh lifetime as the immutable session deadline', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({ sub: 'long-session-user' });
+    mockUserInfo({ sub: 'long-session-user' });
+
+    await service.createSession({
+      access_token: accessToken,
+      refresh_token: 'refresh',
+      refresh_expires_in: 24 * 60 * 60,
+    });
+
+    expect(sessions.set).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        sessionExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
+        sessionAbsoluteDeadline: Date.now() + 24 * 60 * 60 * 1000,
+      }),
+    );
+  });
+
+  it('never extends the original session deadline when refresh metadata is omitted', async () => {
+    const service = createService();
+    const originalDeadline = Date.now() + 30 * 60 * 1000;
+    const session: AuthSession = {
+      accessToken: tokenWithClaims({ sub: 'bounded-user' }),
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() - 1,
+      sessionExpiresAt: originalDeadline,
+      sessionAbsoluteDeadline: originalDeadline,
+    };
+    sessions.get.mockResolvedValue(session);
+    mockedAxios.post.mockImplementation(async () => ({
+      data: { access_token: tokenWithClaims({ sub: 'bounded-user' }) },
+    }) as never);
+    mockUserInfo({ sub: 'bounded-user' });
+
+    await service.refreshSession('session-1');
+    jest.setSystemTime(new Date('2026-06-21T12:20:00.000Z'));
+    await service.refreshSession('session-1');
+
+    const savedSessions = sessions.set.mock.calls.map(([, saved]) => saved);
+    expect(savedSessions).toHaveLength(2);
+    expect(savedSessions.every((saved) => saved.sessionAbsoluteDeadline === originalDeadline)).toBe(true);
+    expect(savedSessions.every((saved) => saved.sessionExpiresAt <= originalDeadline)).toBe(true);
+  });
+
+  it('refuses to persist a refresh result after losing the Redis lock lease', async () => {
+    const service = createService();
+    const session: AuthSession = {
+      accessToken: tokenWithClaims({ sub: 'lost-lock-user' }),
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() - 1,
+      sessionExpiresAt: Date.now() + 600000,
+    };
+    sessions.get.mockResolvedValue(session);
+    sessions.renewRefreshLock.mockResolvedValue(false);
+
+    await expect(service.refreshSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(sessions.set).not.toHaveBeenCalled();
   });
 
   it('does not sync principals without a subject', async () => {

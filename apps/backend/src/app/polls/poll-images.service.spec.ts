@@ -216,9 +216,10 @@ describe('PollImagesService', () => {
 
     await expect(service.deleteObjectKeysBestEffort(['same-key', 'same-key', 'other-key'])).resolves.toBeUndefined();
 
-    expect(s3.deleteFile).toHaveBeenCalledTimes(2);
+    expect(s3.deleteFile).toHaveBeenCalledTimes(3);
     expect(s3.deleteFile).toHaveBeenNthCalledWith(1, 'same-key');
-    expect(s3.deleteFile).toHaveBeenNthCalledWith(2, 'other-key');
+    expect(s3.deleteFile).toHaveBeenNthCalledWith(2, 'same-key');
+    expect(s3.deleteFile).toHaveBeenNthCalledWith(3, 'other-key');
   });
 
   it('maps optional alt text and captions into public image contracts', () => {

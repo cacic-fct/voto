@@ -120,7 +120,26 @@ describe('AdminPollKioskController', () => {
     expect(authorizations.authorize).not.toHaveBeenCalled();
   });
 
-  it('always clears the authorization cookie after a submission attempt', async () => {
+  it('removes a replacement authorization if retiring the previous token fails', async () => {
+    authorizations.discard
+      .mockRejectedValueOnce(new Error('redis unavailable'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      controller.authorize(
+        'poll-1',
+        request,
+        response as never,
+        POLL_KIOSK_REQUEST_HEADER_VALUE,
+        { primaryEmail: 'person@example.com', totpCode: '123456' },
+      ),
+    ).rejects.toThrow('redis unavailable');
+    expect(authorizations.discard).toHaveBeenNthCalledWith(1, 'previous-token');
+    expect(authorizations.discard).toHaveBeenNthCalledWith(2, 'opaque-token');
+    expect(response.cookie).not.toHaveBeenCalled();
+  });
+
+  it('keeps the authorization cookie after a retryable submission failure', async () => {
     authorizations.submitResponse.mockRejectedValue(new Error('db unavailable'));
 
     await expect(
@@ -132,6 +151,19 @@ describe('AdminPollKioskController', () => {
         { answers: [] },
       ),
     ).rejects.toThrow('db unavailable');
+    expect(response.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it('clears the authorization cookie only after a successful submission', async () => {
+    await expect(
+      controller.submitResponse(
+        'poll-1',
+        request,
+        response as never,
+        POLL_KIOSK_REQUEST_HEADER_VALUE,
+        { answers: [] },
+      ),
+    ).resolves.toEqual({ id: 'response-1' });
     expect(response.clearCookie).toHaveBeenCalledWith(
       POLL_KIOSK_COOKIE_NAME,
       {

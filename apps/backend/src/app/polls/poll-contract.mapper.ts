@@ -26,6 +26,7 @@ import {
 } from '@prisma/client';
 import { ElementRecord, ImageRecord, PollContractOptions, PollRecord } from './poll-records';
 import { isRecord } from './poll-user-claims';
+import { externalPollElementId, externalPollOptionId } from './poll-identifiers';
 
 export function readElementSettings(element: ElementRecord): PollElementSettings {
   return isRecord(element.settings) ? (element.settings as PollElementSettings) : {};
@@ -71,7 +72,7 @@ export function toContractPoll(poll: PollRecord, options: PollContractOptions = 
     votingStartsAt: poll.votingStartsAt?.toISOString(),
     votingEndsAt: poll.votingEndsAt?.toISOString(),
     elements: poll.elements.map((element) =>
-      toContractElement(element, imagesByElementId.get(element.id) ?? [], options),
+      toContractElement(element, imagesByElementId.get(element.id) ?? [], options, poll.id),
     ),
   };
 }
@@ -80,19 +81,20 @@ export function toContractElement(
   element: ElementRecord,
   images: ImageRecord[],
   options: PollContractOptions,
+  pollId?: string,
 ): PollElement {
   const settings = toContractElementSettings(element);
   const descriptionImages = toContractImages(images, options);
 
   return {
-    id: element.id,
+    id: pollId ? externalPollElementId(pollId, element.id) : element.id,
     type: toContractElementType(element.type),
     title: element.title,
     description: element.description ?? undefined,
     ...(descriptionImages.length > 0 ? { descriptionImages } : {}),
     required: element.required,
     options: element.options.map((option) => ({
-      id: option.id,
+      id: pollId ? externalPollOptionId(element.id, option.id) : option.id,
       label: option.label,
       description: option.description ?? undefined,
     })),
@@ -100,8 +102,8 @@ export function toContractElement(
   };
 }
 
-export function toElementSnapshotJson(element: ElementRecord): Prisma.InputJsonValue {
-  return toContractElement(element, [], {}) as unknown as Prisma.InputJsonValue;
+export function toElementSnapshotJson(element: ElementRecord, pollId?: string): Prisma.InputJsonValue {
+  return toContractElement(element, [], {}, pollId) as unknown as Prisma.InputJsonValue;
 }
 
 export function toContractImages(images: ImageRecord[], options: PollContractOptions = {}): PollImage[] {

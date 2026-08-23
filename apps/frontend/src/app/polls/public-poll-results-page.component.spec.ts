@@ -136,7 +136,7 @@ describe('PublicPollResultsPageComponent', () => {
   it('should load poll results and render public details', () => {
     expect(api.getPublicPoll).toHaveBeenCalledWith('poll-1');
     expect(api.getPublicPollResults).toHaveBeenCalledWith('poll-1');
-    expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith('poll-1', 0);
+    expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith('poll-1');
     expect(fixture.nativeElement.textContent).toContain('Resultados de Consulta pública');
     expect(fixture.nativeElement.textContent).toContain('1 pessoa votou.');
     expect(fixture.nativeElement.textContent).toContain('Ada Lovelace');

@@ -26,6 +26,7 @@ type PollImageRecord = {
 @Injectable()
 export class PollImagesService {
   private readonly logger = new Logger(PollImagesService.name);
+  private readonly deleteAttempts = this.positiveInteger(process.env.S3_DELETE_RETRY_ATTEMPTS, 3);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -193,12 +194,26 @@ export class PollImagesService {
   }
 
   private async deleteObjectBestEffort(objectKey: string): Promise<void> {
-    try {
-      await this.s3.deleteFile(objectKey);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to delete poll image object ${objectKey}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= this.deleteAttempts; attempt += 1) {
+      try {
+        await this.s3.deleteFile(objectKey);
+        return;
+      } catch (error: unknown) {
+        lastError = error;
+        if (attempt < this.deleteAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 25 * attempt));
+        }
+      }
     }
+
+    this.logger.warn(
+      `Failed to delete poll image object ${objectKey} after ${this.deleteAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
+  }
+
+  private positiveInteger(rawValue: string | undefined, fallback: number): number {
+    const value = Number.parseInt(rawValue ?? '', 10);
+    return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 }

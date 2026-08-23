@@ -6,8 +6,8 @@ import { AuthSession } from './auth.types';
 export class AuthSessionStoreService {
   private readonly logger = new Logger(AuthSessionStoreService.name);
   private readonly keyPrefix = process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ?? 'cacic-voto:auth:session:';
-  private readonly refreshLockTtlMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_TTL_MS, 5000);
-  private readonly refreshLockWaitMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_WAIT_MS, 2500);
+  private readonly refreshLockTtlMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_TTL_MS, 5_000);
+  private readonly refreshLockWaitMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_WAIT_MS, 15_000);
   private readonly refreshLockPollMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_POLL_MS, 50);
 
   constructor(private readonly redis: Redis) {}
@@ -20,12 +20,19 @@ export class AuthSessionStoreService {
 
     try {
       const session = JSON.parse(rawSession) as AuthSession;
-      if (!this.isValidSession(session) || session.sessionExpiresAt <= Date.now()) {
+      const absoluteDeadline = session.sessionAbsoluteDeadline ?? session.sessionExpiresAt;
+      if (
+        !this.isValidSession(session) ||
+        session.sessionExpiresAt <= Date.now() ||
+        absoluteDeadline <= Date.now()
+      ) {
         await this.delete(sessionId);
         return undefined;
       }
 
-      return session;
+      return session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > absoluteDeadline
+        ? { ...session, sessionExpiresAt: absoluteDeadline }
+        : session;
     } catch {
       this.logger.warn(`Ignoring unreadable auth session ${sessionId}.`);
       await this.delete(sessionId);
@@ -34,13 +41,17 @@ export class AuthSessionStoreService {
   }
 
   async set(sessionId: string, session: AuthSession): Promise<void> {
-    const ttlSeconds = this.resolveTtlSeconds(session.sessionExpiresAt);
+    const boundedSession =
+      session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > session.sessionAbsoluteDeadline
+        ? { ...session, sessionExpiresAt: session.sessionAbsoluteDeadline }
+        : session;
+    const ttlSeconds = this.resolveTtlSeconds(boundedSession.sessionExpiresAt);
     if (ttlSeconds <= 0) {
       await this.delete(sessionId);
       return;
     }
 
-    await this.redis.set(this.getKey(sessionId), JSON.stringify(session), 'EX', ttlSeconds);
+    await this.redis.set(this.getKey(sessionId), JSON.stringify(boundedSession), 'EX', ttlSeconds);
   }
 
   async delete(sessionId: string): Promise<void> {
@@ -64,6 +75,22 @@ return 0
       this.getRefreshLockKey(sessionId),
       owner,
     );
+  }
+
+  async renewRefreshLock(sessionId: string, owner: string): Promise<boolean> {
+    const result = await this.redis.eval(
+      `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("pexpire", KEYS[1], ARGV[2])
+end
+return 0
+`,
+      1,
+      this.getRefreshLockKey(sessionId),
+      owner,
+      String(this.refreshLockTtlMs),
+    );
+    return result === 1;
   }
 
   async waitForRefreshLockRelease(sessionId: string): Promise<void> {
@@ -94,8 +121,9 @@ return 0
   private isValidSession(session: AuthSession): boolean {
     return (
       typeof session.accessToken === 'string' &&
-      typeof session.accessTokenExpiresAt === 'number' &&
-      typeof session.sessionExpiresAt === 'number' &&
+      Number.isFinite(session.accessTokenExpiresAt) &&
+      Number.isFinite(session.sessionExpiresAt) &&
+      (session.sessionAbsoluteDeadline === undefined || Number.isFinite(session.sessionAbsoluteDeadline)) &&
       (session.refreshToken === undefined || typeof session.refreshToken === 'string') &&
       (session.idTokenHint === undefined || typeof session.idTokenHint === 'string')
     );

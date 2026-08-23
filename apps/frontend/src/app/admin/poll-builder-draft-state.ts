@@ -133,7 +133,9 @@ export abstract class PollBuilderDraftState {
       title: normalizedPoll.title,
       description: normalizedPoll.description,
       descriptionImages: toImageReferences(normalizedPoll.descriptionImages),
-      status: normalizedPoll.status,
+      ...(normalizedPoll.id && normalizedPoll.updatedAt
+        ? { expectedUpdatedAt: normalizedPoll.updatedAt }
+        : {}),
       mode: normalizedPoll.mode,
       cacicElectionPhase: normalizedPoll.cacicElectionPhase,
       votingStyle: normalizedPoll.votingStyle,

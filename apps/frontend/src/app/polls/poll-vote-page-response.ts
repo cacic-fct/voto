@@ -17,6 +17,10 @@ import {
 } from './poll-vote-response-state';
 
 export abstract class PollVotePageResponse extends PollVotePageCacicElection {
+  protected retryResponseState(poll: Poll): void {
+    void this.loadUserResponseState(poll);
+  }
+
   protected async submit(poll: Poll): Promise<void> {
     this.saving.set(true);
     this.error.set(null);
@@ -58,11 +62,13 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
 
   protected async loadUserResponseState(poll: Poll): Promise<void> {
     if (this.isSlateSubmissionPoll(poll)) {
+      this.responseStateError.set(null);
       this.responseState.set(emptyResponseState);
       return;
     }
 
     this.loadingResponseState.set(true);
+    this.responseStateError.set(null);
     this.responseState.set(emptyResponseState);
     try {
       const state = await firstValueFrom(this.getMyPollResponse(poll.id));
@@ -71,7 +77,9 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
         this.applyResponseAnswers(state.response.answers);
       }
     } catch {
-      this.responseState.set(emptyResponseState);
+      this.responseStateError.set(
+        'Não foi possível confirmar se você já votou. O envio ficará bloqueado até a verificação ser concluída.',
+      );
     } finally {
       this.loadingResponseState.set(false);
     }

@@ -19,6 +19,16 @@
     @if (results(); as currentResults) {
       <p class="result-count">{{ voteCountText(currentResults.responseCount) }}</p>
 
+      @if (resultsConnectionState() === 'reconnecting') {
+        <mat-card appearance="outlined" class="notice-card">
+          <mat-card-content>Conexão instável. Tentando atualizar os resultados novamente.</mat-card-content>
+        </mat-card>
+      } @else if (resultsConnectionState() === 'closed' && currentPoll.status === 'published') {
+        <mat-card appearance="outlined" class="notice-card">
+          <mat-card-content>A atualização ao vivo foi interrompida. Recarregue a página para tentar novamente.</mat-card-content>
+        </mat-card>
+      }
+
       @if (!currentResults.answersReleased) {
         <mat-card appearance="outlined" class="notice-card">
           <mat-card-header>
@@ -47,7 +57,7 @@
           </div>
 
           <div class="question-result-list">
-            @for (summary of questionSummaries(); track summary.element.id) {
+            @for (summary of questionSummaries(); track summary.key) {
               <mat-card appearance="outlined" class="question-result-card">
                 <mat-card-header>
                   <mat-icon mat-card-avatar>bar_chart</mat-icon>
@@ -157,8 +167,14 @@
   }
 
   @if (error()) {
-    <mat-card appearance="outlined" class="notice-card">
+    <mat-card appearance="outlined" class="notice-card" aria-live="polite">
       <mat-card-content>{{ error() }}</mat-card-content>
+      <mat-card-actions>
+        <button mat-stroked-button type="button" (click)="retryLoad()">
+          <mat-icon>refresh</mat-icon>
+          Tentar novamente
+        </button>
+      </mat-card-actions>
     </mat-card>
   }
 </section>

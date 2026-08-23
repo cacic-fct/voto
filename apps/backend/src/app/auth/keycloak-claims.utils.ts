@@ -33,14 +33,14 @@ export function extractClientRoles(resourceAccessClaim: unknown, roles: Set<stri
     return;
   }
 
-  for (const clientAccess of Object.values(resourceAccessClaim)) {
+  for (const [clientId, clientAccess] of Object.entries(resourceAccessClaim)) {
     if (!isRecord(clientAccess) || !Array.isArray(clientAccess['roles'])) {
       continue;
     }
 
     for (const role of clientAccess['roles']) {
       if (typeof role === 'string' && role.trim()) {
-        roles.add(role.trim());
+        roles.add(`${clientId}:${role.trim()}`);
       }
     }
   }

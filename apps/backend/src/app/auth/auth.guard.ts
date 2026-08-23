@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { AUTH_SESSION_COOKIE_NAME, IS_PUBLIC_KEY, REQUIRED_PERMISSIONS_KEY } from './auth.constants';
+import { getAuthSessionCookieName, IS_PUBLIC_KEY, REQUIRED_PERMISSIONS_KEY } from './auth.constants';
 import { AuthenticatedRequest } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
 
@@ -22,7 +22,7 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const sessionId = this.readCookie(request, AUTH_SESSION_COOKIE_NAME);
+    const sessionId = this.readCookie(request, getAuthSessionCookieName());
 
     if (!sessionId) {
       if (isPublic) {
@@ -68,7 +68,11 @@ export class AuthGuard implements CanActivate {
         continue;
       }
 
-      return decodeURIComponent(rest.join('='));
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        return null;
+      }
     }
 
     return null;

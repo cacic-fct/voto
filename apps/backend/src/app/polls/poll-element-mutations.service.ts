@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
 import { cleanOptionalText, toDbElementType, toElementSnapshotJson } from './poll-contract.mapper';
+import {
+  assertDeterministicIdentifierAvailable,
+  externalPollElementId,
+  externalPollOptionId,
+  namespacedPollElementId,
+  namespacedPollOptionId,
+} from './poll-identifiers';
 import { PollMutationOptionsService } from './poll-mutation-options.service';
 
 @Injectable()
@@ -27,11 +34,20 @@ export class PollElementMutationsService {
       },
     });
     const existingById = new Map(existingElements.map((element) => [element.id, element]));
-    const inputElementIds = new Set(elements.map((element) => element.id));
+    const existingByExternalId = new Map(
+      existingElements.map((element) => [externalPollElementId(pollId, element.id), element]),
+    );
+    const inputElementIds = new Set(
+      elements.flatMap((element) => [element.id, externalPollElementId(pollId, element.id)]),
+    );
     const now = new Date();
 
     for (const element of existingElements) {
-      if (element.retiredAt || inputElementIds.has(element.id)) {
+      if (
+        element.retiredAt ||
+        inputElementIds.has(element.id) ||
+        inputElementIds.has(externalPollElementId(pollId, element.id))
+      ) {
         continue;
       }
 
@@ -47,7 +63,8 @@ export class PollElementMutationsService {
     }
 
     for (const [elementIndex, element] of elements.entries()) {
-      const existing = existingById.get(element.id);
+      const existing = existingById.get(element.id) ?? existingByExternalId.get(element.id);
+      const storedElementId = existing?.id ?? (await this.resolveElementId(tx, pollId, element.id));
       const settings = this.options.normalizeElementSettings(element);
       const data = {
         pollId,
@@ -62,19 +79,19 @@ export class PollElementMutationsService {
 
       if (existing) {
         await tx.pollElement.update({
-          where: { id: element.id },
+          where: { id: storedElementId },
           data,
         });
-        await this.replaceElementOptions(tx, element.id, element.options);
+        await this.replaceElementOptions(tx, storedElementId, element.options);
         continue;
       }
 
       await tx.pollElement.create({
         data: {
-          id: element.id,
+          id: storedElementId,
           ...data,
           options: {
-            create: element.options.map((option, optionIndex) => this.toElementOptionCreateData(option, optionIndex)),
+            create: await this.toElementOptionCreateDataList(tx, storedElementId, element.options),
           },
         },
       });
@@ -89,10 +106,11 @@ export class PollElementMutationsService {
     await tx.pollElement.deleteMany({ where: { pollId } });
 
     for (const [elementIndex, element] of elements.entries()) {
+      const storedElementId = await this.resolveElementId(tx, pollId, element.id);
       const settings = this.options.normalizeElementSettings(element);
       await tx.pollElement.create({
         data: {
-          id: element.id,
+          id: storedElementId,
           pollId,
           type: toDbElementType(element.type),
           title: element.title.trim(),
@@ -101,7 +119,7 @@ export class PollElementMutationsService {
           settings: settings ? (settings as Prisma.InputJsonValue) : Prisma.JsonNull,
           position: elementIndex,
           options: {
-            create: element.options.map((option, optionIndex) => this.toElementOptionCreateData(option, optionIndex)),
+            create: await this.toElementOptionCreateDataList(tx, storedElementId, element.options),
           },
         },
       });
@@ -125,7 +143,7 @@ export class PollElementMutationsService {
           elementSnapshot: { equals: Prisma.DbNull },
         },
         data: {
-          elementSnapshot: toElementSnapshotJson(element),
+          elementSnapshot: toElementSnapshotJson(element, pollId),
         },
       });
     }
@@ -136,25 +154,93 @@ export class PollElementMutationsService {
     elementId: string,
     options: SavePollDto['elements'][number]['options'],
   ): Promise<void> {
+    const existingOptions = await tx.pollElementOption.findMany({
+      where: { elementId },
+      select: { id: true },
+    });
+    const existingById = new Map(existingOptions.map((option) => [option.id, option.id]));
+    const existingByExternalId = new Map(
+      existingOptions.map((option) => [externalPollOptionId(elementId, option.id), option.id]),
+    );
     await tx.pollElementOption.deleteMany({ where: { elementId } });
     if (options.length === 0) {
       return;
     }
 
     await tx.pollElementOption.createMany({
-      data: options.map((option, optionIndex) => ({
-        ...this.toElementOptionCreateData(option, optionIndex),
-        elementId,
-      })),
+      data: await Promise.all(
+        options.map(async (option, optionIndex) => ({
+          ...this.toElementOptionCreateData(
+            option,
+            optionIndex,
+            existingById.get(option.id) ??
+              existingByExternalId.get(option.id) ??
+              (await this.resolveOptionId(tx, elementId, option.id)),
+          ),
+          elementId,
+        })),
+      ),
     });
+  }
+
+  private async toElementOptionCreateDataList(
+    tx: Prisma.TransactionClient,
+    elementId: string,
+    options: SavePollDto['elements'][number]['options'],
+  ): Promise<Prisma.PollElementOptionCreateWithoutElementInput[]> {
+    return Promise.all(
+      options.map(async (option, optionIndex) =>
+        this.toElementOptionCreateData(option, optionIndex, await this.resolveOptionId(tx, elementId, option.id)),
+      ),
+    );
+  }
+
+  private async resolveElementId(tx: Prisma.TransactionClient, pollId: string, externalId: string): Promise<string> {
+    const namespacedId = namespacedPollElementId(pollId, externalId);
+    const existing = await tx.pollElement.findUnique({
+      where: { id: externalId },
+      select: { id: true, pollId: true },
+    });
+    if (existing?.pollId === pollId) return externalId;
+    const namespaced = await tx.pollElement.findUnique({
+      where: { id: namespacedId },
+      select: { id: true, pollId: true },
+    });
+    assertDeterministicIdentifierAvailable(
+      namespaced ? { id: namespaced.id, parentId: namespaced.pollId } : null,
+      pollId,
+      'element identifier',
+    );
+    return namespacedId;
+  }
+
+  private async resolveOptionId(tx: Prisma.TransactionClient, elementId: string, externalId: string): Promise<string> {
+    const namespacedId = namespacedPollOptionId(elementId, externalId);
+    const existing = await tx.pollElementOption.findUnique({
+      where: { id: externalId },
+      select: { id: true, elementId: true },
+    });
+    if (existing?.elementId === elementId) return externalId;
+
+    const namespaced = await tx.pollElementOption.findUnique({
+      where: { id: namespacedId },
+      select: { id: true, elementId: true },
+    });
+    assertDeterministicIdentifierAvailable(
+      namespaced ? { id: namespaced.id, parentId: namespaced.elementId } : null,
+      elementId,
+      'option identifier',
+    );
+    return namespacedId;
   }
 
   private toElementOptionCreateData(
     option: SavePollDto['elements'][number]['options'][number],
     optionIndex: number,
+    storedId = option.id,
   ): Prisma.PollElementOptionCreateWithoutElementInput {
     return {
-      id: option.id,
+      id: storedId,
       label: option.label.trim(),
       description: cleanOptionalText(option.description),
       position: optionIndex,

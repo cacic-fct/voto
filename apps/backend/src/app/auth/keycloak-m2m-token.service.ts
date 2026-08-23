@@ -14,11 +14,15 @@ type ClientCredentialsTokenOptions = {
   scope?: string;
 };
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const MAX_CACHED_TOKENS = 128;
+
 @Injectable()
 export class KeycloakM2mTokenService {
   private readonly logger = new Logger(KeycloakM2mTokenService.name);
   private readonly tokenRefreshSkewMs = 30_000;
   private readonly cachedTokens = new Map<string, { token: string; expiresAt: number }>();
+  private readonly requestTimeoutMs = this.parsePositiveIntegerEnv(process.env.KEYCLOAK_REQUEST_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS);
 
   async getClientCredentialsToken(options: ClientCredentialsTokenOptions = {}): Promise<string> {
     const clientId = options.clientId ?? process.env.KEYCLOAK_M2M_CLIENT_ID;
@@ -35,6 +39,7 @@ export class KeycloakM2mTokenService {
     });
     const cached = this.cachedTokens.get(cacheKey);
     const now = Date.now();
+    this.pruneCachedTokens(now);
     if (cached && cached.expiresAt - this.tokenRefreshSkewMs > now) {
       return cached.token;
     }
@@ -60,6 +65,7 @@ export class KeycloakM2mTokenService {
           headers: {
             'content-type': 'application/x-www-form-urlencoded',
           },
+          timeout: this.requestTimeoutMs,
         },
       );
 
@@ -87,6 +93,26 @@ export class KeycloakM2mTokenService {
 
       throw new ServiceUnavailableException('Could not authenticate with Keycloak for M2M access.');
     }
+  }
+
+  private pruneCachedTokens(now: number): void {
+    for (const [key, cached] of this.cachedTokens) {
+      if (cached.expiresAt - this.tokenRefreshSkewMs <= now) {
+        this.cachedTokens.delete(key);
+      }
+    }
+    while (this.cachedTokens.size > MAX_CACHED_TOKENS) {
+      const oldest = this.cachedTokens.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.cachedTokens.delete(oldest);
+    }
+  }
+
+  private parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {
+    const value = Number.parseInt(rawValue ?? '', 10);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
   private get realmUrl(): string {

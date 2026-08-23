@@ -642,6 +642,22 @@
         </button>
       </div>
     } @else if (
+      !isSlateSubmissionPoll(currentPoll) && responseStateError()
+    ) {
+      <mat-card appearance="outlined" class="notice-card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar>sync_problem</mat-icon>
+          <mat-card-title>Verificação de voto indisponível</mat-card-title>
+          <mat-card-subtitle>{{ responseStateError() }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-actions>
+          <button mat-stroked-button type="button" (click)="retryResponseState(currentPoll)">
+            <mat-icon>refresh</mat-icon>
+            Tentar novamente
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    } @else if (
       !isSlateSubmissionPoll(currentPoll) && !responseState().hasSubmitted
     ) {
       <mat-card appearance="outlined" class="notice-card">
@@ -656,6 +672,11 @@
     }
 
     @if (shouldShowPublicResults(currentPoll)) {
+      @if (resultsConnectionState() === 'reconnecting') {
+        <p aria-live="polite">Conexão instável para atualização dos resultados; tentando novamente.</p>
+      } @else if (resultsConnectionState() === 'closed' && currentPoll.status === 'published') {
+        <p aria-live="polite">A atualização ao vivo foi interrompida; abra os resultados novamente para reconectar.</p>
+      }
       <div class="actions">
         <a mat-stroked-button [routerLink]="resultsLink(currentPoll)">
           <mat-icon>bar_chart</mat-icon>

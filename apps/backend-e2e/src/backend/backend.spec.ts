@@ -196,7 +196,17 @@ describe('API integration coverage', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AppController, AuthController, PublicPollsController, AdminPollsController],
       providers: [
-        AppService,
+        {
+          provide: AppService,
+          useValue: {
+            getData: () => ({ status: 'ok', name: 'CACiC Voto API' }),
+            getLiveness: () => ({ status: 'ok' }),
+            getReadiness: async () => ({
+              status: 'ok',
+              components: { database: { status: 'ok' }, redis: { status: 'ok' } },
+            }),
+          },
+        },
         { provide: KeycloakAuthService, useValue: auth },
         { provide: PollsService, useValue: polls },
         { provide: PollImagesService, useValue: pollImages },

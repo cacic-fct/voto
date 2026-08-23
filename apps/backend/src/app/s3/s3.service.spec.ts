@@ -46,6 +46,10 @@ describe('S3Service', () => {
         secretAccessKey: 'secret-key',
       },
       forcePathStyle: true,
+      requestHandler: {
+        connectionTimeout: 15_000,
+        socketTimeout: 15_000,
+      },
     });
   });
 
@@ -57,7 +61,7 @@ describe('S3Service', () => {
 
     await expect(service.uploadFile('polls/poll-1/image.avif', body, 'image/avif', { pollId: 'poll-1' })).resolves.toEqual({
       key: 'polls/poll-1/image.avif',
-      size: 123,
+      size: body.length,
     });
 
     expect(Upload).toHaveBeenCalledWith({
@@ -71,10 +75,7 @@ describe('S3Service', () => {
         Metadata: { pollId: 'poll-1' },
       },
     });
-    expect(HeadObjectCommand).toHaveBeenCalledWith({
-      Bucket: 'cacic-voto',
-      Key: 'polls/poll-1/image.avif',
-    });
+    expect(HeadObjectCommand).not.toHaveBeenCalled();
   });
 
   it('uploads streams without forcing content length', async () => {
@@ -96,6 +97,20 @@ describe('S3Service', () => {
         }),
       }),
     );
+  });
+
+  it('deletes an uploaded stream when the metadata lookup fails', async () => {
+    mockUploadDone.mockResolvedValue(undefined);
+    mockS3Send
+      .mockRejectedValueOnce(new Error('head failed'))
+      .mockResolvedValueOnce({});
+    const service = new S3Service();
+
+    await expect(service.uploadFile('polls/poll-1/image.avif', Readable.from(['image']))).rejects.toThrow('head failed');
+    expect(DeleteObjectCommand).toHaveBeenCalledWith({
+      Bucket: 'cacic-voto',
+      Key: 'polls/poll-1/image.avif',
+    });
   });
 
   it('downloads object streams with metadata and content headers', async () => {

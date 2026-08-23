@@ -227,10 +227,19 @@ describe('PollApiService', () => {
     deleteImageRequest.flush(null);
     await expect(deleteImage).resolves.toBeNull();
 
-    const status = firstValueFrom(service.updatePollStatus('poll-1', 'published'));
+    const status = firstValueFrom(
+      service.updatePollStatus(
+        'poll-1',
+        'published',
+        '2026-06-01T10:00:00.000Z',
+      ),
+    );
     const statusRequest = http.expectOne('/api/admin/polls/poll-1/status');
     expect(statusRequest.request.method).toBe('PATCH');
-    expect(statusRequest.request.body).toEqual({ status: 'published' });
+    expect(statusRequest.request.body).toEqual({
+      status: 'published',
+      expectedUpdatedAt: '2026-06-01T10:00:00.000Z',
+    });
     statusRequest.flush({ ...poll, status: 'published' });
     await expect(status).resolves.toEqual({ ...poll, status: 'published' });
 

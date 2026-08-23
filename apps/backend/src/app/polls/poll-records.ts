@@ -173,14 +173,9 @@ export type PollContractOptions = {
   imageBasePath?: string;
 };
 
-export type PollResultResponseRecord = Prisma.PollResponseGetPayload<{
+type PollResultResponseBase = Prisma.PollResponseGetPayload<{
   include: {
-    answers: {
-      select: {
-        elementId: true;
-        value: true;
-      };
-    };
+    answers: { select: { elementId: true; value: true } };
     user: {
       select: {
         id: true;
@@ -193,6 +188,14 @@ export type PollResultResponseRecord = Prisma.PollResponseGetPayload<{
   };
 }>;
 
+export type PollResultResponseRecord = Omit<PollResultResponseBase, 'answers'> & {
+  answers: Array<{
+    elementId: string;
+    value: Prisma.JsonValue;
+    elementSnapshot?: Prisma.JsonValue | null;
+  }>;
+};
+
 export type PollResultStreamEvent = {
   admin: PollResultsDelta;
   observer: PollResultsDelta;
@@ -201,6 +204,7 @@ export type PollResultStreamEvent = {
 
 export const pollInclude = {
   elements: {
+    where: { retiredAt: null },
     orderBy: { position: 'asc' },
     include: {
       options: {

@@ -11,7 +11,6 @@ import {
   PollVoterEligibilitySource as DbPollVoterEligibilitySource,
   PollVotingStyle as DbPollVotingStyle,
 } from '@prisma/client';
-import { setMilliseconds, setSeconds } from 'date-fns';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { SavePollDto } from './dto/poll.dto';
 import {
@@ -85,28 +84,27 @@ export class PollMutationOptionsService {
       };
     }
 
-    if (
-      existing?.linkedEventId === linkedEventId &&
-      existing.linkedEventName &&
-      existing.linkedEventStartDate &&
-      existing.linkedEventEndDate
-    ) {
-      return {
-        mode,
-        cacicElectionPhase,
-        votingStyle,
-        voterEligibilitySource,
-        requireVerifiedUnespRole,
-        linkedEventId: existing.linkedEventId,
-        linkedEventName: existing.linkedEventName,
-        linkedEventStartDate: existing.linkedEventStartDate,
-        linkedEventEndDate: existing.linkedEventEndDate,
-        linkedEventLocationDescription: existing.linkedEventLocationDescription,
-      };
-    }
-
     const event = (await this.eventManager.listLinkableEvents()).find((item) => item.id === linkedEventId);
     if (!event) {
+      if (
+        existing?.linkedEventId === linkedEventId &&
+        existing.linkedEventName &&
+        existing.linkedEventStartDate &&
+        existing.linkedEventEndDate
+      ) {
+        return {
+          mode,
+          cacicElectionPhase,
+          votingStyle,
+          voterEligibilitySource,
+          requireVerifiedUnespRole,
+          linkedEventId: existing.linkedEventId,
+          linkedEventName: existing.linkedEventName,
+          linkedEventStartDate: existing.linkedEventStartDate,
+          linkedEventEndDate: existing.linkedEventEndDate,
+          linkedEventLocationDescription: existing.linkedEventLocationDescription,
+        };
+      }
       throw new BadRequestException('Linked event was not found or is not available for new poll links.');
     }
 
@@ -187,14 +185,12 @@ export class PollMutationOptionsService {
     if (metadata?.mode === DbPollMode.CACIC_ELECTION) {
       return {
         directLinkEnabled: false,
-        directLinkToken: existing?.directLinkToken ?? null,
+        directLinkToken: null,
       };
     }
 
     const directLinkEnabled = input.directLinkEnabled ?? existing?.directLinkEnabled ?? false;
-    const directLinkToken = directLinkEnabled
-      ? existing?.directLinkToken ?? createUuidV7()
-      : existing?.directLinkToken ?? null;
+    const directLinkToken = directLinkEnabled ? existing?.directLinkToken ?? createUuidV7() : null;
 
     return {
       directLinkEnabled,
@@ -289,7 +285,7 @@ export class PollMutationOptionsService {
       throw new BadRequestException('Invalid poll schedule date.');
     }
 
-    return setMilliseconds(setSeconds(date, 0), 0);
+    return date;
   }
 
   private toPollMetadataFromEvent(

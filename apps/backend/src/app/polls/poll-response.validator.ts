@@ -8,22 +8,31 @@ import {
 } from '@org/voting-contracts';
 import { SubmitPollResponseDto } from './dto/poll.dto';
 import { readElementSettings, toContractElementType } from './poll-contract.mapper';
+import { externalPollElementId, externalPollOptionId, normalizePollIdentifier } from './poll-identifiers';
 import { ElementRecord, PollRecord } from './poll-records';
 import { isRecord } from './poll-user-claims';
 
 export function validatePollResponse(poll: PollRecord, input: SubmitPollResponseDto): PollResponseAnswer[] {
-  const answersByElementId = new Map(input.answers.map((answer) => [answer.elementId, answer.value]));
-  const elementIds = new Set(poll.elements.map((element) => element.id));
+  const answersByElementId = new Map<string, unknown>();
+  const elementsByExternalId = new Map(
+    poll.elements.map((element) => [externalPollElementId(poll.id, element.id), element]),
+  );
   const normalizedAnswers: PollResponseAnswer[] = [];
 
   for (const answer of input.answers) {
-    if (!elementIds.has(answer.elementId)) {
-      throw new BadRequestException(`Unknown element id: ${answer.elementId}.`);
+    const elementId = normalizePollIdentifier(answer.elementId, 'Element id');
+    const element = elementsByExternalId.get(elementId);
+    if (!element) {
+      throw new BadRequestException(`Unknown element id: ${elementId}.`);
     }
+    if (answersByElementId.has(element.id)) {
+      throw new BadRequestException(`Duplicated answer for element id: ${elementId}.`);
+    }
+    answersByElementId.set(element.id, answer.value);
   }
 
   for (const element of poll.elements) {
-    const rawValue = answersByElementId.get(element.id) ?? null;
+    const rawValue = answersByElementId.has(element.id) ? answersByElementId.get(element.id) : null;
     const value = normalizeAnswer(element, rawValue);
 
     if (element.required && isEmptyAnswer(value)) {
@@ -45,10 +54,17 @@ export function normalizeAnswer(element: ElementRecord, rawValue: unknown): Poll
   switch (toContractElementType(element.type)) {
     case 'section':
     case 'statement':
+      if (rawValue !== null && rawValue !== undefined) {
+        throw new BadRequestException(`Element "${element.title}" does not accept an answer.`);
+      }
       return null;
     case 'shortText':
     case 'longText':
-      return typeof rawValue === 'string' ? rawValue.trim() : null;
+      if (rawValue === null || rawValue === undefined) return null;
+      if (typeof rawValue !== 'string') {
+        throw new BadRequestException(`Invalid text for element: ${element.title}.`);
+      }
+      return rawValue.trim();
     case 'singleChoice':
     case 'selectionDropdown':
       return normalizeSingleChoiceAnswer(element, rawValue);
@@ -72,30 +88,53 @@ export function normalizeAnswer(element: ElementRecord, rawValue: unknown): Poll
 }
 
 function normalizeSingleChoiceAnswer(element: ElementRecord, rawValue: unknown): string | null {
-  if (typeof rawValue !== 'string' || !rawValue.trim()) {
+  if (rawValue === null || rawValue === undefined) {
     return null;
   }
+  if (typeof rawValue !== 'string') {
+    throw new BadRequestException(`Invalid option for element: ${element.title}.`);
+  }
+  const normalizedValue = rawValue.trim();
+  if (!normalizedValue) return null;
 
   const optionIds = new Set(element.options.map((option) => option.id));
-  if (!optionIds.has(rawValue)) {
+  const optionIdsByExternalId = new Map(
+    element.options.map((option) => [externalPollOptionId(element.id, option.id), option.id]),
+  );
+  const storedOptionId = optionIdsByExternalId.get(normalizedValue) ??
+    (optionIds.has(normalizedValue) ? normalizedValue : undefined);
+  if (!storedOptionId) {
     throw new BadRequestException(`Invalid option for element: ${element.title}.`);
   }
 
-  return rawValue;
+  return storedOptionId;
 }
 
 function normalizeMultipleChoiceAnswer(element: ElementRecord, rawValue: unknown): string[] | null {
-  if (!Array.isArray(rawValue)) {
+  if (rawValue === null || rawValue === undefined) {
     return null;
+  }
+  if (!Array.isArray(rawValue)) {
+    throw new BadRequestException(`Invalid options for element: ${element.title}.`);
   }
 
   const optionIds = new Set(element.options.map((option) => option.id));
-  const selected = [...new Set(rawValue.filter((value) => typeof value === 'string' && value.trim()))];
-
-  for (const optionId of selected) {
-    if (!optionIds.has(optionId)) {
+  const optionIdsByExternalId = new Map(
+    element.options.map((option) => [externalPollOptionId(element.id, option.id), option.id]),
+  );
+  const selected: string[] = [];
+  for (const value of rawValue) {
+    if (typeof value !== 'string') {
       throw new BadRequestException(`Invalid option for element: ${element.title}.`);
     }
+    const normalizedValue = value.trim();
+    if (!normalizedValue) continue;
+    const storedOptionId = optionIdsByExternalId.get(normalizedValue) ??
+      (optionIds.has(normalizedValue) ? normalizedValue : undefined);
+    if (!storedOptionId) {
+      throw new BadRequestException(`Invalid option for element: ${element.title}.`);
+    }
+    if (!selected.includes(storedOptionId)) selected.push(storedOptionId);
   }
 
   return selected.length > 0 ? selected : null;
@@ -106,8 +145,9 @@ function normalizeSingleSelectionGridAnswer(
   rawValue: unknown,
 ): Record<string, string> | null {
   const grid = readElementSettings(element).grid;
+  if (rawValue === null || rawValue === undefined) return null;
   if (!grid || !isRecord(rawValue)) {
-    return null;
+    throw new BadRequestException(`Invalid grid answer for element: ${element.title}.`);
   }
 
   const rowIds = new Set(grid.rows.map((row) => row.id));
@@ -119,15 +159,20 @@ function normalizeSingleSelectionGridAnswer(
       throw new BadRequestException(`Invalid row for element: ${element.title}.`);
     }
 
-    if (typeof columnId !== 'string' || !columnId.trim()) {
+    if (columnId === null || columnId === undefined || columnId === '') {
       continue;
     }
+    if (typeof columnId !== 'string') {
+      throw new BadRequestException(`Invalid column for element: ${element.title}.`);
+    }
+    const normalizedColumnId = columnId.trim();
+    if (!normalizedColumnId) continue;
 
-    if (!columnIds.has(columnId)) {
+    if (!columnIds.has(normalizedColumnId)) {
       throw new BadRequestException(`Invalid column for element: ${element.title}.`);
     }
 
-    selected[rowId] = columnId;
+    selected[rowId] = normalizedColumnId;
   }
 
   ensureRequiredGridRows(element, grid.rows, selected);
@@ -139,8 +184,9 @@ function normalizeMultipleSelectionGridAnswer(
   rawValue: unknown,
 ): Record<string, string[]> | null {
   const grid = readElementSettings(element).grid;
+  if (rawValue === null || rawValue === undefined) return null;
   if (!grid || !isRecord(rawValue)) {
-    return null;
+    throw new BadRequestException(`Invalid grid answer for element: ${element.title}.`);
   }
 
   const rowIds = new Set(grid.rows.map((row) => row.id));
@@ -152,11 +198,19 @@ function normalizeMultipleSelectionGridAnswer(
       throw new BadRequestException(`Invalid row for element: ${element.title}.`);
     }
 
+    if (columnValues === null || columnValues === undefined) continue;
     if (!Array.isArray(columnValues)) {
-      continue;
+      throw new BadRequestException(`Invalid columns for element: ${element.title}.`);
     }
 
-    const selectedColumns = [...new Set(columnValues.filter((value) => typeof value === 'string' && value.trim()))];
+    const selectedColumns: string[] = [];
+    for (const value of columnValues) {
+      if (typeof value !== 'string') {
+        throw new BadRequestException(`Invalid column for element: ${element.title}.`);
+      }
+      const normalizedValue = value.trim();
+      if (normalizedValue && !selectedColumns.includes(normalizedValue)) selectedColumns.push(normalizedValue);
+    }
     for (const columnId of selectedColumns) {
       if (!columnIds.has(columnId)) {
         throw new BadRequestException(`Invalid column for element: ${element.title}.`);
@@ -220,7 +274,7 @@ function normalizeStarRatingAnswer(element: ElementRecord, rawValue: unknown): n
 }
 
 function parseNumberAnswer(element: ElementRecord, rawValue: unknown): number | null {
-  if (rawValue === null || rawValue === '') {
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
     return null;
   }
 
@@ -239,7 +293,11 @@ function parseNumberAnswer(element: ElementRecord, rawValue: unknown): number | 
 }
 
 function normalizeDateAnswer(element: ElementRecord, rawValue: unknown): string | null {
-  if (typeof rawValue !== 'string' || !rawValue.trim()) {
+  if (rawValue === null || rawValue === undefined) return null;
+  if (typeof rawValue !== 'string') {
+    throw new BadRequestException(`Invalid date for element: ${element.title}.`);
+  }
+  if (!rawValue.trim()) {
     return null;
   }
 
@@ -249,7 +307,11 @@ function normalizeDateAnswer(element: ElementRecord, rawValue: unknown): string 
 }
 
 function normalizeTimeAnswer(element: ElementRecord, rawValue: unknown): string | null {
-  if (typeof rawValue !== 'string' || !rawValue.trim()) {
+  if (rawValue === null || rawValue === undefined) return null;
+  if (typeof rawValue !== 'string') {
+    throw new BadRequestException(`Invalid time for element: ${element.title}.`);
+  }
+  if (!rawValue.trim()) {
     return null;
   }
 
@@ -260,13 +322,17 @@ function normalizeTimeAnswer(element: ElementRecord, rawValue: unknown): string 
 
 function normalizeSchedulingAnswer(element: ElementRecord, rawValue: unknown): PollResponseAnswer['value'] {
   const settings = readElementSettings(element).scheduling;
+  if (rawValue === null || rawValue === undefined) return null;
   if (!settings || !isRecord(rawValue)) {
-    return null;
+    throw new BadRequestException(`Invalid scheduling answer for element: ${element.title}.`);
   }
 
-  const slotId = typeof rawValue['slotId'] === 'string' ? rawValue['slotId'].trim() : '';
+  if (typeof rawValue['slotId'] !== 'string') {
+    throw new BadRequestException(`Invalid scheduling slot for element: ${element.title}.`);
+  }
+  const slotId = rawValue['slotId'].trim();
   if (!slotId) {
-    return null;
+    throw new BadRequestException(`Invalid scheduling slot for element: ${element.title}.`);
   }
 
   const validSlotIds = new Set(buildSchedulingSlots(settings).map((slot) => slot.id));
@@ -294,8 +360,7 @@ function normalizeSchedulingInvitees(
   }
 
   const invitees = (Array.isArray(rawInvitees) ? rawInvitees : [])
-    .map((rawInvitee) => normalizeSchedulingInvitee(element, rawInvitee))
-    .filter((invitee): invitee is PollSchedulingInvitee => invitee !== null);
+    .map((rawInvitee) => normalizeSchedulingInvitee(element, rawInvitee));
 
   if (invitees.length > settings.maxInvitees) {
     throw new BadRequestException(`Too many invitees for element: ${element.title}.`);
@@ -308,15 +373,15 @@ function normalizeSchedulingInvitees(
   return invitees;
 }
 
-function normalizeSchedulingInvitee(element: ElementRecord, rawInvitee: unknown): PollSchedulingInvitee | null {
+function normalizeSchedulingInvitee(element: ElementRecord, rawInvitee: unknown): PollSchedulingInvitee {
   if (!isRecord(rawInvitee)) {
-    return null;
+    throw new BadRequestException(`Invalid invitee for element: ${element.title}.`);
   }
 
   const name = typeof rawInvitee['name'] === 'string' ? rawInvitee['name'].trim() : '';
   const email = typeof rawInvitee['email'] === 'string' ? rawInvitee['email'].trim() : '';
   if (!name && !email) {
-    return null;
+    throw new BadRequestException(`Invitee name is required for element: ${element.title}.`);
   }
 
   if (!name) {

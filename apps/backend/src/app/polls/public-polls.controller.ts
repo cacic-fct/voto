@@ -12,6 +12,8 @@ import type {
 } from '@org/voting-contracts';
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 import { SubmitCacicElectionSlateDto, SubmitPollResponseDto } from './dto/poll.dto';
 import { PollImagesService } from './poll-images.service';
@@ -23,14 +25,14 @@ import { PollsService } from './polls.service';
 export class PublicPollsController {
   constructor(
     private readonly polls: PollsService,
-    private readonly pollImages?: PollImagesService,
+    private readonly pollImages: PollImagesService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: 'List published polls' })
   @ApiOkResponse({ description: 'Published poll summaries.' })
-  listPolls(): Promise<PollSummary[]> {
-    return this.polls.listPublicPolls();
+  listPolls(@Req() request?: AuthenticatedRequest): Promise<PollSummary[]> {
+    return this.polls.listPublicPolls(request?.user ?? null);
   }
 
   @Get('direct/:directLinkToken')
@@ -53,7 +55,7 @@ export class PublicPollsController {
     @Res() response: Response,
   ): Promise<void> {
     const pollId = await this.polls.assertPublishedDirectLinkPollReadable(directLinkToken, request.user);
-    const image = await this.getPollImages().getPollImage(pollId, imageId, request.user, {
+    const image = await this.pollImages.getPollImage(pollId, imageId, request.user, {
       allowPublishedRead: true,
     });
     response.setHeader('Content-Type', image.contentType);
@@ -61,7 +63,7 @@ export class PublicPollsController {
     if (image.contentLength !== undefined) {
       response.setHeader('Content-Length', String(image.contentLength));
     }
-    image.stream.pipe(response);
+    await this.pipeImage(image.stream, response, request);
   }
 
   @Get('direct/:directLinkToken/results')
@@ -129,7 +131,7 @@ export class PublicPollsController {
     @Res() response: Response,
   ): Promise<void> {
     await this.polls.assertPublishedPollReadable(id, request.user);
-    const image = await this.getPollImages().getPollImage(id, imageId, request.user, {
+    const image = await this.pollImages.getPollImage(id, imageId, request.user, {
       allowPublishedRead: true,
     });
     response.setHeader('Content-Type', image.contentType);
@@ -137,7 +139,7 @@ export class PublicPollsController {
     if (image.contentLength !== undefined) {
       response.setHeader('Content-Length', String(image.contentLength));
     }
-    image.stream.pipe(response);
+    await this.pipeImage(image.stream, response, request);
   }
 
   @Get(':id/results')
@@ -212,11 +214,33 @@ export class PublicPollsController {
     return this.polls.submitResponse(id, body, request.user);
   }
 
-  private getPollImages(): PollImagesService {
-    if (!this.pollImages) {
-      throw new Error('Poll image service is not available.');
+  private async pipeImage(
+    stream: Readable,
+    response: Response,
+    request: AuthenticatedRequest,
+  ): Promise<void> {
+    const abort = () => {
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    };
+    const canObserveAbort = typeof request.once === 'function' && typeof request.off === 'function';
+    if (canObserveAbort) {
+      request.once('aborted', abort);
     }
-
-    return this.pollImages;
+    try {
+      if (typeof response.on !== 'function') {
+        return;
+      }
+      await pipeline(stream, response);
+    } catch (error: unknown) {
+      if (!request.destroyed && !request.aborted) {
+        throw error;
+      }
+    } finally {
+      if (canObserveAbort) {
+        request.off('aborted', abort);
+      }
+    }
   }
 }

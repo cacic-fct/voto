@@ -8,6 +8,7 @@ import { AuthorizationStateService } from './authorization-state.service';
 import { KeycloakAuthService } from './keycloak-auth.service';
 import { KeycloakM2mTokenService } from './keycloak-m2m-token.service';
 import { getRedisConnectionOptions } from './redis-connection';
+import { RedisConnectionLifecycle } from './redis-lifecycle';
 
 @Module({
   controllers: [AuthController],
@@ -16,6 +17,7 @@ import { getRedisConnectionOptions } from './redis-connection';
     AuthorizationStateService,
     KeycloakAuthService,
     KeycloakM2mTokenService,
+    RedisConnectionLifecycle,
     {
       provide: Redis,
       useFactory: () => new Redis(getRedisConnectionOptions()),

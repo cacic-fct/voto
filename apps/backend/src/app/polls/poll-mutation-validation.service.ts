@@ -9,6 +9,7 @@ import {
 import { PollImagePlacement as DbPollImagePlacement } from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
 import { cleanOptionalText, isGridElement, isOptionChoiceElement } from './poll-contract.mapper';
+import { normalizePollIdentifier } from './poll-identifiers';
 import { PollImageReferenceData, PollPublicationScheduleData } from './poll-records';
 import { parseDateAnswerValue, parseTimeAnswerValue } from './poll-response.validator';
 
@@ -36,6 +37,7 @@ export class PollMutationValidationService {
       throw new BadRequestException('Poll title is required.');
     }
 
+    this.normalizePollInputIdentifiers(input);
     const elementIds = new Set<string>();
     for (const element of input.elements) {
       if (elementIds.has(element.id)) {
@@ -72,6 +74,29 @@ export class PollMutationValidationService {
     }
 
     this.validateImageReferences(input, elementIds);
+  }
+
+  /** Normalize all identifier-bearing fields before any uniqueness check. */
+  private normalizePollInputIdentifiers(input: SavePollDto): void {
+    for (const element of input.elements) {
+      element.id = normalizePollIdentifier(element.id, 'Element id');
+      for (const option of element.options) {
+        option.id = normalizePollIdentifier(option.id, 'Option id');
+      }
+
+      const grid = element.settings?.grid;
+      for (const option of [...(grid?.rows ?? []), ...(grid?.columns ?? [])]) {
+        option.id = normalizePollIdentifier(option.id, 'Grid option id');
+      }
+
+      const scheduling = element.settings?.scheduling;
+      if (scheduling) {
+        scheduling.timezone = scheduling.timezone.trim();
+        for (const availability of scheduling.availability) {
+          availability.id = normalizePollIdentifier(availability.id, 'Scheduling availability id');
+        }
+      }
+    }
   }
 
   validateImageReferences(input: SavePollDto, elementIds: Set<string>): void {
@@ -253,8 +278,15 @@ export class PollMutationValidationService {
   }
 
   validateSchedulingSettings(elementTitle: string, settings: PollSchedulingSettings): void {
-    if (!settings.timezone.trim()) {
+    const timezone = settings.timezone.trim();
+    if (!timezone) {
       throw new BadRequestException(`Element "${elementTitle}" scheduling timezone is required.`);
+    }
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format();
+    } catch {
+      throw new BadRequestException(`Element "${elementTitle}" scheduling timezone is invalid.`);
     }
 
     this.validateSchedulingInteger(
@@ -304,16 +336,14 @@ export class PollMutationValidationService {
     const windowIds = new Set<string>();
     const requiredMinutes =
       settings.bufferBeforeMinutes + settings.durationMinutes + settings.bufferAfterMinutes;
+    const intervals: { start: Date; end: Date }[] = [];
 
     for (const availability of settings.availability) {
-      if (!availability.id.trim()) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability id is required.`);
-      }
-
-      if (windowIds.has(availability.id)) {
+      const availabilityId = normalizePollIdentifier(availability.id, 'Scheduling availability id');
+      if (windowIds.has(availabilityId)) {
         throw new BadRequestException(`Element "${elementTitle}" scheduling availability has duplicated ids.`);
       }
-      windowIds.add(availability.id);
+      windowIds.add(availabilityId);
 
       parseDateAnswerValue(elementTitle, availability.date);
       const startMinutes = parseTimeAnswerValue(elementTitle, availability.startTime);
@@ -325,6 +355,20 @@ export class PollMutationValidationService {
       if (endMinutes - startMinutes < requiredMinutes) {
         throw new BadRequestException(`Element "${elementTitle}" scheduling availability is shorter than the meeting.`);
       }
+
+      const start = this.resolveLocalDateTime(elementTitle, timezone, availability.date, availability.startTime);
+      const end = this.resolveLocalDateTime(elementTitle, timezone, availability.date, availability.endTime);
+      if (end <= start) {
+        throw new BadRequestException(`Element "${elementTitle}" scheduling availability has an invalid time range.`);
+      }
+      intervals.push({ start, end });
+    }
+
+    intervals.sort((left, right) => left.start.getTime() - right.start.getTime());
+    for (let index = 1; index < intervals.length; index += 1) {
+      if (intervals[index].start < intervals[index - 1].end) {
+        throw new BadRequestException(`Element "${elementTitle}" scheduling availability windows overlap.`);
+      }
     }
   }
 
@@ -332,5 +376,52 @@ export class PollMutationValidationService {
     if (!Number.isInteger(value) || value < minimum || value > maximum) {
       throw new BadRequestException(message);
     }
+  }
+
+  private resolveLocalDateTime(elementTitle: string, timezone: string, date: string, time: string): Date {
+    const [year, month, day] = date.split('-').map(Number);
+    const [hours, minutes] = time.split(':').map(Number);
+    const target = Date.UTC(year, month - 1, day, hours, minutes);
+    const matches: Date[] = [];
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+
+    // Current IANA zones use offsets in 15-minute increments. Searching the
+    // full legal offset range also detects DST gaps and folds deterministically.
+    for (let offsetMinutes = -14 * 60; offsetMinutes <= 14 * 60; offsetMinutes += 15) {
+      const candidate = new Date(target - offsetMinutes * 60_000);
+      const parts = Object.fromEntries(
+        formatter.formatToParts(candidate)
+          .filter(({ type }) => ['year', 'month', 'day', 'hour', 'minute'].includes(type))
+          .map(({ type, value }) => [type, Number(value)]),
+      ) as Record<string, number>;
+      if (
+        parts.year === year &&
+        parts.month === month &&
+        parts.day === day &&
+        parts.hour === hours &&
+        parts.minute === minutes
+      ) {
+        if (!matches.some((match) => match.getTime() === candidate.getTime())) {
+          matches.push(candidate);
+        }
+      }
+    }
+
+    if (matches.length === 0) {
+      throw new BadRequestException(`Element "${elementTitle}" scheduling time does not exist in ${timezone}.`);
+    }
+    if (matches.length > 1) {
+      throw new BadRequestException(`Element "${elementTitle}" scheduling time is ambiguous in ${timezone}.`);
+    }
+
+    return matches[0];
   }
 }

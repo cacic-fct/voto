@@ -100,11 +100,15 @@ describe('AuthSessionStoreService', () => {
     expect(redis.del).toHaveBeenCalledWith('test:session:session-1');
   });
 
-  it('acquires and releases refresh locks', async () => {
+  it('acquires, renews, and releases refresh locks', async () => {
     redis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
+    redis.eval.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
     await expect(service.acquireRefreshLock('session-1', 'owner')).resolves.toBe(true);
     await expect(service.acquireRefreshLock('session-1', 'owner')).resolves.toBe(false);
+
+    await expect(service.renewRefreshLock('session-1', 'owner')).resolves.toBe(true);
+    expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining('pexpire'), 1, 'test:session:session-1:refresh-lock', 'owner', '5');
 
     await service.releaseRefreshLock('session-1', 'owner');
     expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining('redis.call("get"'), 1, 'test:session:session-1:refresh-lock', 'owner');

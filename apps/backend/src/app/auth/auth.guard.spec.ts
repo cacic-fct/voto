@@ -110,6 +110,16 @@ describe('AuthGuard', () => {
     await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('ignores malformed percent-encoded session cookies', async () => {
+    const request = {
+      headers: { cookie: `${AUTH_SESSION_COOKIE_NAME}=%` },
+    } as AuthenticatedRequest;
+    reflector.getAllAndOverride.mockReturnValue(undefined);
+
+    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(auth.authenticateSession).not.toHaveBeenCalled();
+  });
+
   it('allows public requests when session authentication fails and rethrows for private requests', async () => {
     const request = {
       headers: {

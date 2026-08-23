@@ -14,8 +14,11 @@ export type KeycloakTokenVerifierOptions = {
   realmUrl: string;
   jwksCacheTtlMs: number;
   jwtClockSkewSeconds: number;
+  requestTimeoutMs?: number;
   logger: Logger;
 };
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 export class KeycloakTokenVerifier {
   private jwksCache?: { keys: Map<string, KeyObject>; expiresAt: number };
@@ -109,6 +112,7 @@ export class KeycloakTokenVerifier {
           accept: 'application/json',
         },
         validateStatus: () => true,
+        timeout: this.requestTimeoutMs,
       });
 
       if (response.status < 200 || response.status >= 300) {
@@ -177,6 +181,12 @@ export class KeycloakTokenVerifier {
     }
 
     return keys;
+  }
+
+  private get requestTimeoutMs(): number {
+    return this.options.requestTimeoutMs && this.options.requestTimeoutMs > 0
+      ? this.options.requestTimeoutMs
+      : DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   private decodeJwtJsonSegment(segment: string, description: string): Record<string, unknown> {

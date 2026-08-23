@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
 import { AdminPollsController } from './admin-polls.controller';
@@ -165,7 +166,7 @@ describe('AdminPollsController', () => {
     expect(pollImages.deletePollImage).toHaveBeenCalledWith('poll-1', 'image-1');
     expect(polls.createPoll).toHaveBeenCalledWith(savePoll, user);
     expect(polls.updatePoll).toHaveBeenCalledWith('poll-1', savePoll, user);
-    expect(polls.updatePollStatus).toHaveBeenCalledWith('poll-1', 'published', user);
+    expect(polls.updatePollStatus).toHaveBeenCalledWith('poll-1', 'published', user, undefined);
     expect(polls.deletePoll).toHaveBeenCalledWith('poll-1');
   });
 
@@ -175,15 +176,12 @@ describe('AdminPollsController', () => {
     ).toThrow(UnauthorizedException);
   });
 
-  it('fails image operations clearly when the image service is unavailable', async () => {
-    const controllerWithoutImages = new AdminPollsController(polls as unknown as PollsService);
-    const request = { user: createUser() } as AuthenticatedRequest;
-
-    expect(() =>
-      controllerWithoutImages.uploadPollImage('poll-1', { originalname: 'image.png' } as never, request),
-    ).toThrow('Poll image service is not available.');
-    await expect(controllerWithoutImages.deletePollImage('poll-1', 'image-1')).rejects.toThrow(
-      'Poll image service is not available.',
-    );
+  it('fails Nest compilation when the required image provider is missing', async () => {
+    await expect(
+      Test.createTestingModule({
+        controllers: [AdminPollsController],
+        providers: [{ provide: PollsService, useValue: polls }],
+      }).compile(),
+    ).rejects.toThrow();
   });
 });

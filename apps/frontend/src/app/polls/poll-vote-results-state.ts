@@ -14,6 +14,7 @@ export function applyResultsDelta(
     responseCount: delta.responseCount,
     voterCount: delta.voterCount ?? current.voterCount,
     voters: delta.voters ?? current.voters,
-    responses: delta.responses,
+    aggregates: delta.aggregates ?? current.aggregates,
+    responses: delta.refreshRequired ? current.responses : delta.responses,
   };
 }

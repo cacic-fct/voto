@@ -14,6 +14,11 @@ import {
 import { SavePollDto } from './dto/poll.dto';
 import { cacicElectionSlateOptionId } from './poll-cacic-election.mapper';
 import { cleanOptionalText, toDbElementType } from './poll-contract.mapper';
+import {
+  assertDeterministicIdentifierAvailable,
+  namespacedPollElementId,
+  namespacedPollOptionId,
+} from './poll-identifiers';
 
 type CacicElectionElementMetadata = {
   mode: DbPollMode;
@@ -139,22 +144,31 @@ export class PollCacicElectionElementsService {
     pollId: string,
     element: SavePollDto['elements'][number],
   ): Promise<void> {
+    const existingElement = await tx.pollElement.findFirst({
+      where: {
+        pollId,
+        OR: [{ id: element.id }, { id: namespacedPollElementId(pollId, element.id) }],
+      },
+      select: { id: true },
+    });
+    const storedElementId = existingElement?.id ?? namespacedPollElementId(pollId, element.id);
+    if (!existingElement) {
+      const conflictingElement = await tx.pollElement.findFirst({
+        where: { id: storedElementId },
+        select: { id: true, pollId: true },
+      });
+      assertDeterministicIdentifierAvailable(
+        conflictingElement ? { id: conflictingElement.id, parentId: conflictingElement.pollId } : null,
+        pollId,
+        'element identifier',
+      );
+    }
     const options = element.options.map((option, optionIndex) => ({
-      id: option.id,
+      id: namespacedPollOptionId(storedElementId, option.id),
       label: option.label.trim(),
       description: cleanOptionalText(option.description),
       position: optionIndex,
     }));
-    const existingElement = await tx.pollElement.findFirst({
-      where: {
-        id: element.id,
-        pollId,
-      },
-      select: {
-        id: true,
-      },
-    });
-
     if (existingElement) {
       await tx.pollElement.update({
         where: { id: existingElement.id },
@@ -181,7 +195,7 @@ export class PollCacicElectionElementsService {
 
     await tx.pollElement.create({
       data: {
-        id: element.id,
+        id: storedElementId,
         pollId,
         type: toDbElementType(element.type),
         title: element.title.trim(),

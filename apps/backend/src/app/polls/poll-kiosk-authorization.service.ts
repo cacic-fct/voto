@@ -24,6 +24,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthorizePollKioskVoteDto } from './dto/poll-kiosk.dto';
 import { SubmitPollResponseDto } from './dto/poll.dto';
 import { PollsService } from './polls.service';
+import {
+  isRecord as isClaimRecord,
+  parseStringList,
+  readBooleanValue,
+  readClaimValuesFromClaims,
+  readEnrollmentNumberFromClaims,
+} from './poll-user-claims';
 
 const TOTP_PERIOD_MS = 30_000;
 const TOTP_REPLAY_TTL_SECONDS = 2 * 60;
@@ -36,8 +43,19 @@ type StoredKioskAuthorization = {
   pollId: string;
   adminId: string;
   sessionId: string;
-  voter: StoredKioskVoter;
+  voter: StoredKioskVoterReference;
   expiresAt: string;
+};
+
+type StoredKioskVoterReference = {
+  sub: string;
+  /** Legacy fields are accepted while old short-lived Redis entries expire. */
+  email?: string;
+  name?: string;
+  enrollmentNumber?: string;
+  secondaryEmails?: string[];
+  unespRole?: string;
+  unespRoleVerified?: boolean;
 };
 
 type StoredKioskVoter = {
@@ -107,13 +125,6 @@ export class PollKioskAuthorizationService {
       throw new UnauthorizedException('Invalid voter credentials.');
     }
 
-    await this.reserveTotpStep(
-      validated.profile.userId,
-      validated.serverTime,
-      validated.matchedStepOffset,
-    );
-    await this.redis.del(...attemptKeys);
-
     const voter = this.toStoredVoter(validated.profile);
     const principal = this.toPrincipal(voter);
     const poll = await this.polls.getPublishedPollForKiosk(pollId, principal);
@@ -131,34 +142,55 @@ export class PollKioskAuthorizationService {
     );
     const stored: StoredKioskAuthorization = {
       pollId,
-      adminId: this.requireAdminId(admin),
-      sessionId,
-      voter,
+      adminId: this.digest(this.requireAdminId(admin)),
+      sessionId: this.digest(sessionId),
+      voter: { sub: voter.sub },
       expiresAt: expiresAt.toISOString(),
     };
-    const storedResult = await this.redis.set(
-      this.authorizationKey(token),
-      JSON.stringify(stored),
-      'EX',
-      this.authorizationTtlSeconds,
-      'NX',
-    );
-    if (storedResult !== 'OK') {
-      throw new ServiceUnavailableException(
-        'Could not create kiosk voting authorization.',
+
+    try {
+      const storedResult = await this.redis.set(
+        this.authorizationKey(token),
+        JSON.stringify(stored),
+        'EX',
+        this.authorizationTtlSeconds,
+        'NX',
       );
+      if (storedResult !== 'OK') {
+        throw new ServiceUnavailableException(
+          'Could not create kiosk voting authorization.',
+        );
+      }
+
+      // Burn the Account Manager TOTP only after all poll, response, local
+      // sync, and Redis authorization checks have succeeded. If replay is
+      // detected, the newly-created authorization is removed again.
+      await this.reserveTotpStep(
+        validated.profile.userId,
+        validated.serverTime,
+        validated.matchedStepOffset,
+      );
+    } catch (error) {
+      await this.redis.del(this.authorizationKey(token)).catch(() => undefined);
+      throw error;
     }
+    await this.redis.del(...attemptKeys).catch((error: unknown) => {
+      this.logger.warn({
+        event: 'poll-kiosk-attempt-cleanup-failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     this.logger.log({
       event: 'poll-kiosk-authorized',
       pollId,
-      adminId: stored.adminId,
-      voterId: voter.sub,
+      adminRef: this.auditReference(stored.adminId),
+      voterRef: this.auditReference(voter.sub),
     });
 
     return {
       token,
-      context: this.toContext(poll, stored),
+      context: this.toContext(poll, { ...stored, voter }),
     };
   }
 
@@ -174,12 +206,13 @@ export class PollKioskAuthorizationService {
       admin,
       sessionId,
     );
+    const voter = await this.loadVoter(authorization.voter);
     const poll = await this.polls.getPublishedPollForKiosk(
       pollId,
-      this.toPrincipal(authorization.voter),
+      this.toPrincipal(voter),
     );
     this.assertKioskVotingOpen(poll);
-    return this.toContext(poll, authorization);
+    return this.toContext(poll, { ...authorization, voter });
   }
 
   async getResponseState(
@@ -194,9 +227,10 @@ export class PollKioskAuthorizationService {
       admin,
       sessionId,
     );
+    const voter = await this.loadVoter(authorization.voter);
     return this.polls.getUserResponseState(
       pollId,
-      this.toPrincipal(authorization.voter),
+      this.toPrincipal(voter),
     );
   }
 
@@ -207,24 +241,52 @@ export class PollKioskAuthorizationService {
     admin: AuthenticatedPrincipal,
     sessionId: string,
   ): Promise<PollResponse> {
-    const authorization = await this.consumeAuthorization(
+    const reservation = await this.reserveAuthorization(
       pollId,
       token,
       admin,
       sessionId,
     );
-    const response = await this.polls.submitResponse(
-      pollId,
-      input,
-      this.toPrincipal(authorization.voter),
-    );
-    this.logger.log({
-      event: 'poll-kiosk-vote-submitted',
-      pollId,
-      adminId: authorization.adminId,
-      voterId: authorization.voter.sub,
-    });
-    return response;
+    let submitted = false;
+    try {
+      const voter = await this.loadVoter(reservation.authorization.voter);
+      const response = await this.polls.submitResponse(
+        pollId,
+        input,
+        this.toPrincipal(voter),
+      );
+      submitted = true;
+      try {
+        await this.finalizeAuthorization(reservation.reservationKey);
+      } catch (error: unknown) {
+        // The database commit is authoritative. Do not restore a token after
+        // a successful vote, even if Redis finalization is temporarily down;
+        // the reservation TTL is the safe one-time-use fallback.
+        this.logger.warn({
+          event: 'poll-kiosk-authorization-finalize-failed',
+          pollId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      this.logger.log({
+        event: 'poll-kiosk-vote-submitted',
+        pollId,
+        adminRef: this.auditReference(reservation.authorization.adminId),
+        voterRef: this.auditReference(voter.sub),
+      });
+      return response;
+    } catch (error) {
+      if (!submitted) {
+        await this.releaseAuthorization(reservation).catch((releaseError: unknown) => {
+        this.logger.warn({
+          event: 'poll-kiosk-authorization-release-failed',
+          pollId,
+          error: releaseError instanceof Error ? releaseError.message : String(releaseError),
+        });
+        });
+      }
+      throw error;
+    }
   }
 
   async readPrincipal(
@@ -239,7 +301,7 @@ export class PollKioskAuthorizationService {
       admin,
       sessionId,
     );
-    return this.toPrincipal(authorization.voter);
+    return this.toPrincipal(await this.loadVoter(authorization.voter));
   }
 
   async discard(token: string | undefined): Promise<void> {
@@ -267,33 +329,133 @@ export class PollKioskAuthorizationService {
     );
   }
 
-  private async consumeAuthorization(
+  private async reserveAuthorization(
     pollId: string,
     token: string | undefined,
     admin: AuthenticatedPrincipal,
     sessionId: string,
-  ): Promise<StoredKioskAuthorization> {
+  ): Promise<{ authorization: StoredKioskAuthorization; reservationKey: string; tokenKey: string }> {
     if (!token) {
       throw new UnauthorizedException('Missing kiosk voting authorization.');
     }
 
+    const tokenKey = this.authorizationKey(token);
+    const reservationKey = this.authorizationReservationKey(token);
     const raw = await this.redis.eval(
       `
 local value = redis.call("get", KEYS[1])
-if value then
+if value and redis.call("set", KEYS[2], value, "EX", ARGV[1], "NX") == "OK" then
   redis.call("del", KEYS[1])
+  return value
 end
-return value
+return nil
 `,
-      1,
-      this.authorizationKey(token),
+      2,
+      tokenKey,
+      reservationKey,
+      this.authorizationTtlSeconds,
     );
-    return this.parseAndAssertAuthorization(
+    const authorization = this.parseAndAssertAuthorization(
       typeof raw === 'string' ? raw : null,
       pollId,
       admin,
       sessionId,
     );
+    return { authorization, reservationKey, tokenKey };
+  }
+
+  private async finalizeAuthorization(reservationKey: string): Promise<void> {
+    await this.redis.del(reservationKey);
+  }
+
+  private async releaseAuthorization(reservation: {
+    authorization: StoredKioskAuthorization;
+    reservationKey: string;
+    tokenKey: string;
+  }): Promise<void> {
+    const remainingTtlSeconds = Math.max(
+      1,
+      Math.ceil((new Date(reservation.authorization.expiresAt).getTime() - Date.now()) / 1000),
+    );
+    await this.redis.eval(
+      `
+local value = redis.call("get", KEYS[1])
+if value then
+  redis.call("set", KEYS[2], value, "EX", ARGV[1], "NX")
+  redis.call("del", KEYS[1])
+end
+return 1
+`,
+      2,
+      reservation.reservationKey,
+      reservation.tokenKey,
+      remainingTtlSeconds,
+    );
+  }
+
+  private async loadVoter(reference: StoredKioskVoterReference | StoredKioskVoter): Promise<StoredKioskVoter> {
+    if ('email' in reference && 'name' in reference && reference.email && reference.name) {
+      return {
+        sub: reference.sub,
+        email: reference.email,
+        name: reference.name,
+        ...(reference.enrollmentNumber ? { enrollmentNumber: reference.enrollmentNumber } : {}),
+        ...(reference.secondaryEmails ? { secondaryEmails: reference.secondaryEmails } : {}),
+        ...(reference.unespRole ? { unespRole: reference.unespRole } : {}),
+        ...(reference.unespRoleVerified === undefined ? {} : { unespRoleVerified: reference.unespRoleVerified }),
+      };
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: reference.sub },
+      select: {
+        id: true,
+        preferredUsername: true,
+        email: true,
+        name: true,
+        claims: true,
+      },
+    });
+    if (!user?.id || !user.email || !user.name) {
+      throw new UnauthorizedException('Kiosk voter identity is no longer available.');
+    }
+
+    const claims = isClaimRecord(user.claims) ? user.claims : {};
+    const secondaryEmails = readClaimValuesFromClaims(claims, ['secondary_emails', 'secondaryEmails'])
+      .flatMap((value) => typeof value === 'string' ? parseStringList(value) : [])
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+    const roles = readClaimValuesFromClaims(claims, ['unesp_role', 'unespRole'])
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    return {
+      sub: user.id,
+      email: user.email.trim().toLowerCase(),
+      name: user.name.trim(),
+      ...(readEnrollmentNumberFromClaims(claims)
+        ? { enrollmentNumber: readEnrollmentNumberFromClaims(claims) ?? undefined }
+        : {}),
+      ...(secondaryEmails.length
+        ? { secondaryEmails: [...new Set(secondaryEmails)] }
+        : {}),
+      ...(roles.length
+        ? { unespRole: [...new Set(roles)].join(', ') }
+        : {}),
+      ...(readClaimValuesFromClaims(claims, [
+        'unespRoleVerified',
+        'isUnespRoleVerified',
+        'unesp_role_verified',
+        'is_unesp_role_verified',
+      ]).length > 0
+        ? { unespRoleVerified: readClaimValuesFromClaims(claims, [
+          'unespRoleVerified',
+          'isUnespRoleVerified',
+          'unesp_role_verified',
+          'is_unesp_role_verified',
+        ]).some((value) => readBooleanValue(value)) }
+        : {}),
+    };
   }
 
   private parseAndAssertAuthorization(
@@ -306,8 +468,8 @@ return value
     if (
       !authorization ||
       authorization.pollId !== pollId ||
-      authorization.adminId !== this.requireAdminId(admin) ||
-      authorization.sessionId !== sessionId ||
+      !this.matchesBinding(authorization.adminId, this.requireAdminId(admin)) ||
+      !this.matchesBinding(authorization.sessionId, sessionId) ||
       new Date(authorization.expiresAt).getTime() <= Date.now()
     ) {
       throw new UnauthorizedException(
@@ -334,7 +496,7 @@ return value
       const sub = this.stringValue(voter['sub']);
       const email = this.stringValue(voter['email']);
       const name = this.stringValue(voter['name']);
-      if (!pollId || !adminId || !sessionId || !expiresAt || !sub || !email || !name) {
+      if (!pollId || !adminId || !sessionId || !expiresAt || !sub) {
         return null;
       }
 
@@ -345,8 +507,8 @@ return value
         expiresAt,
         voter: {
           sub,
-          email,
-          name,
+          ...(email ? { email } : {}),
+          ...(name ? { name } : {}),
           ...(this.stringValue(voter['enrollmentNumber'])
             ? { enrollmentNumber: this.stringValue(voter['enrollmentNumber']) }
             : {}),
@@ -543,7 +705,7 @@ return value
 
   private toContext(
     poll: Poll,
-    authorization: StoredKioskAuthorization,
+    authorization: Omit<StoredKioskAuthorization, 'voter'> & { voter: StoredKioskVoter },
   ): PollKioskVotingContext {
     return {
       poll,
@@ -566,6 +728,20 @@ return value
 
   private authorizationKey(token: string): string {
     return `${this.authorizationKeyPrefix}${this.digest(token)}`;
+  }
+
+  private authorizationReservationKey(token: string): string {
+    return `${this.authorizationKey(token)}:reserved`;
+  }
+
+  private auditReference(value: string): string {
+    return this.digest(value).slice(0, 16);
+  }
+
+  private matchesBinding(storedValue: string, rawValue: string): boolean {
+    // Accept raw values only for legacy entries while their short TTL drains;
+    // all newly-issued authorizations store keyed digests in Redis.
+    return storedValue === rawValue || storedValue === this.digest(rawValue);
   }
 
   private digest(value: string): string {

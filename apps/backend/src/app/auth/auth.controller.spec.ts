@@ -409,6 +409,18 @@ describe('AuthController', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('treats malformed percent-encoded session cookies as unauthenticated', async () => {
+    await expect(
+      controller.refresh(
+        createRequest({
+          headers: { host: 'localhost:3000', cookie: `${AUTH_SESSION_COOKIE_NAME}=%` },
+        }),
+        createResponse() as unknown as Response,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(auth.refreshSession).not.toHaveBeenCalledWith('%');
+  });
+
   it('logs out current sessions and clears cookies', async () => {
     const response = createResponse();
     const request = createRequest({

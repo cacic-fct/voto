@@ -33,6 +33,7 @@ export function canVoteInPoll(
   poll: Poll | null,
   state: PollUserResponseState,
   loadingResponseState: boolean,
+  responseStateError: string | null = null,
 ): boolean {
   if (!poll) {
     return false;
@@ -42,6 +43,7 @@ export function canVoteInPoll(
     isPollVotingOpen(poll) &&
     !isSlateSubmissionPoll(poll) &&
     !loadingResponseState &&
+    !responseStateError &&
     (!state.hasSubmitted || state.canEdit || state.canSubmitAnother)
   );
 }

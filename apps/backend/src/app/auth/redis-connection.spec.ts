@@ -1,4 +1,5 @@
 import { getRedisConnectionOptions } from './redis-connection';
+import { closeRedisConnection } from './redis-lifecycle';
 
 describe('getRedisConnectionOptions', () => {
   const originalEnv = process.env;
@@ -68,5 +69,35 @@ describe('getRedisConnectionOptions', () => {
       tls: {},
     });
     expect(getRedisConnectionOptions().db).toBeUndefined();
+  });
+});
+
+describe('closeRedisConnection', () => {
+  it('gracefully quits the root connection', async () => {
+    const redis = {
+      status: 'ready',
+      quit: jest.fn().mockResolvedValue('OK'),
+      disconnect: jest.fn(),
+    };
+
+    await closeRedisConnection(redis, 10);
+
+    expect(redis.quit).toHaveBeenCalledTimes(1);
+    expect(redis.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects when graceful quit exceeds the deadline', async () => {
+    jest.useFakeTimers();
+    const redis = {
+      status: 'ready',
+      quit: jest.fn().mockReturnValue(new Promise<string>(() => undefined)),
+      disconnect: jest.fn(),
+    };
+    const closing = closeRedisConnection(redis, 10);
+    await jest.advanceTimersByTimeAsync(10);
+    await closing;
+
+    expect(redis.disconnect).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });

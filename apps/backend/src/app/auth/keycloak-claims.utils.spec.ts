@@ -40,7 +40,7 @@ describe('keycloak claim utilities', () => {
       },
     );
 
-    expect(roles).toEqual(['super-admin', 'member', 'poll-admin', 'auditor']);
+    expect(roles).toEqual(['super-admin', 'member', 'voting:poll-admin', 'voting:member', 'auditor']);
   });
 
   it('skips invalid client-role and realm-role structures', () => {

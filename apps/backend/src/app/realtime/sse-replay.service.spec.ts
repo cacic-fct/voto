@@ -1,5 +1,5 @@
 import { MessageEvent } from '@nestjs/common';
-import { firstValueFrom, NEVER, take } from 'rxjs';
+import { firstValueFrom, NEVER, Subject, take } from 'rxjs';
 import { SseReplayService } from './sse-replay.service';
 
 class ReplayRedisStub {
@@ -38,5 +38,31 @@ describe('SseReplayService', () => {
 
     expect(duplicate.id).toBe(first.id);
     await expect(firstValueFrom(service.replay(scope, 'foreign-cursor', NEVER).pipe(take(1)))).resolves.toEqual(first);
+  });
+
+  it('keeps live delivery alive when replay storage fails and bounds pending events', async () => {
+    const redis = {
+      lrange: jest.fn().mockRejectedValue(new Error('redis unavailable')),
+    };
+    const service = new SseReplayService(redis as never);
+    const source = new Subject<MessageEvent>();
+    const received: MessageEvent[] = [];
+    const errors: unknown[] = [];
+    const subscription = service.replay('public:scope', undefined, source).subscribe({
+      next: (event) => received.push(event),
+      error: (error) => errors.push(error),
+    });
+
+    for (let index = 0; index < 400; index += 1) {
+      source.next({ id: `event-${index}`, data: '😀'.repeat(20_000) });
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(errors).toEqual([]);
+    expect(received.length).toBeLessThanOrEqual(256);
+    expect(received.at(-1)?.data).toBe('😀'.repeat(20_000));
+    source.next({ id: 'live-after-replay-failure', data: { ok: true } });
+    expect(received.at(-1)).toEqual({ id: 'live-after-replay-failure', data: { ok: true } });
+    subscription.unsubscribe();
   });
 });

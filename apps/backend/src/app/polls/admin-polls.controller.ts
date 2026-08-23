@@ -77,7 +77,7 @@ class PollImageUploadBodyDto {
 export class AdminPollsController {
   constructor(
     private readonly polls: PollsService,
-    private readonly pollImages?: PollImagesService,
+    private readonly pollImages: PollImagesService,
   ) {}
 
   @Get()
@@ -306,7 +306,7 @@ export class AdminPollsController {
     @UploadedFile() file: UploadedPollImageFile | undefined,
     @Req() request: AuthenticatedRequest,
   ): Promise<PollImage> {
-    return this.getPollImages().uploadPollImage(id, file, this.getUser(request));
+    return this.pollImages.uploadPollImage(id, file, this.getUser(request));
   }
 
   @Delete(':id/images/:imageId')
@@ -314,7 +314,7 @@ export class AdminPollsController {
   @ApiOperation({ summary: 'Delete an image uploaded for a poll' })
   @ApiNoContentResponse({ description: 'Image deleted when present.' })
   async deletePollImage(@Param('id') id: string, @Param('imageId') imageId: string): Promise<void> {
-    await this.getPollImages().deletePollImage(id, imageId);
+    await this.pollImages.deletePollImage(id, imageId);
   }
 
   @Post()
@@ -338,7 +338,7 @@ export class AdminPollsController {
   @ApiOperation({ summary: 'Publish, close, or reopen a poll' })
   @ApiOkResponse({ description: 'Poll with updated status.' })
   updateStatus(@Param('id') id: string, @Req() request: AuthenticatedRequest, @Body() body: PollStatusDto): Promise<Poll> {
-    return this.polls.updatePollStatus(id, body.status, this.getUser(request));
+    return this.polls.updatePollStatus(id, body.status, this.getUser(request), body.expectedUpdatedAt);
   }
 
   @Delete(':id')
@@ -357,11 +357,4 @@ export class AdminPollsController {
     return request.user;
   }
 
-  private getPollImages(): PollImagesService {
-    if (!this.pollImages) {
-      throw new Error('Poll image service is not available.');
-    }
-
-    return this.pollImages;
-  }
 }

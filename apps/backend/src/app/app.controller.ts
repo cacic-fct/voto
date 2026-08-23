@@ -11,4 +11,16 @@ export class AppController {
   getData() {
     return this.appService.getData();
   }
+
+  @Get('live')
+  @Public()
+  getLiveness() {
+    return this.appService.getLiveness();
+  }
+
+  @Get('ready')
+  @Public()
+  getReadiness() {
+    return this.appService.getReadiness();
+  }
 }

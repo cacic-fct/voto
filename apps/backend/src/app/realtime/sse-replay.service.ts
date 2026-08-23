@@ -5,6 +5,9 @@ import { Observable } from 'rxjs';
 
 const REPLAY_TTL_SECONDS = 15 * 60;
 const MAX_REPLAY_EVENTS = 512;
+const MAX_PENDING_REPLAY_EVENTS = 256;
+const MAX_PENDING_REPLAY_BYTES = 2 * 1024 * 1024;
+const MAX_REPLAY_READ_MS = 10_000;
 const GENERATION_DURATION_MS = 6 * 60 * 60 * 1000;
 const DATA_ENCODING = 'json-v1';
 
@@ -54,7 +57,11 @@ export class SseReplayService {
       let replayFinished = false;
       let lastDeliveredId = lastEventId;
       const buffered: StoredSseEvent[] = [];
+      let bufferedBytes = 0;
       const deliver = (event: StoredSseEvent) => {
+        if (subscriber.closed) {
+          return;
+        }
         if (event.id !== lastDeliveredId) {
           lastDeliveredId = event.id;
           subscriber.next(this.toMessageEvent(event));
@@ -64,8 +71,22 @@ export class SseReplayService {
         next: (event) => {
           if (event.id) {
             const stored = this.fromMessageEvent(event, event.id);
-            if (replayFinished) deliver(stored);
-            else buffered.push(stored);
+            if (replayFinished) {
+              deliver(stored);
+            } else {
+              buffered.push(stored);
+              bufferedBytes += this.eventSize(stored);
+              while (
+                buffered.length > MAX_PENDING_REPLAY_EVENTS ||
+                bufferedBytes > MAX_PENDING_REPLAY_BYTES
+              ) {
+                const removed = buffered.shift();
+                if (!removed) {
+                  break;
+                }
+                bufferedBytes -= this.eventSize(removed);
+              }
+            }
           } else {
             subscriber.next(event);
           }
@@ -74,14 +95,39 @@ export class SseReplayService {
         complete: () => subscriber.complete(),
       });
 
-      void this.readReplay(scope, lastEventId).then((events) => {
+      void this.readReplayWithTimeout(scope, lastEventId).then((events) => {
         events.forEach(deliver);
         replayFinished = true;
         buffered.forEach(deliver);
-      }).catch((error: unknown) => subscriber.error(error));
+      }).catch(() => {
+        // Replay is an optimization. Redis may be slow or unavailable while
+        // the live subscription is still healthy; keep the connection alive
+        // and deliver the bounded live buffer instead of terminating it.
+        replayFinished = true;
+        buffered.forEach(deliver);
+      });
 
       return () => sourceSubscription.unsubscribe();
     });
+  }
+
+  private async readReplayWithTimeout(
+    scope: string,
+    lastEventId: string | undefined,
+  ): Promise<StoredSseEvent[]> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.readReplay(scope, lastEventId),
+        new Promise<StoredSseEvent[]>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('SSE replay read timed out.')), MAX_REPLAY_READ_MS);
+        }),
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
   }
 
   async record(scope: string, event: MessageEvent): Promise<MessageEvent> {
@@ -120,7 +166,7 @@ export class SseReplayService {
   }
 
   private fromMessageEvent(event: MessageEvent, id: string): StoredSseEvent {
-    return { id, data: event.data, fingerprint: '', retry: event.retry, type: event.type };
+    return { id, data: event.data ?? '', fingerprint: '', retry: event.retry, type: event.type };
   }
 
   private toMessageEvent(event: StoredSseEvent): MessageEvent {
@@ -129,6 +175,14 @@ export class SseReplayService {
       try { data = JSON.parse(data) as object; } catch { /* Preserve malformed legacy data. */ }
     }
     return { id: event.id, data, retry: event.retry, type: event.type };
+  }
+
+  private eventSize(event: StoredSseEvent): number {
+    try {
+      return Buffer.byteLength(JSON.stringify(event), 'utf8');
+    } catch {
+      return 0;
+    }
   }
 
   private parse(value: string): StoredSseEvent | null {

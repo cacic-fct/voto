@@ -1,4 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -28,6 +29,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { votingStylePublicResultsDescription } from './poll-metadata';
 import { PollApiService } from './poll-api.service';
+import { buildPublicQuestionSummaries } from './poll-public-results';
 
 type PublicPollAccess =
   | {
@@ -45,6 +47,7 @@ type ResultBucket = {
 };
 
 type QuestionResultSummary = {
+  key: string;
   element: PollElement;
   answeredCount: number;
   buckets: ResultBucket[];
@@ -84,6 +87,7 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   protected readonly results = signal<PollResults | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
+  protected readonly resultsConnectionState = signal<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting');
   protected readonly votingStylePublicResultsDescription =
     votingStylePublicResultsDescription;
   protected readonly backLink = computed(() => {
@@ -104,15 +108,11 @@ export class PublicPollResultsPageComponent implements OnDestroy {
         return [];
       }
 
-      return poll.elements
-        .filter((element) => this.isAnswerElement(element))
-        .map((element) =>
-          this.buildQuestionSummary(
-            element,
-            results.responses,
-            poll.votingStyle,
-          ),
-        );
+      return buildPublicQuestionSummaries(
+        poll.elements,
+        results.responses,
+        results.aggregates ?? [],
+      );
     },
   );
   protected readonly canShowParticipants = computed(() => {
@@ -126,13 +126,25 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     () => this.poll()?.votingStyle === 'public' && Boolean(this.results()?.responses.length),
   );
   private resultsEvents?: EventSource;
+  private refreshTimer?: ReturnType<typeof setTimeout>;
+  private reconnectAttempts = 0;
 
   constructor() {
     void this.load();
   }
 
   ngOnDestroy(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
     this.closeResultsEvents();
+  }
+
+  protected retryLoad(): void {
+    this.closeResultsEvents();
+    this.error.set(null);
+    this.loading.set(true);
+    void this.load();
   }
 
   protected resultBucketPercent(
@@ -198,13 +210,11 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       const results = await firstValueFrom(this.getResults(poll.id));
       this.results.set(results);
 
-      if (poll.status === 'published' && poll.resultsLive) {
+      if (poll.status === 'published' && poll.resultsLive && poll.votingStyle === 'public') {
         this.openResultsEvents(poll.id);
       }
-    } catch {
-      this.error.set(
-        'Não foi possível carregar os resultados públicos desta votação.',
-      );
+    } catch (error: unknown) {
+      this.error.set(this.resultLoadErrorMessage(error));
     } finally {
       this.loading.set(false);
     }
@@ -241,17 +251,37 @@ export class PublicPollResultsPageComponent implements OnDestroy {
 
     const source =
       this.pollAccess?.kind === 'directLink'
-        ? this.api.openDirectLinkPollResultsEvents(this.pollAccess.value, 0)
-        : this.api.openPublicPollResultsEvents(pollId, 0);
+        ? this.api.openDirectLinkPollResultsEvents(this.pollAccess.value)
+        : this.api.openPublicPollResultsEvents(pollId);
     source.onmessage = (event) => {
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
         if (delta.final) {
           void this.reconcileFinalResults(pollId);
+        } else if (delta.refreshRequired) {
+          this.scheduleResultsRefresh(pollId);
         }
       }
     };
+    source.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.resultsConnectionState.set('connected');
+    };
+    source.onerror = () => {
+      if (typeof EventSource !== 'undefined' && source.readyState === EventSource.CLOSED) {
+        this.resultsConnectionState.set('closed');
+        return;
+      }
+      this.reconnectAttempts += 1;
+      if (this.reconnectAttempts >= 5) {
+        source.close();
+        this.resultsConnectionState.set('closed');
+        return;
+      }
+      this.resultsConnectionState.set('reconnecting');
+    };
+    this.resultsConnectionState.set('connecting');
     this.resultsEvents = source;
   }
 
@@ -272,7 +302,8 @@ export class PublicPollResultsPageComponent implements OnDestroy {
         responseCount: delta.responseCount,
         voterCount: delta.voterCount ?? current.voterCount,
         voters: delta.voters ?? current.voters,
-        responses: delta.responses,
+        aggregates: delta.aggregates ?? current.aggregates,
+        responses: delta.refreshRequired ? current.responses : delta.responses,
       };
     });
   }
@@ -282,6 +313,37 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       this.results.set(await firstValueFrom(this.getResults(pollId)));
     } finally {
       this.closeResultsEvents();
+    }
+  }
+
+  private scheduleResultsRefresh(pollId: string): void {
+    if (this.refreshTimer) {
+      return;
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      void firstValueFrom(this.getResults(this.poll()?.id ?? pollId))
+        .then((results) => this.results.set(results))
+        .catch(() => this.error.set('A atualização dos resultados está temporariamente indisponível.'));
+    }, 250);
+  }
+
+  private resultLoadErrorMessage(error: unknown): string {
+    const status = error instanceof HttpErrorResponse ? error.status : 0;
+    switch (status) {
+      case 401:
+        return 'Sua sessão expirou. Entre novamente para consultar os resultados.';
+      case 403:
+        return 'Os resultados não estão disponíveis para este acesso.';
+      case 404:
+        return 'Votação não encontrada.';
+      case 409:
+        return 'A votação mudou. Atualize a página e tente novamente.';
+      case 503:
+        return 'O serviço de resultados está temporariamente indisponível. Tente novamente em instantes.';
+      default:
+        return 'Não foi possível carregar os resultados públicos desta votação. Verifique sua conexão e tente novamente.';
     }
   }
 
@@ -295,6 +357,15 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       .filter((value) => !this.isEmptyAnswerValue(value));
 
     return {
+      key: JSON.stringify({
+        id: element.id,
+        type: element.type,
+        title: element.title,
+        description: element.description ?? null,
+        required: element.required,
+        options: element.options,
+        settings: element.settings ?? null,
+      }),
       element,
       answeredCount: values.length,
       buckets: this.buildResultBuckets(element, values),

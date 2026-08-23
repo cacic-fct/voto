@@ -1,4 +1,6 @@
 import { of } from 'rxjs';
+import { Test } from '@nestjs/testing';
+import { Readable } from 'node:stream';
 import { AuthenticatedRequest } from '../auth/auth.types';
 import { PollImagesService } from './poll-images.service';
 import { PublicPollsController } from './public-polls.controller';
@@ -54,7 +56,7 @@ describe('PublicPollsController', () => {
     };
     pollImages = {
       getPollImage: jest.fn().mockResolvedValue({
-        stream: { pipe: jest.fn() } as never,
+        stream: Readable.from(['image']),
         contentType: 'image/avif',
         contentLength: 5,
       }),
@@ -137,7 +139,7 @@ describe('PublicPollsController', () => {
 
   it('streams images without a content-length header when object size is unknown', async () => {
     pollImages.getPollImage.mockResolvedValueOnce({
-      stream: { pipe: jest.fn() } as never,
+      stream: Readable.from(['image']),
       contentType: 'image/avif',
       contentLength: undefined,
     });
@@ -169,18 +171,12 @@ describe('PublicPollsController', () => {
     expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'image/avif');
   });
 
-  it('fails image reads clearly when the image service is unavailable', async () => {
-    const controllerWithoutImages = new PublicPollsController(polls as unknown as PollsService);
-    const request = { user: { sub: 'user-1' } } as AuthenticatedRequest;
-    const response = {
-      setHeader: jest.fn(),
-    };
-
-    await expect(controllerWithoutImages.getPollImage('poll-1', 'image-1', request, response as never)).rejects.toThrow(
-      'Poll image service is not available.',
-    );
+  it('fails Nest compilation when the required image provider is missing', async () => {
     await expect(
-      controllerWithoutImages.getDirectLinkPollImage('token-1', 'image-1', request, response as never),
-    ).rejects.toThrow('Poll image service is not available.');
+      Test.createTestingModule({
+        controllers: [PublicPollsController],
+        providers: [{ provide: PollsService, useValue: polls }],
+      }).compile(),
+    ).rejects.toThrow();
   });
 });

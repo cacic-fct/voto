@@ -4,7 +4,6 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  Optional,
 } from '@nestjs/common';
 import {
   AccountManagerPerson,
@@ -12,7 +11,7 @@ import {
   PollEligibilityEnrollmentList,
   PollEligibilityMutationMode,
 } from '@org/voting-contracts';
-import { PollVoterEligibilitySource as DbPollVoterEligibilitySource } from '@prisma/client';
+import { PollStatus as DbPollStatus, Prisma, PollVoterEligibilitySource as DbPollVoterEligibilitySource } from '@prisma/client';
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
 import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
@@ -41,10 +40,8 @@ export class PollEligibilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventManager: EventManagerIntegrationService,
-    @Optional()
-    private readonly featureFlags?: FeatureFlagService,
-    @Optional()
-    private readonly accountManager?: AccountManagerIntegrationService,
+    private readonly featureFlags: FeatureFlagService,
+    private readonly accountManager: AccountManagerIntegrationService,
   ) {}
 
   async listEligibilityEnrollments(
@@ -72,7 +69,7 @@ export class PollEligibilityService {
     input: AddPollEligibilityEnrollmentsDto,
     user: AuthenticatedPrincipal,
   ): Promise<PollEligibilityEnrollmentImportResult> {
-    await this.assertPollExists(pollId);
+    await this.assertEligibilityMutable(pollId);
     const parsed = this.normalizeEnrollmentNumbers(input.enrollmentNumbers);
     return this.replaceOrAppendEligibilityEnrollments(pollId, parsed, 'append', user.sub);
   }
@@ -82,36 +79,48 @@ export class PollEligibilityService {
     input: ImportPollEligibilityEnrollmentsDto,
     user: AuthenticatedPrincipal,
   ): Promise<PollEligibilityEnrollmentImportResult> {
-    await this.assertPollExists(pollId);
+    await this.assertEligibilityMutable(pollId);
     const parsed = this.parseEligibilityImport(input);
     return this.replaceOrAppendEligibilityEnrollments(pollId, parsed, input.mode ?? 'append', user.sub);
   }
 
   async deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string): Promise<void> {
-    await this.assertPollExists(pollId);
+    await this.assertEligibilityMutable(pollId);
     const normalizedEnrollmentNumber = normalizeEnrollmentNumber(enrollmentNumber);
     if (!normalizedEnrollmentNumber) {
       throw new BadRequestException('Enrollment number is required.');
     }
 
-    await this.prisma.pollEligibilityEnrollment.deleteMany({
-      where: {
-        pollId,
-        enrollmentNumber: normalizedEnrollmentNumber,
-      },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertEligibilityMutableWithClient(tx, pollId);
+      await tx.pollEligibilityEnrollment.deleteMany({
+        where: {
+          pollId,
+          enrollmentNumber: normalizedEnrollmentNumber,
+        },
+      });
+      await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async clearEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
-    await this.assertPollExists(pollId);
-    await this.prisma.pollEligibilityEnrollment.deleteMany({ where: { pollId } });
+    await this.assertEligibilityMutable(pollId);
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertEligibilityMutableWithClient(tx, pollId);
+      await tx.pollEligibilityEnrollment.deleteMany({ where: { pollId } });
+      await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return {
       entries: [],
       totalCount: 0,
     };
   }
 
-  async ensureVotingAllowed(poll: PollEligibilityRecord, user: AuthenticatedVoter): Promise<void> {
+  async ensureVotingAllowed(
+    poll: PollEligibilityRecord,
+    user: AuthenticatedVoter,
+    client: Pick<PrismaService, 'pollEligibilityEnrollment'> | Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
     switch (poll.voterEligibilitySource) {
       case DbPollVoterEligibilitySource.AUTHENTICATED_USERS:
         return;
@@ -133,7 +142,7 @@ export class PollEligibilityService {
         await this.ensureComputerScienceStudentVotingAllowed(poll, user);
         return;
       case DbPollVoterEligibilitySource.ENROLLMENT_LIST:
-        await this.ensureEnrollmentListVotingAllowed(poll, user);
+        await this.ensureEnrollmentListVotingAllowed(poll, user, client);
         return;
     }
 
@@ -191,6 +200,7 @@ export class PollEligibilityService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.assertEligibilityMutableWithClient(tx, pollId);
       const replaced =
         mode === 'replace'
           ? await tx.pollEligibilityEnrollment.deleteMany({
@@ -207,11 +217,16 @@ export class PollEligibilityService {
         skipDuplicates: true,
       });
 
+      await tx.poll.update({
+        where: { id: pollId },
+        data: { updatedAt: new Date() },
+      });
+
       return {
         createdCount: created.count,
         replacedCount: replaced.count,
       };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
       const entries = await this.listEligibilityEnrollments(pollId);
 
@@ -331,14 +346,31 @@ export class PollEligibilityService {
   }
 
   private detectCsvDelimiter(csvContent: string): string {
-    /* istanbul ignore next -- String#split always returns a first segment. */
     const firstLine = csvContent.split(/\r?\n/, 1)[0] ?? '';
     const candidates = [',', ';', '\t'];
     return candidates.reduce((bestDelimiter, delimiter) => {
-      const bestCount = firstLine.split(bestDelimiter).length;
-      const candidateCount = firstLine.split(delimiter).length;
+      const bestCount = this.countUnquotedDelimiter(firstLine, bestDelimiter);
+      const candidateCount = this.countUnquotedDelimiter(firstLine, delimiter);
       return candidateCount > bestCount ? delimiter : bestDelimiter;
     }, ',');
+  }
+
+  private countUnquotedDelimiter(line: string, delimiter: string): number {
+    let inQuotes = false;
+    let count = 0;
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      if (char === '"') {
+        if (inQuotes && line[index + 1] === '"') {
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   private async toEligibilityEnrollmentList(
@@ -367,7 +399,7 @@ export class PollEligibilityService {
     }
 
     try {
-      const people = await this.accountManager?.lookupPeopleByEnrollmentNumbers(enrollmentNumbers) ?? [];
+      const people = await this.accountManager.lookupPeopleByEnrollmentNumbers(enrollmentNumbers);
       for (const person of people) {
         const normalizedEnrollmentNumber = normalizeEnrollmentNumber(person.enrollmentNumber);
         if (!normalizedEnrollmentNumber) {
@@ -395,6 +427,35 @@ export class PollEligibilityService {
     }
   }
 
+  private async assertEligibilityMutable(pollId: string): Promise<void> {
+    const poll = await this.prisma.poll.findUnique({
+      where: { id: pollId },
+      select: { id: true, status: true },
+    });
+    if (!poll) {
+      throw new NotFoundException('Poll not found.');
+    }
+    if (poll.status !== DbPollStatus.DRAFT) {
+      throw new ForbiddenException('Eligibility lists are frozen after poll publication.');
+    }
+  }
+
+  private async assertEligibilityMutableWithClient(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+  ): Promise<void> {
+    const poll = await tx.poll.findUnique({
+      where: { id: pollId },
+      select: { id: true, status: true },
+    });
+    if (!poll) {
+      throw new NotFoundException('Poll not found.');
+    }
+    if (poll.status !== DbPollStatus.DRAFT) {
+      throw new ForbiddenException('Eligibility lists are frozen after poll publication.');
+    }
+  }
+
   private async ensureEventAttendanceVotingAllowed(poll: PollEligibilityRecord, user: AuthenticatedVoter): Promise<void> {
     if (!poll.linkedEventId) {
       throw new BadRequestException('Poll is not linked to an Event Manager event.');
@@ -406,13 +467,17 @@ export class PollEligibilityService {
     }
   }
 
-  private async ensureEnrollmentListVotingAllowed(poll: PollEligibilityRecord, user: AuthenticatedVoter): Promise<void> {
+  private async ensureEnrollmentListVotingAllowed(
+    poll: PollEligibilityRecord,
+    user: AuthenticatedVoter,
+    client: Pick<PrismaService, 'pollEligibilityEnrollment'> | Prisma.TransactionClient,
+  ): Promise<void> {
     const enrollmentNumber = readUserEnrollmentNumber(user);
     if (!enrollmentNumber) {
       throw new ForbiddenException('Voting is restricted to users with an enrollment number.');
     }
 
-    const eligibleEnrollment = await this.prisma.pollEligibilityEnrollment.findUnique({
+    const eligibleEnrollment = await client.pollEligibilityEnrollment.findUnique({
       where: {
         pollId_enrollmentNumber: {
           pollId: poll.id,
@@ -463,9 +528,6 @@ export class PollEligibilityService {
       return false;
     }
 
-    return !(
-      (await this.featureFlags?.isUndergraduateUnespRoleVerificationDisabled()) ??
-      false
-    );
+    return !(await this.featureFlags.isUndergraduateUnespRoleVerificationDisabled());
   }
 }

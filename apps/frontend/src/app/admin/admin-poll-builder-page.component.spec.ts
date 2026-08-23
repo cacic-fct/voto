@@ -217,7 +217,6 @@ describe('AdminPollBuilderPageComponent', () => {
       title: 'Nova votação',
       description: '',
       descriptionImages: undefined,
-      status: 'draft',
       mode: 'regular',
       cacicElectionPhase: undefined,
       votingStyle: 'secret',
@@ -589,7 +588,11 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(component.saving()).toBe(false);
 
     await component.setStatus('published');
-    expect(api.updatePollStatus).toHaveBeenCalledWith('poll-1', 'published');
+    expect(api.updatePollStatus).toHaveBeenCalledWith(
+      'poll-1',
+      'published',
+      poll.updatedAt,
+    );
 
     await component.deletePoll();
     expect(api.deletePoll).toHaveBeenCalledWith('poll-1');
@@ -642,7 +645,7 @@ describe('AdminPollBuilderPageComponent', () => {
     await component.loadResults();
     source.onmessage?.({ data: JSON.stringify(delta) } as MessageEvent<string>);
 
-    expect(api.openAdminPollResultsEvents).toHaveBeenCalledWith('poll-1', 0);
+    expect(api.openAdminPollResultsEvents).toHaveBeenCalledWith('poll-1');
     expect(component.results()?.responseCount).toBe(2);
     expect(component.results()?.responses.map((item) => item.id)).toEqual(['response-1', 'response-2']);
     expect(component.selectedIndividualResponseId()).toBe('response-2');

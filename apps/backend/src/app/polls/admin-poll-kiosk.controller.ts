@@ -25,6 +25,8 @@ import {
   PollUserResponseState,
 } from '@org/voting-contracts';
 import type { Request, Response } from 'express';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import type {
   AuthenticatedPrincipal,
   AuthenticatedRequest,
@@ -69,13 +71,18 @@ export class AdminPollKioskController {
   ): Promise<PollKioskVotingContext> {
     this.assertKioskRequestHeader(kioskHeader);
     const previousToken = this.readCookie(request, POLL_KIOSK_COOKIE_NAME);
-    await this.authorizations.discard(previousToken);
     const issued = await this.authorizations.authorize(
       pollId,
       body,
       this.getUser(request),
       this.getSessionId(request),
     );
+    try {
+      await this.authorizations.discard(previousToken);
+    } catch (error) {
+      await this.authorizations.discard(issued.token).catch(() => undefined);
+      throw error;
+    }
     const expiresAt = new Date(issued.context.expiresAt).getTime();
     response.cookie(POLL_KIOSK_COOKIE_NAME, issued.token, {
       httpOnly: true,
@@ -164,7 +171,7 @@ export class AdminPollKioskController {
     if (image.contentLength !== undefined) {
       response.setHeader('Content-Length', String(image.contentLength));
     }
-    image.stream.pipe(response);
+    await this.pipeImage(image.stream, response, request);
   }
 
   @Post('responses')
@@ -178,17 +185,15 @@ export class AdminPollKioskController {
     @Body() body: SubmitPollResponseDto,
   ): Promise<PollResponse> {
     this.assertKioskRequestHeader(kioskHeader);
-    try {
-      return await this.authorizations.submitResponse(
-        pollId,
-        this.readCookie(request, POLL_KIOSK_COOKIE_NAME),
-        body,
-        this.getUser(request),
-        this.getSessionId(request),
-      );
-    } finally {
-      this.clearAuthorizationCookie(response, request, pollId);
-    }
+    const submitted = await this.authorizations.submitResponse(
+      pollId,
+      this.readCookie(request, POLL_KIOSK_COOKIE_NAME),
+      body,
+      this.getUser(request),
+      this.getSessionId(request),
+    );
+    this.clearAuthorizationCookie(response, request, pollId);
+    return submitted;
   }
 
   @Delete('authorization')
@@ -253,15 +258,52 @@ export class AdminPollKioskController {
     for (const cookie of request.headers.cookie?.split(';') ?? []) {
       const [cookieName, ...rest] = cookie.trim().split('=');
       if (cookieName === name && rest.length > 0) {
-        return decodeURIComponent(rest.join('='));
+        try {
+          return decodeURIComponent(rest.join('='));
+        } catch {
+          return undefined;
+        }
       }
     }
     return undefined;
   }
 
+  private async pipeImage(
+    stream: Readable,
+    response: Response,
+    request: AuthenticatedRequest,
+  ): Promise<void> {
+    const abort = () => {
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    };
+    const canObserveAbort = typeof request.once === 'function' && typeof request.off === 'function';
+    if (canObserveAbort) {
+      request.once('aborted', abort);
+    }
+    try {
+      if (typeof response.on !== 'function') {
+        return;
+      }
+      await pipeline(stream, response);
+    } catch (error: unknown) {
+      if (!request.destroyed && !request.aborted) {
+        throw error;
+      }
+    } finally {
+      if (canObserveAbort) {
+        request.off('aborted', abort);
+      }
+    }
+  }
+
   private isSecureRequest(request: Request): boolean {
     if (request.secure) {
       return true;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      return false;
     }
     const forwardedProto = request.headers['x-forwarded-proto'];
     return Array.isArray(forwardedProto)

@@ -50,7 +50,7 @@ const admin = {
 
 describe('PollKioskAuthorizationService', () => {
   let redis: RedisMock;
-  let prisma: { user: { upsert: jest.Mock } };
+  let prisma: { user: { upsert: jest.Mock; findUnique: jest.Mock } };
   let accountManager: { validateTotpForPrimaryEmail: jest.Mock };
   let polls: {
     getPublishedPollForKiosk: jest.Mock;
@@ -66,7 +66,23 @@ describe('PollKioskAuthorizationService', () => {
       del: jest.fn().mockResolvedValue(1),
       eval: jest.fn().mockResolvedValue(1),
     };
-    prisma = { user: { upsert: jest.fn().mockResolvedValue({}) } };
+    prisma = {
+      user: {
+        upsert: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'voter-1',
+          preferredUsername: 'pessoa@example.com',
+          email: 'pessoa@example.com',
+          name: 'Pessoa Eleitora',
+          claims: {
+            enrollmentNumber: '261200001',
+            secondary_emails: ['pessoa@unesp.br'],
+            unespRole: 'aluno-graduacao',
+            unespRoleVerified: true,
+          },
+        }),
+      },
+    };
     accountManager = {
       validateTotpForPrimaryEmail: jest.fn().mockResolvedValue({
         profile: {
@@ -159,7 +175,7 @@ describe('PollKioskAuthorizationService', () => {
   });
 
   it('rejects a reused Account Manager TOTP time step', async () => {
-    redis.set.mockResolvedValueOnce(null);
+    redis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
 
     await expect(
       service.authorize(
@@ -169,7 +185,7 @@ describe('PollKioskAuthorizationService', () => {
         'session-1',
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(polls.getPublishedPollForKiosk).not.toHaveBeenCalled();
+    expect(polls.getPublishedPollForKiosk).toHaveBeenCalled();
   });
 
   it('atomically consumes the authorization and submits as the voter, never the admin', async () => {
@@ -179,7 +195,9 @@ describe('PollKioskAuthorizationService', () => {
       admin,
       'session-1',
     );
-    const storedValue = redis.set.mock.calls.at(-1)?.[1] as string;
+    const storedValue = redis.set.mock.calls.find((call) =>
+      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    )?.[1] as string;
     redis.eval.mockResolvedValueOnce(storedValue);
 
     await expect(
@@ -198,9 +216,78 @@ describe('PollKioskAuthorizationService', () => {
     );
     expect(redis.eval).toHaveBeenLastCalledWith(
       expect.stringContaining('redis.call("del"'),
-      1,
+      2,
       expect.stringContaining('cacic-voto:poll-kiosk:authorization:'),
+      expect.stringContaining(':reserved'),
+      expect.any(Number),
     );
+  });
+
+  it('round-trips a minimized Redis authorization by reloading the local voter claims', async () => {
+    const issued = await service.authorize(
+      poll.id,
+      { primaryEmail: 'pessoa@example.com', totpCode: '123456' },
+      admin,
+      'session-1',
+    );
+    const storedValue = redis.set.mock.calls.find((call) =>
+      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    )?.[1] as string;
+    expect(storedValue).not.toContain('pessoa@example.com');
+    expect(storedValue).toContain('"sub":"voter-1"');
+    redis.get.mockResolvedValue(storedValue);
+
+    await expect(service.getResponseState(poll.id, issued.token, admin, 'session-1')).resolves.toEqual({
+      hasSubmitted: false,
+      canEdit: false,
+      canSubmitAnother: false,
+    });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'voter-1' } }));
+  });
+
+  it('releases a reservation after a retryable database failure without burning the authorization', async () => {
+    const issued = await service.authorize(
+      poll.id,
+      { primaryEmail: 'pessoa@example.com', totpCode: '123456' },
+      admin,
+      'session-1',
+    );
+    const storedValue = redis.set.mock.calls.find((call) =>
+      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    )?.[1] as string;
+    redis.eval.mockResolvedValueOnce(storedValue).mockResolvedValueOnce(1);
+    polls.submitResponse.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(
+      service.submitResponse(poll.id, issued.token, { answers: [] }, admin, 'session-1'),
+    ).rejects.toThrow('database unavailable');
+    expect(redis.eval).toHaveBeenLastCalledWith(
+      expect.stringContaining('redis.call("set"'),
+      2,
+      expect.stringContaining(':reserved'),
+      expect.stringContaining('cacic-voto:poll-kiosk:authorization:'),
+      expect.any(Number),
+    );
+  });
+
+  it('does not restore a kiosk token after the vote commits when Redis finalization fails', async () => {
+    const issued = await service.authorize(
+      poll.id,
+      { primaryEmail: 'pessoa@example.com', totpCode: '123456' },
+      admin,
+      'session-1',
+    );
+    const storedValue = redis.set.mock.calls.find((call) =>
+      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    )?.[1] as string;
+    redis.eval.mockResolvedValueOnce(storedValue);
+    redis.del.mockRejectedValueOnce(new Error('redis finalization unavailable'));
+    const evalCallsBeforeSubmit = redis.eval.mock.calls.length;
+
+    await expect(
+      service.submitResponse(poll.id, issued.token, { answers: [] }, admin, 'session-1'),
+    ).resolves.toMatchObject({ id: 'response-1' });
+    expect(redis.eval).toHaveBeenCalledTimes(evalCallsBeforeSubmit + 1);
   });
 
   it('binds a stored authorization to its admin session and poll', async () => {

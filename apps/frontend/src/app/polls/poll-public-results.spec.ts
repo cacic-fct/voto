@@ -85,7 +85,7 @@ describe('poll public result helpers', () => {
   it('gates public result visibility by election phase, live flag, and poll status', () => {
     expect(shouldShowPublicResults(createPoll({ resultsPublic: false, resultsLive: true }))).toBe(false);
     expect(shouldShowPublicResults(createPoll({ status: 'published', resultsLive: false }))).toBe(false);
-    expect(shouldShowPublicResults(createPoll({ status: 'published', resultsLive: true }))).toBe(true);
+    expect(shouldShowPublicResults(createPoll({ status: 'published', votingStyle: 'public', resultsLive: true }))).toBe(true);
     expect(shouldShowPublicResults(createPoll({ status: 'closed', resultsLive: false }))).toBe(true);
     expect(
       shouldShowPublicResults(
@@ -118,5 +118,33 @@ describe('poll public result helpers', () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it('renders immutable aggregate question versions with stable distinct keys', () => {
+    const first = { ...choiceElement, title: 'Prioridade original' };
+    const second = { ...choiceElement, title: 'Prioridade revisada' };
+
+    const summaries = buildPublicQuestionSummaries([], [], [
+      {
+        elementId: 'choice',
+        versionKey: 'version-1',
+        elementSnapshot: first,
+        answeredCount: 1,
+        buckets: [{ key: 'a', count: 1 }],
+      },
+      {
+        elementId: 'choice',
+        versionKey: 'version-2',
+        elementSnapshot: second,
+        answeredCount: 1,
+        buckets: [{ key: 'b', count: 1 }],
+      },
+    ]);
+
+    expect(summaries.map((summary) => summary.key)).toEqual(['version-1', 'version-2']);
+    expect(summaries.map((summary) => summary.element.title)).toEqual([
+      'Prioridade original',
+      'Prioridade revisada',
+    ]);
   });
 });
