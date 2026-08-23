@@ -14,10 +14,14 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
+import { SilentSsoService, type SilentSsoResult } from './silent-sso.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let http: HttpTestingController;
+  const silentSso = {
+    check: vi.fn<() => Promise<SilentSsoResult>>(),
+  };
 
   const user: AuthenticatedUser = {
     sub: 'user-1',
@@ -35,6 +39,7 @@ describe('AuthService', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: PLATFORM_ID, useValue: platformId },
+        { provide: SilentSsoService, useValue: silentSso },
       ],
     });
 
@@ -43,6 +48,7 @@ describe('AuthService', () => {
   }
 
   beforeEach(() => {
+    silentSso.check.mockReset();
     configure();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
   });
@@ -88,13 +94,8 @@ describe('AuthService', () => {
     http.expectNone('/api/auth/me');
   });
 
-  it('attempts silent SSO and keeps initialization successful for auth failures', async () => {
-    const internals = service as unknown as {
-      buildLoginRedirectUrl(options?: LoginOptions): string;
-    };
-    const redirectSpy = vi
-      .spyOn(internals, 'buildLoginRedirectUrl')
-      .mockReturnValue('#silent-login');
+  it('uses check-sso and keeps initialization successful when no SSO session exists', async () => {
+    silentSso.check.mockResolvedValue('unauthenticated');
     service.user.set(user);
 
     const initialize = service.initialize();
@@ -105,12 +106,23 @@ describe('AuthService', () => {
 
     expect(service.initialized()).toBe(true);
     expect(service.user()).toBeNull();
-    expect(redirectSpy).toHaveBeenCalledWith({
-      returnTo: expect.any(String),
-      prompt: 'none',
-    });
-    expect(window.location.hash).toBe('#silent-login');
-    redirectSpy.mockRestore();
+    expect(silentSso.check).toHaveBeenCalledOnce();
+  });
+
+  it('uses the existing redirect login as the fallback when check-sso fails', async () => {
+    const fallback = vi
+      .spyOn(service, 'loginWithExistingSsoSession')
+      .mockImplementation(() => undefined);
+    silentSso.check.mockRejectedValue(new Error('Third-party cookies are unavailable'));
+
+    const initialize = service.initialize();
+    http
+      .expectOne('/api/auth/me')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
+    await initialize;
+
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(service.initialized()).toBe(true);
   });
 
   it('rethrows unexpected initialization failures after marking initialization complete', async () => {

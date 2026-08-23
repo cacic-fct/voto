@@ -22,6 +22,7 @@ import {
   tap,
   throwError,
 } from 'rxjs';
+import { SilentSsoService } from './silent-sso.service';
 
 @Service()
 export class AuthService {
@@ -37,6 +38,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly document = inject(DOCUMENT);
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly silentSso = inject(SilentSsoService);
   private refreshRequest$: Observable<AuthRefreshResult> | null = null;
 
   readonly user = signal<AuthenticatedUser | null>(null);
@@ -55,7 +57,7 @@ export class AuthService {
         return;
       }
 
-      this.loginWithExistingSsoSession();
+      await this.checkExistingSsoSession();
     } finally {
       this.initialized.set(true);
     }
@@ -90,6 +92,27 @@ export class AuthService {
         prompt: 'none',
       }),
     );
+  }
+
+  private async checkExistingSsoSession(): Promise<void> {
+    if (
+      this.hasSilentSsoFailureMarker() ||
+      this.getSessionStorageItem(this.silentSsoAttemptStorageKey)
+    ) {
+      return;
+    }
+
+    this.setSessionStorageItem(this.silentSsoAttemptStorageKey, 'true');
+
+    try {
+      const result = await this.silentSso.check();
+      if (result === 'authenticated') {
+        await this.loadCurrentUser();
+      }
+    } catch {
+      this.removeSessionStorageItem(this.silentSsoAttemptStorageKey);
+      this.loginWithExistingSsoSession();
+    }
   }
 
   async logout(): Promise<void> {
