@@ -1,4 +1,5 @@
 import { MatCheckboxChange } from '@angular/material/checkbox';
+import { formatDateOnly, parseDateOnly } from '../shared/date-only';
 import { MatRadioChange } from '@angular/material/radio';
 import { MatSelectChange } from '@angular/material/select';
 import { PollElement } from '@org/voting-contracts';
@@ -36,6 +37,10 @@ export abstract class PollVotePageAnswers extends PollVotePageState {
         ? target.value
         : '';
     this.answers.update((answers) => setAnswerValue(answers, elementId, value));
+  }
+
+  protected setDateAnswer(elementId: string, value: Date | null): void {
+    this.answers.update((answers) => setAnswerValue(answers, elementId, formatDateOnly(value)));
   }
 
   protected setSingleAnswer(elementId: string, event: MatRadioChange): void {
@@ -105,6 +110,10 @@ export abstract class PollVotePageAnswers extends PollVotePageState {
 
   protected textAnswerValue(elementId: string): string {
     return textAnswerValue(this.answers(), elementId);
+  }
+
+  protected dateAnswerValue(elementId: string): Date | null {
+    return parseDateOnly(textAnswerValue(this.answers(), elementId));
   }
 
   protected singleAnswerValue(elementId: string): string {

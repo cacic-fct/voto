@@ -1,6 +1,9 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
+import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
+import { ptBR } from 'date-fns/locale';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 import { EventManagerEvent, Poll, PollEligibilityEnrollment, PollElement, PollResults, PollSummary } from '@org/voting-contracts';
@@ -163,6 +166,8 @@ describe('AdminPollBuilderPageComponent', () => {
         { provide: MatSnackBar, useValue: snackBar },
         { provide: MatDialog, useValue: dialog },
         { provide: PermissionsService, useValue: permissions },
+        { provide: MAT_DATE_LOCALE, useValue: ptBR },
+        provideDateFnsAdapter(),
       ],
     });
     TestBed.overrideProvider(MatSnackBar, { useValue: snackBar });

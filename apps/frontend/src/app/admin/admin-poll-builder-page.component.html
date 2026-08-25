@@ -144,34 +144,64 @@
 
           <div class="field-grid schedule-grid">
             <mat-form-field appearance="outline">
-              <mat-label>Visível a partir de</mat-label>
+              <mat-label>Visível a partir de — data</mat-label>
               <input
                 matInput
-                type="datetime-local"
-                step="60"
-                [value]="builder.dateTimeInputValue(builder.draft().visibleFrom)"
-                (input)="builder.updateVisibleFrom($event)" />
+                [matDatepicker]="visibleFromDatePicker"
+                [value]="builder.dateTimeDateInputValue(builder.draft().visibleFrom)"
+                (dateChange)="builder.updateVisibleFromDate($event.value)" />
+              <mat-datepicker-toggle matIconSuffix [for]="visibleFromDatePicker" />
+              <mat-datepicker #visibleFromDatePicker />
               <mat-hint>Antes deste horário, o link público não abre a votação.</mat-hint>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar a partir de</mat-label>
+              <mat-label>Visível a partir de — horário</mat-label>
               <input
                 matInput
-                type="datetime-local"
-                step="60"
-                [value]="builder.dateTimeInputValue(builder.draft().votingStartsAt)"
-                (input)="builder.updateVotingStartsAt($event)" />
+                type="time"
+                [value]="builder.dateTimeTimeInputValue(builder.draft().visibleFrom)"
+                (input)="builder.updateVisibleFromTime($event)" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar até</mat-label>
+              <mat-label>Aberta para votar a partir de — data</mat-label>
               <input
                 matInput
-                type="datetime-local"
-                step="60"
-                [value]="builder.dateTimeInputValue(builder.draft().votingEndsAt)"
-                (input)="builder.updateVotingEndsAt($event)" />
+                [matDatepicker]="votingStartsAtDatePicker"
+                [value]="builder.dateTimeDateInputValue(builder.draft().votingStartsAt)"
+                (dateChange)="builder.updateVotingStartsAtDate($event.value)" />
+              <mat-datepicker-toggle matIconSuffix [for]="votingStartsAtDatePicker" />
+              <mat-datepicker #votingStartsAtDatePicker />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Aberta para votar a partir de — horário</mat-label>
+              <input
+                matInput
+                type="time"
+                [value]="builder.dateTimeTimeInputValue(builder.draft().votingStartsAt)"
+                (input)="builder.updateVotingStartsAtTime($event)" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Aberta para votar até — data</mat-label>
+              <input
+                matInput
+                [matDatepicker]="votingEndsAtDatePicker"
+                [value]="builder.dateTimeDateInputValue(builder.draft().votingEndsAt)"
+                (dateChange)="builder.updateVotingEndsAtDate($event.value)" />
+              <mat-datepicker-toggle matIconSuffix [for]="votingEndsAtDatePicker" />
+              <mat-datepicker #votingEndsAtDatePicker />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Aberta para votar até — horário</mat-label>
+              <input
+                matInput
+                type="time"
+                [value]="builder.dateTimeTimeInputValue(builder.draft().votingEndsAt)"
+                (input)="builder.updateVotingEndsAtTime($event)" />
             </mat-form-field>
           </div>
         </section>

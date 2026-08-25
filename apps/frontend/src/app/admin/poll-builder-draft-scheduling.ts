@@ -7,6 +7,7 @@ import {
   createSchedulingAvailability,
   ensureSchedulingSettings,
 } from './poll-builder-options';
+import { formatDateOnly } from '../shared/date-only';
 import { PollBuilderDraftElements } from './poll-builder-draft-elements';
 
 export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElements {
@@ -91,7 +92,7 @@ export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElement
   updateSchedulingAvailability(
     elementId: string,
     availabilityId: string,
-    field: 'date' | 'startTime' | 'endTime',
+    field: 'startTime' | 'endTime',
     event: Event,
   ): void {
     this.updateSchedulingSettings(elementId, (settings) => ({
@@ -102,6 +103,21 @@ export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElement
               ...availability,
               [field]: this.readInputValue(event),
             }
+          : availability,
+      ),
+    }));
+  }
+
+  updateSchedulingAvailabilityDate(
+    elementId: string,
+    availabilityId: string,
+    value: Date | null,
+  ): void {
+    this.updateSchedulingSettings(elementId, (settings) => ({
+      ...settings,
+      availability: settings.availability.map((availability) =>
+        availability.id === availabilityId
+          ? { ...availability, date: formatDateOnly(value) }
           : availability,
       ),
     }));

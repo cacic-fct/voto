@@ -16,6 +16,7 @@ import {
   requiresLinkedEventEligibilitySource,
   supportsVerifiedUnespRoleRequirement,
 } from '../polls/poll-metadata';
+import { combineDateAndTime } from '../shared/date-only';
 import { PollBuilderDraftState } from './poll-builder-draft-state';
 
 export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState {
@@ -101,25 +102,28 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
     );
   }
 
-  updateVisibleFrom(event: Event): void {
-    this.draft.update((poll) => ({
-      ...poll,
-      visibleFrom: this.readDateTimeInputValue(event),
-    }));
+  updateVisibleFromDate(value: Date | null): void {
+    this.updateDateTimeDate('visibleFrom', value);
   }
 
-  updateVotingStartsAt(event: Event): void {
-    this.draft.update((poll) => ({
-      ...poll,
-      votingStartsAt: this.readDateTimeInputValue(event),
-    }));
+  updateVisibleFromTime(event: Event): void {
+    this.updateDateTimeTime('visibleFrom', event);
   }
 
-  updateVotingEndsAt(event: Event): void {
-    this.draft.update((poll) => ({
-      ...poll,
-      votingEndsAt: this.readDateTimeInputValue(event),
-    }));
+  updateVotingStartsAtDate(value: Date | null): void {
+    this.updateDateTimeDate('votingStartsAt', value);
+  }
+
+  updateVotingStartsAtTime(event: Event): void {
+    this.updateDateTimeTime('votingStartsAt', event);
+  }
+
+  updateVotingEndsAtDate(value: Date | null): void {
+    this.updateDateTimeDate('votingEndsAt', value);
+  }
+
+  updateVotingEndsAtTime(event: Event): void {
+    this.updateDateTimeTime('votingEndsAt', event);
   }
 
   updateVotingStyle(event: MatSelectChange): void {
@@ -194,5 +198,31 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
       allowMultipleResponses: event.checked,
       allowResponseEditing: event.checked ? false : poll.allowResponseEditing,
     }));
+  }
+
+  private updateDateTimeDate(
+    field: 'visibleFrom' | 'votingStartsAt' | 'votingEndsAt',
+    value: Date | null,
+  ): void {
+    this.draft.update((poll) => ({
+      ...poll,
+      [field]: value
+        ? combineDateAndTime(value, this.dateTimeTimeInputValue(poll[field]) || '00:00')
+        : null,
+    }));
+  }
+
+  private updateDateTimeTime(
+    field: 'visibleFrom' | 'votingStartsAt' | 'votingEndsAt',
+    event: Event,
+  ): void {
+    const time = this.readInputValue(event);
+    this.draft.update((poll) => {
+      const date = this.dateTimeDateInputValue(poll[field]);
+      return {
+        ...poll,
+        [field]: combineDateAndTime(date, time),
+      };
+    });
   }
 }

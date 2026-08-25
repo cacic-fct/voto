@@ -87,6 +87,19 @@ describe('PollBuilderDraftService', () => {
     expect(service.schedulingTimezoneOptions).toContain('America/Sao_Paulo');
   });
 
+  it('should serialize publication schedule dates and times without a date shift', () => {
+    service.updateVisibleFromDate(new Date(2026, 5, 27));
+    service.updateVisibleFromTime(textEvent('09:10'));
+    service.updateVotingStartsAtDate(new Date(2026, 5, 27));
+    service.updateVotingStartsAtTime(textEvent('10:11'));
+    service.updateVotingEndsAtDate(new Date(2026, 5, 27));
+    service.updateVotingEndsAtTime(textEvent('18:12'));
+
+    expect(service.draft().visibleFrom).toBe(new Date(2026, 5, 27, 9, 10).toISOString());
+    expect(service.draft().votingStartsAt).toBe(new Date(2026, 5, 27, 10, 11).toISOString());
+    expect(service.draft().votingEndsAt).toBe(new Date(2026, 5, 27, 18, 12).toISOString());
+  });
+
   it('should copy the last scheduling availability date when adding another window', () => {
     service.addElement('scheduling');
     const [element] = service.draft().elements;
@@ -254,29 +267,6 @@ describe('PollBuilderDraftService', () => {
     expect(service.canSave()).toBe(false);
   });
 
-  it('should store publication schedule values at minute precision', () => {
-    service.updateVisibleFrom(textEvent('2026-06-27T09:10:45'));
-    service.updateVotingStartsAt(textEvent('2026-06-27T10:11:32'));
-    service.updateVotingEndsAt(textEvent('2026-06-27T18:12:59'));
-
-    expect(service.draft().visibleFrom).toBe(new Date('2026-06-27T09:10:00').toISOString());
-    expect(service.draft().votingStartsAt).toBe(new Date('2026-06-27T10:11:00').toISOString());
-    expect(service.draft().votingEndsAt).toBe(new Date('2026-06-27T18:12:00').toISOString());
-    expect(service.dateTimeInputValue(service.draft().votingStartsAt)).toBe('2026-06-27T10:11');
-    expect(service.toSaveRequest()).toMatchObject({
-      visibleFrom: new Date('2026-06-27T09:10:00').toISOString(),
-      votingStartsAt: new Date('2026-06-27T10:11:00').toISOString(),
-      votingEndsAt: new Date('2026-06-27T18:12:00').toISOString(),
-    });
-
-    service.updateVotingEndsAt(textEvent(''));
-
-    expect(service.draft().votingEndsAt).toBeNull();
-    expect(service.toSaveRequest()).toMatchObject({
-      votingEndsAt: null,
-    });
-  });
-
   it('should reorder and remove elements', () => {
     service.addElement('shortText');
     service.addElement('longText');
@@ -403,7 +393,7 @@ describe('PollBuilderDraftService', () => {
     service.updateSchedulingNumber(elementId, 'maxInvitees', { value: 4 } as never);
     service.updateSchedulingInviteeMode(elementId, { value: 'required' } as never);
     service.addSchedulingAvailability(elementId);
-    service.updateSchedulingAvailability(elementId, firstAvailability?.id ?? '', 'date', textEvent('2026-06-24'));
+    service.updateSchedulingAvailabilityDate(elementId, firstAvailability?.id ?? '', new Date(2026, 5, 24));
     service.updateSchedulingAvailability(elementId, firstAvailability?.id ?? '', 'startTime', textEvent('08:30'));
     service.updateSchedulingAvailability(elementId, firstAvailability?.id ?? '', 'endTime', textEvent('11:30'));
     service.removeSchedulingAvailability(elementId, service.draft().elements[0].settings?.scheduling?.availability[1].id ?? '');

@@ -1,5 +1,6 @@
 import { computed, signal } from '@angular/core';
 import { MatSelectChange } from '@angular/material/select';
+import { format, isValid, parseISO } from 'date-fns';
 import {
   Poll,
   PollElement,
@@ -8,6 +9,7 @@ import {
   SavePollRequest,
 } from '@org/voting-contracts';
 import { voterEligibilityOptions, votingStyleOptions } from '../polls/poll-metadata';
+import { parseDateOnly } from '../shared/date-only';
 import {
   CACIC_ELECTION_PHASE_OPTIONS,
   ELEMENT_TYPE_OPTIONS,
@@ -113,18 +115,18 @@ export abstract class PollBuilderDraftState {
     }
   }
 
-  dateTimeInputValue(value: string | null | undefined): string {
-    if (!value) {
-      return '';
-    }
+  dateInputValue(value: string | null | undefined): Date | null {
+    return parseDateOnly(value);
+  }
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
+  dateTimeDateInputValue(value: string | null | undefined): Date | null {
+    const date = value ? parseISO(value) : null;
+    return date && isValid(date) ? date : null;
+  }
 
-    const offset = date.getTimezoneOffset() * 60_000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  dateTimeTimeInputValue(value: string | null | undefined): string {
+    const date = this.dateTimeDateInputValue(value);
+    return date ? format(date, 'HH:mm') : '';
   }
 
   toSaveRequest(poll = this.draft()): SavePollRequest {
@@ -163,21 +165,6 @@ export abstract class PollBuilderDraftState {
   protected readInputValue(event: Event): string {
     const target = event.target;
     return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target.value : '';
-  }
-
-  protected readDateTimeInputValue(event: Event): string | null {
-    const value = this.readInputValue(event);
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    date.setSeconds(0, 0);
-    return date.toISOString();
   }
 
   protected readNumberValue(event: MatSelectChange): number | null {

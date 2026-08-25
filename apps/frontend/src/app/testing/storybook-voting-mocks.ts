@@ -3,6 +3,9 @@ import localePt from '@angular/common/locales/pt';
 import { provideHttpClient, withFetch } from '@angular/common/http';
 import { ApplicationConfig, LOCALE_ID, inject, provideAppInitializer } from '@angular/core';
 import { MatIconRegistry } from '@angular/material/icon';
+import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
+import { ptBR } from 'date-fns/locale';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { fakerPT_BR as faker } from '@faker-js/faker';
 import { HttpResponse, delay, http, type RequestHandler } from 'msw';
@@ -42,6 +45,8 @@ registerLocaleData(localePt);
 
 export const storybookBaseProviders: NonNullable<ApplicationConfig['providers']> = [
   { provide: LOCALE_ID, useValue: 'pt-BR' },
+  { provide: MAT_DATE_LOCALE, useValue: ptBR },
+  provideDateFnsAdapter(),
   provideHttpClient(withFetch()),
   provideNoopAnimations(),
   provideAppInitializer(() => {

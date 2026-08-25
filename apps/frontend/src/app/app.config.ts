@@ -19,6 +19,9 @@ import {
   withEventReplay,
 } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
+import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
+import { ptBR } from 'date-fns/locale';
 import { authInterceptor } from './auth/auth.interceptor';
 import { AuthService } from './auth/auth.service';
 import { CookieBannerFeatureFlagService } from './feature-flags/cookie-banner-feature-flag.service';
@@ -28,6 +31,8 @@ registerLocaleData(localePt);
 export const appConfig: ApplicationConfig = {
   providers: [
     { provide: LOCALE_ID, useValue: 'pt-BR' },
+    { provide: MAT_DATE_LOCALE, useValue: ptBR },
+    provideDateFnsAdapter(),
     provideClientHydration(withEventReplay()),
     provideBrowserGlobalErrorListeners(),
     provideHttpClient(withFetch(), withInterceptors([authInterceptor])),

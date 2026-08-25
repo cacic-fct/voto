@@ -328,9 +328,11 @@
                             <mat-label>Data</mat-label>
                             <input
                               matInput
-                              type="date"
-                              [value]="availability.date"
-                              (input)="builder().updateSchedulingAvailability(element.id, availability.id, 'date', $event)" />
+                              [matDatepicker]="availabilityDatePicker"
+                              [value]="builder().dateInputValue(availability.date)"
+                              (dateChange)="builder().updateSchedulingAvailabilityDate(element.id, availability.id, $event.value)" />
+                            <mat-datepicker-toggle matIconSuffix [for]="availabilityDatePicker" />
+                            <mat-datepicker #availabilityDatePicker />
                           </mat-form-field>
                           <mat-form-field appearance="outline">
                             <mat-label>Início</mat-label>
@@ -498,4 +500,3 @@
         }
       </div>
     </section>
-

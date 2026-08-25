@@ -476,10 +476,12 @@
                     <mat-label>Data</mat-label>
                     <input
                       matInput
-                      type="date"
-                      [value]="textAnswerValue(element.id)"
-                      (input)="setTextAnswer(element.id, $event)"
+                      [matDatepicker]="datePicker"
+                      [value]="dateAnswerValue(element.id)"
+                      (dateChange)="setDateAnswer(element.id, $event.value)"
                     />
+                    <mat-datepicker-toggle matIconSuffix [for]="datePicker" />
+                    <mat-datepicker #datePicker />
                   </mat-form-field>
                 }
                 @case ('time') {
