@@ -802,6 +802,28 @@ describe('PollsService', () => {
     await expect(service.getAdminPoll('old-poll', observer)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('redacts slate submitter identities from election observers', async () => {
+    const observer = createUser({
+      roles: [ELECTIONS_OBSERVER_ROLE],
+      roleSet: new Set([ELECTIONS_OBSERVER_ROLE]),
+    });
+    prisma.poll.findUnique.mockResolvedValueOnce(
+      pollRecord({
+        mode: DbPollMode.CACIC_ELECTION,
+        votingStartsAt: new Date(),
+      }),
+    );
+    prisma.cacicElectionSlate.findMany.mockResolvedValueOnce([dbCacicElectionSlate()]);
+
+    const slates = await service.listAdminCacicElectionSlates('poll-1', observer);
+
+    expect(slates[0]).not.toHaveProperty('submittedBy');
+    expect(slates[0]?.members[0]).toMatchObject({
+      fullName: 'Nome oculto',
+      identifierValue: 'oculto',
+    });
+  });
+
   it('reads admin and published polls or rejects missing polls', async () => {
     prisma.poll.findUnique.mockResolvedValueOnce(pollRecord());
     await expect(service.getAdminPoll('poll-1')).resolves.toMatchObject({ id: 'poll-1', elements: expect.any(Array) });

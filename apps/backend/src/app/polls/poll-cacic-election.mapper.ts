@@ -45,14 +45,12 @@ export function toContractCacicElectionSlate(
   slate: CacicElectionSlateRecord,
   options: CacicElectionSlateListOptions & { redactIdentities?: boolean },
 ): AdminCacicElectionSlate | CacicElectionSlate {
-  const submittedBy = slate.submittedBy
+  const submittedBy = slate.submittedBy && !options.redactIdentities
     ? {
         userId: slate.submittedBy.id,
-        ...(!options.redactIdentities && slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
-        ...(!options.redactIdentities && slate.submittedBy.preferredUsername
-          ? { preferredUsername: slate.submittedBy.preferredUsername }
-          : {}),
-        ...(!options.redactIdentities && slate.submittedBy.email ? { email: slate.submittedBy.email } : {}),
+        ...(slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
+        ...(slate.submittedBy.preferredUsername ? { preferredUsername: slate.submittedBy.preferredUsername } : {}),
+        ...(slate.submittedBy.email ? { email: slate.submittedBy.email } : {}),
       }
     : undefined;
   const members = slate.members.map((member) => {
