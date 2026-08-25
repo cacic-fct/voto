@@ -26,6 +26,8 @@ const coveredFrontendRoutes = [
   '',
   '**',
   'admin',
+  'admin/polls/:id/kiosk',
+  'admin/polls/:id/kiosk/vote',
   'login',
   'polls',
   'polls/:id',

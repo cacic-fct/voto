@@ -114,6 +114,7 @@ describeKeycloak('Keycloak-backed authentication', () => {
       {
         headers: {
           Cookie: cookie,
+          Origin: 'http://localhost:4200',
         },
         validateStatus: () => true,
       },
