@@ -40,6 +40,23 @@ describe('SseReplayService', () => {
     await expect(firstValueFrom(service.replay(scope, 'foreign-cursor', NEVER).pipe(take(1)))).resolves.toEqual(first);
   });
 
+  it('deduplicates retries by mutation identity while preserving distinct result mutations', async () => {
+    const service = new SseReplayService(new ReplayRedisStub() as never);
+    const scope = service.scope('poll-results-admin', 'poll-1');
+    const first = await service.record(scope, { data: { responseCount: 1, refreshRequired: true } }, {
+      deduplicationKey: 'response-1:100',
+    });
+    const retry = await service.record(scope, { data: { responseCount: 1, refreshRequired: true } }, {
+      deduplicationKey: 'response-1:100',
+    });
+    const edit = await service.record(scope, { data: { responseCount: 1, refreshRequired: true } }, {
+      deduplicationKey: 'response-1:200',
+    });
+
+    expect(retry.id).toBe(first.id);
+    expect(edit.id).not.toBe(first.id);
+  });
+
   it('keeps live delivery alive when replay storage fails and bounds pending events', async () => {
     const redis = {
       lrange: jest.fn().mockRejectedValue(new Error('redis unavailable')),

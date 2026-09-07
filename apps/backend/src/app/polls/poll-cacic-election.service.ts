@@ -37,7 +37,9 @@ import {
 } from './poll-cacic-election.mapper';
 import { PollCacicElectionSlateValidatorService } from './poll-cacic-election-slate-validator.service';
 import { NormalizedCacicElectionSlateMember } from './poll-cacic-election.types';
+import { recordPollAdminAudit } from './poll-admin-audit';
 import { cleanOptionalText } from './poll-contract.mapper';
+import { isSerializationConflictError } from './poll-auth';
 
 type CacicElectionPollMetadata = {
   mode: DbPollMode;
@@ -177,7 +179,7 @@ export class PollCacicElectionService {
         throw new ConflictException('This user already submitted a slate for this election.');
       }
 
-      if (this.isSerializationConflict(error)) {
+      if (isSerializationConflictError(error)) {
         throw new ConflictException('The slate changed concurrently. Please reload and retry.');
       }
 
@@ -221,7 +223,7 @@ export class PollCacicElectionService {
       throw new BadRequestException('Only approved slates can be enabled.');
     }
 
-    const slate = await this.prisma.$transaction(async (tx) => {
+    const slate = await this.runAdminSlateTransaction(() => this.prisma.$transaction(async (tx) => {
       await this.assertCacicElectionPollMutable(tx, pollId);
       await this.assertUniqueSlateName(tx, pollId, name);
       const created = await tx.cacicElectionSlate.create({
@@ -238,11 +240,12 @@ export class PollCacicElectionService {
       });
       await this.replaceCacicElectionSlateMembers(tx, created.id, members);
       await this.elements.refreshCacicElectionVoteElement(tx, pollId);
+      await this.recordSlateAudit(tx, pollId, user.sub, 'slate.created');
       return tx.cacicElectionSlate.findUniqueOrThrow({
         where: { id: created.id },
         include: cacicElectionSlateInclude(),
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return toContractCacicElectionSlate(slate, { includePrivateIdentifiers: true });
   }
@@ -261,7 +264,7 @@ export class PollCacicElectionService {
       throw new BadRequestException('Use the rejection endpoint to reject a slate with a reason.');
     }
 
-    const slate = await this.prisma.$transaction(async (tx) => {
+    const slate = await this.runAdminSlateTransaction(() => this.prisma.$transaction(async (tx) => {
       await this.assertCacicElectionPollMutable(tx, pollId);
       await this.assertCacicElectionSlateBelongsToPoll(tx, pollId, slateId);
       await this.assertUniqueSlateName(tx, pollId, name, slateId);
@@ -290,11 +293,12 @@ export class PollCacicElectionService {
       });
       await this.replaceCacicElectionSlateMembers(tx, updated.id, members);
       await this.elements.refreshCacicElectionVoteElement(tx, pollId);
+      await this.recordSlateAudit(tx, pollId, user.sub, 'slate.updated');
       return tx.cacicElectionSlate.findUniqueOrThrow({
         where: { id: updated.id },
         include: cacicElectionSlateInclude(),
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return toContractCacicElectionSlate(slate, { includePrivateIdentifiers: true });
   }
@@ -311,7 +315,7 @@ export class PollCacicElectionService {
       throw new BadRequestException('A rejection reason is required.');
     }
 
-    const slate = await this.prisma.$transaction(async (tx) => {
+    const slate = await this.runAdminSlateTransaction(() => this.prisma.$transaction(async (tx) => {
       await this.assertCacicElectionPollMutable(tx, pollId);
       await this.assertCacicElectionSlateBelongsToPoll(tx, pollId, slateId);
       const updated = await tx.cacicElectionSlate.update({
@@ -325,11 +329,12 @@ export class PollCacicElectionService {
         },
       });
       await this.elements.refreshCacicElectionVoteElement(tx, pollId);
+      await this.recordSlateAudit(tx, pollId, user.sub, 'slate.rejected');
       return tx.cacicElectionSlate.findUniqueOrThrow({
         where: { id: updated.id },
         include: cacicElectionSlateInclude(),
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return toContractCacicElectionSlate(slate, { includePrivateIdentifiers: true });
   }
@@ -338,9 +343,10 @@ export class PollCacicElectionService {
     pollId: string,
     slateId: string,
     input: UpdateCacicElectionSlateEnabledDto,
+    user?: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
     await this.assertCacicElectionPollExists(pollId, 'admin', true);
-    const slate = await this.prisma.$transaction(async (tx) => {
+    const slate = await this.runAdminSlateTransaction(() => this.prisma.$transaction(async (tx) => {
       await this.assertCacicElectionPollMutable(tx, pollId);
       await this.assertCacicElectionSlateBelongsToPoll(tx, pollId, slateId);
       const current = await tx.cacicElectionSlate.findUnique({ where: { id: slateId }, select: { status: true } });
@@ -354,23 +360,30 @@ export class PollCacicElectionService {
         },
       });
       await this.elements.refreshCacicElectionVoteElement(tx, pollId);
+      await this.recordSlateAudit(tx, pollId, user?.sub, 'slate.enabledChanged');
       return tx.cacicElectionSlate.findUniqueOrThrow({
         where: { id: updated.id },
         include: cacicElectionSlateInclude(),
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return toContractCacicElectionSlate(slate, { includePrivateIdentifiers: true });
   }
 
-  async deleteCacicElectionSlate(pollId: string, slateId: string): Promise<void> {
+  async deleteCacicElectionSlate(pollId: string, slateId: string, user?: AuthenticatedPrincipal): Promise<void> {
     await this.assertCacicElectionPollExists(pollId, 'admin', true);
-    await this.prisma.$transaction(async (tx) => {
+    await this.runAdminSlateTransaction(() => this.prisma.$transaction(async (tx) => {
       await this.assertCacicElectionPollMutable(tx, pollId);
       await this.assertCacicElectionSlateBelongsToPoll(tx, pollId, slateId);
       await tx.cacicElectionSlate.delete({ where: { id: slateId } });
       await this.elements.refreshCacicElectionVoteElement(tx, pollId);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      await this.recordSlateAudit(tx, pollId, user?.sub, 'slate.deleted');
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+  }
+
+  private async recordSlateAudit(tx: Prisma.TransactionClient, pollId: string, actorId: string | undefined, action: string): Promise<void> {
+    const poll = await tx.poll.findUnique({ where: { id: pollId }, select: { updatedAt: true } });
+    await recordPollAdminAudit(tx, { pollId, actorId, action, afterVersion: poll?.updatedAt });
   }
 
   private async assertPublicCacicElectionSlatePollReadable(pollId: string): Promise<void> {
@@ -429,6 +442,7 @@ export class PollCacicElectionService {
       select: {
         id: true,
         mode: true,
+        cacicElectionPhase: true,
         createdAt: true,
         publishedAt: true,
         visibleFrom: true,
@@ -449,7 +463,7 @@ export class PollCacicElectionService {
     if (audience === 'observer') {
       assertObserverCanReadElectionPoll(poll);
     }
-    if (forMutation && (poll.status !== DbPollStatus.DRAFT || poll._count.responses > 0)) {
+    if (forMutation && !this.isCacicElectionPollMutable(poll)) {
       throw new ConflictException('CACiC election slates are frozen after publication or voting starts.');
     }
   }
@@ -460,13 +474,33 @@ export class PollCacicElectionService {
   ): Promise<void> {
     const poll = await client.poll.findUnique({
       where: { id: pollId },
-      select: { id: true, mode: true, status: true, _count: { select: { responses: true } } },
+      select: {
+        id: true,
+        mode: true,
+        cacicElectionPhase: true,
+        status: true,
+        _count: { select: { responses: true } },
+      },
     });
     if (!poll) throw new NotFoundException('Poll not found.');
     if (poll.mode !== DbPollMode.CACIC_ELECTION) throw new BadRequestException('This poll is not a CACiC election.');
-    if (poll.status !== DbPollStatus.DRAFT || poll._count.responses > 0) {
+    if (!this.isCacicElectionPollMutable(poll)) {
       throw new ConflictException('CACiC election slates are frozen after publication or voting starts.');
     }
+  }
+
+  private isCacicElectionPollMutable(poll: {
+    mode: DbPollMode;
+    cacicElectionPhase: DbCacicElectionPhase | null;
+    status: DbPollStatus;
+    _count: { responses: number };
+  }): boolean {
+    return (
+      poll.mode === DbPollMode.CACIC_ELECTION &&
+      (poll._count?.responses ?? 0) === 0 &&
+      (poll.status === DbPollStatus.DRAFT ||
+        (poll.status === DbPollStatus.PUBLISHED && poll.cacicElectionPhase === DbCacicElectionPhase.SLATE_SUBMISSION))
+    );
   }
 
   private async assertUniqueSlateName(
@@ -534,6 +568,7 @@ export class PollCacicElectionService {
     await tx.cacicElectionSlateMember.createMany({
       data: members.map((member, position) => ({
         slateId,
+        verifiedSubjectHash: member.verifiedSubjectHash,
         fullName: member.fullName,
         enrollmentNumber: member.enrollmentNumber,
         role: member.role,
@@ -588,8 +623,17 @@ export class PollCacicElectionService {
     );
   }
 
-  private isSerializationConflict(error: unknown): error is { code: 'P2034' } {
-    return typeof error === 'object' && error !== null && 'code' in error &&
-      (error as { code?: unknown }).code === 'P2034';
+  private async runAdminSlateTransaction<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error: unknown) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      if (isSerializationConflictError(error)) {
+        throw new ConflictException('The election changed concurrently. Reload and retry.');
+      }
+      throw error;
+    }
   }
 }

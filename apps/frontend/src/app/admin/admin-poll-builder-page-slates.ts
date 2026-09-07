@@ -20,6 +20,7 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
     }
 
     const editingSlate = this.editingSlate();
+    const selectionGeneration = this.currentPollSelectionGeneration();
     const payload: UpdateCacicElectionSlateRequest = {
       ...request,
       status: editingSlate?.status ?? 'approved',
@@ -30,18 +31,25 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
       const savedSlate = editingSlate
         ? await firstValueFrom(this.api.updateAdminCacicElectionSlate(pollId, editingSlate.id, payload))
         : await firstValueFrom(this.api.createAdminCacicElectionSlate(pollId, payload));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.slates.update((slates) =>
         editingSlate
           ? slates.map((slate) => (slate.id === savedSlate.id ? savedSlate : slate))
           : [...slates, savedSlate],
       );
       this.editingSlate.set(null);
-      await this.reloadPollAfterSlateChange(pollId);
+      await this.reloadPollAfterSlateChange(pollId, selectionGeneration);
       this.snackBar.open('Chapa salva.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível salvar a chapa.', 'OK', { duration: 4000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível salvar a chapa.', 'OK', { duration: 4000 });
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -79,16 +87,24 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
       return;
     }
 
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.savingSlate.set(true);
     try {
       const updated = await firstValueFrom(this.api.updateCacicElectionSlateEnabled(pollId, slate.id, { enabled }));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.replaceSlate(updated);
-      await this.reloadPollAfterSlateChange(pollId);
+      await this.reloadPollAfterSlateChange(pollId, selectionGeneration);
       this.snackBar.open(enabled ? 'Chapa habilitada.' : 'Chapa desabilitada.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível atualizar a chapa.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível atualizar a chapa.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -111,16 +127,24 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
       return;
     }
 
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.savingSlate.set(true);
     try {
       const updated = await firstValueFrom(this.api.rejectCacicElectionSlate(pollId, slate.id, { reason }));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.replaceSlate(updated);
-      await this.reloadPollAfterSlateChange(pollId);
+      await this.reloadPollAfterSlateChange(pollId, selectionGeneration);
       this.snackBar.open('Chapa rejeitada.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível rejeitar a chapa.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível rejeitar a chapa.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -134,19 +158,27 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
       return;
     }
 
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.savingSlate.set(true);
     try {
       await firstValueFrom(this.api.deleteCacicElectionSlate(pollId, slate.id));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.slates.update((slates) => slates.filter((item) => item.id !== slate.id));
       if (this.editingSlate()?.id === slate.id) {
         this.editingSlate.set(null);
       }
-      await this.reloadPollAfterSlateChange(pollId);
+      await this.reloadPollAfterSlateChange(pollId, selectionGeneration);
       this.snackBar.open('Chapa excluída.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível excluir a chapa.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível excluir a chapa.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -191,8 +223,14 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
     }
   }
 
-  protected async loadCacicElectionSlates(showLoading = true): Promise<void> {
+  protected async loadCacicElectionSlates(
+    showLoading = true,
+    selectionGeneration = this.currentPollSelectionGeneration(),
+  ): Promise<void> {
     const poll = this.builder.draft();
+    if (poll.id && !this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+      return;
+    }
     if (!poll.id || !this.builder.isCacicElection(poll)) {
       this.slates.set([]);
       this.editingSlate.set(null);
@@ -204,11 +242,19 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
     }
 
     try {
-      this.slates.set(await firstValueFrom(this.api.listAdminCacicElectionSlates(poll.id)));
+      const slates = await firstValueFrom(this.api.listAdminCacicElectionSlates(poll.id));
+      if (!this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        return;
+      }
+      this.slates.set(slates);
     } catch {
-      this.snackBar.open('Não foi possível carregar as chapas.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        this.snackBar.open('Não foi possível carregar as chapas.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.loadingSlates.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        this.loadingSlates.set(false);
+      }
     }
   }
 
@@ -221,6 +267,7 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
       return;
     }
 
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.savingSlate.set(true);
     try {
       const updated = await firstValueFrom(
@@ -229,13 +276,20 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
           ...overrides,
         }),
       );
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.replaceSlate(updated);
-      await this.reloadPollAfterSlateChange(pollId);
+      await this.reloadPollAfterSlateChange(pollId, selectionGeneration);
       this.snackBar.open('Chapa atualizada.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível atualizar a chapa.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível atualizar a chapa.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -263,9 +317,15 @@ export abstract class AdminPollBuilderPageSlates extends AdminPollBuilderPageEli
     };
   }
 
-  private async reloadPollAfterSlateChange(pollId: string): Promise<void> {
+  private async reloadPollAfterSlateChange(
+    pollId: string,
+    selectionGeneration = this.currentPollSelectionGeneration(),
+  ): Promise<void> {
     const poll = await firstValueFrom(this.api.getAdminPoll(pollId));
-    this.builder.setDraft(poll);
+    if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+      return;
+    }
+    this.setServerPoll(poll);
     this.selectedResultsElementId.set(this.questionSummaries()[0]?.key ?? null);
   }
 }

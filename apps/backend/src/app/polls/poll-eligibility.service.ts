@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   AccountManagerPerson,
@@ -18,6 +20,8 @@ import { EventManagerIntegrationService } from '../event-manager/event-manager-i
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddPollEligibilityEnrollmentsDto, ImportPollEligibilityEnrollmentsDto } from './dto/poll.dto';
+import { recordPollAdminAudit } from './poll-admin-audit';
+import { isSerializationConflictError } from './poll-auth';
 import {
   EligibilityEnrollmentRecord,
   ParsedEligibilityEnrollments,
@@ -32,6 +36,11 @@ import {
   normalizeEnrollmentNumber,
   readUserEnrollmentNumber,
 } from './poll-user-claims';
+
+export type EligibilityCheckOptions = {
+  /** Maximum time an external eligibility dependency may hold a vote transaction. */
+  remoteTimeoutMs?: number;
+};
 
 @Injectable()
 export class PollEligibilityService {
@@ -84,14 +93,14 @@ export class PollEligibilityService {
     return this.replaceOrAppendEligibilityEnrollments(pollId, parsed, input.mode ?? 'append', user.sub);
   }
 
-  async deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string): Promise<void> {
+  async deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string, user?: AuthenticatedPrincipal): Promise<void> {
     await this.assertEligibilityMutable(pollId);
     const normalizedEnrollmentNumber = normalizeEnrollmentNumber(enrollmentNumber);
     if (!normalizedEnrollmentNumber) {
       throw new BadRequestException('Enrollment number is required.');
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.runSerializableTransaction(async (tx) => {
       await this.assertEligibilityMutableWithClient(tx, pollId);
       await tx.pollEligibilityEnrollment.deleteMany({
         where: {
@@ -99,17 +108,19 @@ export class PollEligibilityService {
           enrollmentNumber: normalizedEnrollmentNumber,
         },
       });
-      await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      const updated = await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
+      await recordPollAdminAudit(tx, { pollId, actorId: user?.sub, action: 'eligibility.removed', afterVersion: updated?.updatedAt });
+    }, 'Eligibility list changed concurrently. Reload and retry.');
   }
 
-  async clearEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
+  async clearEligibilityEnrollments(pollId: string, user?: AuthenticatedPrincipal): Promise<PollEligibilityEnrollmentList> {
     await this.assertEligibilityMutable(pollId);
-    await this.prisma.$transaction(async (tx) => {
+    await this.runSerializableTransaction(async (tx) => {
       await this.assertEligibilityMutableWithClient(tx, pollId);
       await tx.pollEligibilityEnrollment.deleteMany({ where: { pollId } });
-      await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      const updated = await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
+      await recordPollAdminAudit(tx, { pollId, actorId: user?.sub, action: 'eligibility.cleared', afterVersion: updated?.updatedAt });
+    }, 'Eligibility list changed concurrently. Reload and retry.');
     return {
       entries: [],
       totalCount: 0,
@@ -120,6 +131,7 @@ export class PollEligibilityService {
     poll: PollEligibilityRecord,
     user: AuthenticatedVoter,
     client: Pick<PrismaService, 'pollEligibilityEnrollment'> | Prisma.TransactionClient = this.prisma,
+    options: EligibilityCheckOptions = {},
   ): Promise<void> {
     switch (poll.voterEligibilitySource) {
       case DbPollVoterEligibilitySource.AUTHENTICATED_USERS:
@@ -128,18 +140,18 @@ export class PollEligibilityService {
         this.ensureUnespUserVotingAllowed(user);
         return;
       case DbPollVoterEligibilitySource.COMPUTER_SCIENCE_STUDENTS:
-        await this.ensureComputerScienceStudentVotingAllowed(poll, user);
+        await this.ensureComputerScienceStudentVotingAllowed(poll, user, options);
         return;
       case DbPollVoterEligibilitySource.EVENT_ATTENDANCE:
-        await this.ensureEventAttendanceVotingAllowed(poll, user);
+        await this.ensureEventAttendanceVotingAllowed(poll, user, options);
         return;
       case DbPollVoterEligibilitySource.EVENT_ATTENDANCE_UNESP_USERS:
-        await this.ensureEventAttendanceVotingAllowed(poll, user);
+        await this.ensureEventAttendanceVotingAllowed(poll, user, options);
         this.ensureUnespUserVotingAllowed(user);
         return;
       case DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS:
-        await this.ensureEventAttendanceVotingAllowed(poll, user);
-        await this.ensureComputerScienceStudentVotingAllowed(poll, user);
+        await this.ensureEventAttendanceVotingAllowed(poll, user, options);
+        await this.ensureComputerScienceStudentVotingAllowed(poll, user, options);
         return;
       case DbPollVoterEligibilitySource.ENROLLMENT_LIST:
         await this.ensureEnrollmentListVotingAllowed(poll, user, client);
@@ -199,7 +211,7 @@ export class PollEligibilityService {
       throw new BadRequestException('At least one valid enrollment number is required.');
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.runSerializableTransaction(async (tx) => {
       await this.assertEligibilityMutableWithClient(tx, pollId);
       const replaced =
         mode === 'replace'
@@ -217,18 +229,19 @@ export class PollEligibilityService {
         skipDuplicates: true,
       });
 
-      await tx.poll.update({
+      const updated = await tx.poll.update({
         where: { id: pollId },
         data: { updatedAt: new Date() },
       });
+      await recordPollAdminAudit(tx, { pollId, actorId: createdById, action: `eligibility.${mode}`, afterVersion: updated?.updatedAt });
 
       return {
         createdCount: created.count,
         replacedCount: replaced.count,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, 'Eligibility list changed concurrently. Reload and retry.');
 
-      const entries = await this.listEligibilityEnrollments(pollId);
+    const entries = await this.listEligibilityEnrollments(pollId);
 
     return {
       ...entries,
@@ -427,6 +440,22 @@ export class PollEligibilityService {
     }
   }
 
+  private async runSerializableTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    conflictMessage: string,
+  ): Promise<T> {
+    try {
+      return await this.prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error: unknown) {
+      if (isSerializationConflictError(error)) {
+        throw new ConflictException(conflictMessage);
+      }
+      throw error;
+    }
+  }
+
   private async assertEligibilityMutable(pollId: string): Promise<void> {
     const poll = await this.prisma.poll.findUnique({
       where: { id: pollId },
@@ -456,12 +485,25 @@ export class PollEligibilityService {
     }
   }
 
-  private async ensureEventAttendanceVotingAllowed(poll: PollEligibilityRecord, user: AuthenticatedVoter): Promise<void> {
+  private async ensureEventAttendanceVotingAllowed(
+    poll: PollEligibilityRecord,
+    user: AuthenticatedVoter,
+    options: EligibilityCheckOptions,
+  ): Promise<void> {
     if (!poll.linkedEventId) {
       throw new BadRequestException('Poll is not linked to an Event Manager event.');
     }
 
-    const hasAttendance = await this.eventManager.hasAttendance(poll.linkedEventId, user.sub);
+    const hasAttendance = await this.withRemoteEligibilityBudget(
+      this.eventManager.hasAttendance(
+        poll.linkedEventId,
+        user.sub,
+        options.remoteTimeoutMs
+          ? { timeoutMs: options.remoteTimeoutMs, maxAttempts: 1 }
+          : undefined,
+      ),
+      options.remoteTimeoutMs,
+    );
     if (!hasAttendance) {
       throw new ForbiddenException('Voting is restricted to users with registered attendance for the linked event.');
     }
@@ -503,6 +545,7 @@ export class PollEligibilityService {
   private async ensureComputerScienceStudentVotingAllowed(
     poll: PollEligibilityRecord,
     user: AuthenticatedVoter,
+    options: EligibilityCheckOptions,
   ): Promise<void> {
     if (!hasUndergraduateUnespRole(user)) {
       throw new ForbiddenException('Voting is restricted to undergraduate Unesp students.');
@@ -514,7 +557,7 @@ export class PollEligibilityService {
     }
 
     if (
-      (await this.shouldRequireVerifiedUnespRole(poll)) &&
+      (await this.withRemoteEligibilityBudget(this.shouldRequireVerifiedUnespRole(poll), options.remoteTimeoutMs)) &&
       !hasVerifiedUnespRole(user)
     ) {
       throw new ForbiddenException('Voting is restricted to users with a verified Unesp role.');
@@ -529,5 +572,26 @@ export class PollEligibilityService {
     }
 
     return !(await this.featureFlags.isUndergraduateUnespRoleVerificationDisabled());
+  }
+
+  private async withRemoteEligibilityBudget<T>(operation: Promise<T>, timeoutMs?: number): Promise<T> {
+    if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      return operation;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new ServiceUnavailableException('Eligibility verification timed out.')),
+        timeoutMs,
+      );
+      timer.unref?.();
+    });
+
+    try {
+      return await Promise.race([operation, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

@@ -25,16 +25,26 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
       return;
     }
 
+    const expectedUpdatedAt = this.builder.draft().updatedAt;
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
       const result = await firstValueFrom(this.api.addPollEligibilityEnrollments(pollId, { enrollmentNumbers }));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.eligibilityEntries.set(result.entries);
+      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
       this.manualEnrollmentNumbers.set('');
       this.snackBar.open(this.importResultLabel(result.createdCount, result.existingCount), 'OK', { duration: 3500 });
     } catch {
-      this.snackBar.open('Não foi possível adicionar as matrículas.', 'OK', { duration: 4000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível adicionar as matrículas.', 'OK', { duration: 4000 });
+      }
     } finally {
-      this.importingEligibility.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.importingEligibility.set(false);
+      }
     }
   }
 
@@ -51,6 +61,8 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
       return;
     }
 
+    const expectedUpdatedAt = this.builder.draft().updatedAt;
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
       const content = await file.text();
@@ -69,14 +81,22 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
           selectedHeader,
         }),
       );
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.eligibilityEntries.set(result.entries);
+      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
       this.snackBar.open(this.importResultLabel(result.createdCount, result.existingCount, mode), 'OK', {
         duration: 4000,
       });
     } catch {
-      this.snackBar.open('Não foi possível importar o arquivo.', 'OK', { duration: 4000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível importar o arquivo.', 'OK', { duration: 4000 });
+      }
     } finally {
-      this.importingEligibility.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.importingEligibility.set(false);
+      }
     }
   }
 
@@ -90,17 +110,27 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
       return;
     }
 
+    const expectedUpdatedAt = this.builder.draft().updatedAt;
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
       await firstValueFrom(this.api.deletePollEligibilityEnrollment(pollId, enrollmentNumber));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.eligibilityEntries.update((entries) =>
         entries.filter((entry) => entry.enrollmentNumber !== enrollmentNumber),
       );
+      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
       this.snackBar.open('Matrícula removida.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível remover a matrícula.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível remover a matrícula.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.importingEligibility.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.importingEligibility.set(false);
+      }
     }
   }
 
@@ -114,15 +144,25 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
       return;
     }
 
+    const expectedUpdatedAt = this.builder.draft().updatedAt;
+    const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
       const result = await firstValueFrom(this.api.clearPollEligibilityEnrollments(pollId));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.eligibilityEntries.set(result.entries);
+      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
       this.snackBar.open('Lista de matrículas limpa.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível limpar a lista.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível limpar a lista.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.importingEligibility.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.importingEligibility.set(false);
+      }
     }
   }
 
@@ -134,8 +174,14 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     return entry.people.map((person) => person.name).join(', ');
   }
 
-  protected async loadEligibilityEnrollments(showLoading = true): Promise<void> {
+  protected async loadEligibilityEnrollments(
+    showLoading = true,
+    selectionGeneration = this.currentPollSelectionGeneration(),
+  ): Promise<void> {
     const poll = this.builder.draft();
+    if (poll.id && !this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+      return;
+    }
     if (!poll.id || poll.voterEligibilitySource !== 'enrollmentList') {
       this.eligibilityEntries.set([]);
       return;
@@ -147,11 +193,18 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
 
     try {
       const result = await firstValueFrom(this.api.listPollEligibilityEnrollments(poll.id));
+      if (!this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        return;
+      }
       this.eligibilityEntries.set(result.entries);
     } catch {
-      this.snackBar.open('Não foi possível carregar as matrículas habilitadas.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        this.snackBar.open('Não foi possível carregar as matrículas habilitadas.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.loadingEligibility.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
+        this.loadingEligibility.set(false);
+      }
     }
   }
 

@@ -173,6 +173,38 @@ describe('poll vote answer-state helpers', () => {
     });
   });
 
+  it('keeps indexed invitees paired while editing out of order and normalizes empty rows on submit', () => {
+    let answers = setSchedulingInviteeAnswer({}, 'schedule', 2, 'name', 'Carla');
+    answers = setSchedulingInviteeAnswer(answers, 'schedule', 2, 'email', 'carla@example.com');
+    answers = setSchedulingInviteeAnswer(answers, 'schedule', 0, 'name', 'Ana');
+    answers = setSchedulingInviteeAnswer(answers, 'schedule', 0, 'email', 'ana@example.com');
+
+    expect(readSchedulingAnswer(answers['schedule'])).toEqual({
+      slotId: '',
+      invitees: [
+        { name: 'Ana', email: 'ana@example.com' },
+        { name: '', email: '' },
+        { name: 'Carla', email: 'carla@example.com' },
+      ],
+    });
+
+    const poll = {
+      ...schedulingElement,
+      elements: [schedulingElement],
+    } as unknown as Parameters<typeof buildPollResponseAnswers>[0];
+    const submitted = buildPollResponseAnswers(poll, {
+      schedule: { slotId: 'window:09:15', invitees: readSchedulingAnswer(answers['schedule']).invitees },
+    });
+
+    expect(submitted[0]?.value).toEqual({
+      slotId: 'window:09:15',
+      invitees: [
+        { name: 'Ana', email: 'ana@example.com' },
+        { name: 'Carla', email: 'carla@example.com' },
+      ],
+    });
+  });
+
   it('reads answer values and selected states defensively', () => {
     const answers = {
       number: 4,
@@ -474,7 +506,11 @@ describe('poll vote scheduling helpers', () => {
       }),
     ).toEqual({
       slotId: 'window:09:15',
-      invitees: [{ name: 'Ana', email: 'ana@example.com' }, { name: '', email: '' }],
+      invitees: [
+        { name: 'Ana', email: 'ana@example.com' },
+        { name: '', email: '' },
+        { name: '', email: '' },
+      ],
     });
   });
 });

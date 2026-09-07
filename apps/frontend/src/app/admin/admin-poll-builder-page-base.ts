@@ -6,6 +6,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   AdminCacicElectionSlate,
   EventManagerEvent,
+  Poll,
   PollEligibilityEnrollment,
   PollResults,
   PollSummary,
@@ -28,6 +29,7 @@ import {
   supportsVerifiedUnespRoleRequirement,
 } from '../polls/poll-metadata';
 import { PollBuilderDraftService } from './poll-builder-draft.service';
+import { PollResultsFinalizationState } from '../polls/poll-results-reconciliation';
 
 export abstract class AdminPollBuilderPageBase {
   protected readonly api = inject(PollApiService);
@@ -42,6 +44,7 @@ export abstract class AdminPollBuilderPageBase {
 
   protected resultsEvents?: EventSource;
   protected readonly builder = inject(PollBuilderDraftService);
+  protected readonly authoritativePoll = signal<Poll | null>(null);
   protected readonly polls = signal<PollSummary[]>([]);
   protected readonly linkableEvents = signal<EventManagerEvent[]>([]);
   protected readonly eligibilityEntries = signal<PollEligibilityEnrollment[]>([]);
@@ -84,6 +87,9 @@ export abstract class AdminPollBuilderPageBase {
     'image/avif,image/bmp,image/gif,image/heic,image/heif,image/jpeg,image/png,image/tiff,image/webp';
   protected readonly manualEnrollmentNumbers = signal('');
   protected readonly results = signal<PollResults | null>(null);
+  protected readonly resultsFinalizationState = signal<PollResultsFinalizationState>('idle');
+  protected readonly resultsFinalizationError = signal<string | null>(null);
+  protected readonly pendingFinalResultsPollId = signal<string | null>(null);
   protected readonly loadingResults = signal(false);
   protected readonly exportingCacicElectionVoters = signal(false);
   protected readonly selectedResultsElementId = signal<string | null>(null);
@@ -162,17 +168,72 @@ export abstract class AdminPollBuilderPageBase {
     );
   });
 
-  protected abstract loadEligibilityEnrollments(showLoading?: boolean): Promise<void>;
+  protected abstract loadEligibilityEnrollments(showLoading?: boolean, selectionGeneration?: number): Promise<void>;
   protected abstract resetResults(): void;
+
+  private pollSelectionGeneration = 0;
+
+  protected beginPollSelection(): number {
+    return ++this.pollSelectionGeneration;
+  }
+
+  protected invalidatePollSelection(): void {
+    this.pollSelectionGeneration += 1;
+  }
+
+  protected currentPollSelectionGeneration(): number {
+    return this.pollSelectionGeneration;
+  }
+
+  protected isPollSelectionCurrent(generation: number, pollId?: string): boolean {
+    return generation === this.pollSelectionGeneration && (!pollId || this.builder.draft().id === pollId);
+  }
+
+  protected setServerPoll(poll: Poll): void {
+    this.authoritativePoll.set(poll);
+    this.builder.setDraft(poll);
+  }
+
+  protected async synchronizePollVersion(
+    pollId: string,
+    expectedUpdatedAt: string,
+    generation = this.currentPollSelectionGeneration(),
+  ): Promise<void> {
+    const latest = await firstValueFrom(this.api.getAdminPoll(pollId));
+    if (!this.isPollSelectionCurrent(generation, pollId)) {
+      return;
+    }
+
+    const baseline = this.authoritativePoll();
+    if (baseline && !this.samePollContent(baseline, latest)) {
+      return;
+    }
+
+    if (this.builder.draft().updatedAt === expectedUpdatedAt) {
+      this.builder.setDraftUpdatedAt(latest.updatedAt);
+      this.authoritativePoll.set({ ...(baseline ?? latest), updatedAt: latest.updatedAt });
+    }
+  }
+
+  private samePollContent(left: Poll, right: Poll): boolean {
+    const withoutVersion = (poll: Poll): string => JSON.stringify({ ...poll, updatedAt: undefined });
+    return withoutVersion(left) === withoutVersion(right);
+  }
 
   protected newPoll(): void {
     if (this.isReadOnlyAdmin()) {
       return;
     }
 
+    this.invalidatePollSelection();
+    this.authoritativePoll.set(null);
     this.builder.newPoll();
     this.eligibilityEntries.set([]);
+    this.loadingEligibility.set(false);
     this.slates.set([]);
+    this.loadingSlates.set(false);
+    this.importingEligibility.set(false);
+    this.savingSlate.set(false);
     this.editingSlate.set(null);
     this.manualEnrollmentNumbers.set('');
     this.resetResults();

@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 import { EventManagerEvent, Poll, PollEligibilityEnrollment, PollElement, PollResults, PollSummary } from '@org/voting-contracts';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from '../polls/poll-api.service';
 import { PermissionsService } from '../auth/permissions.service';
@@ -249,6 +249,8 @@ describe('AdminPollBuilderPageComponent', () => {
     };
     component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
     component.manualEnrollmentNumbers.set(' 261200001 \n\n261200002 ');
+    const refreshedVersion = '2026-06-01T10:00:01.000Z';
+    vi.mocked(api.getAdminPoll).mockReturnValueOnce(of({ ...poll, updatedAt: refreshedVersion }));
 
     await component.addManualEnrollmentNumbers();
 
@@ -256,6 +258,7 @@ describe('AdminPollBuilderPageComponent', () => {
       enrollmentNumbers: ['261200001', '261200002'],
     });
     expect(component.eligibilityEntries()).toEqual([eligibilityEntry]);
+    expect(component.builder.draft().updatedAt).toBe(refreshedVersion);
     expect(component.manualEnrollmentNumbers()).toBe('');
     expect(snackBar.open).toHaveBeenCalledWith('1 matrículas adicionadas.', 'OK', { duration: 3500 });
   });
@@ -613,6 +616,39 @@ describe('AdminPollBuilderPageComponent', () => {
     confirm.mockRestore();
   });
 
+  it('keeps the latest admin poll selection when an earlier load resolves later', async () => {
+    const firstPoll = new Subject<Poll>();
+    const secondPoll = new Subject<Poll>();
+    const pollB = { ...poll, id: 'poll-2', title: 'Outra votação' };
+    vi.mocked(api.getAdminPoll).mockImplementation((id: string) =>
+      (id === poll.id ? firstPoll : secondPoll).asObservable(),
+    );
+    vi.mocked(api.getAdminPollResults).mockImplementation((id: string) =>
+      of({ pollId: id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
+    );
+
+    const component = fixture.componentInstance as unknown as {
+      builder: PollBuilderDraftService;
+      results: { (): PollResults | null };
+      selectPoll(id: string): Promise<void>;
+    };
+    const firstLoad = component.selectPoll(poll.id);
+    const secondLoad = component.selectPoll(pollB.id);
+    secondPoll.next(pollB);
+    secondPoll.complete();
+    await secondLoad;
+
+    firstPoll.next(poll);
+    firstPoll.complete();
+    await firstLoad;
+
+    expect(component.builder.draft().id).toBe(pollB.id);
+    expect(component.builder.draft().title).toBe(pollB.title);
+    expect(component.results()?.pollId).toBe(pollB.id);
+    expect(api.openAdminPollResultsEvents).toHaveBeenCalledWith(pollB.id);
+    expect(api.openAdminPollResultsEvents).not.toHaveBeenCalledWith(poll.id);
+  });
+
   it('should apply live admin result snapshots and close event sources', async () => {
     const source = { close: vi.fn(), onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined };
     const initialResults: PollResults = {
@@ -657,6 +693,50 @@ describe('AdminPollBuilderPageComponent', () => {
 
     component.ngOnDestroy();
     expect(source.close).toHaveBeenCalled();
+  });
+
+  it('keeps final admin results recoverable when reconciliation temporarily fails', async () => {
+    const source = {
+      close: vi.fn(),
+      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+    };
+    const initialResults: PollResults = {
+      pollId: poll.id,
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 1,
+      responses: [],
+    };
+    const finalResults = { ...initialResults, responseCount: 2 };
+    vi.mocked(api.getAdminPollResults)
+      .mockReturnValueOnce(of(initialResults))
+      .mockReturnValueOnce(throwError(() => new Error('temporary outage')))
+      .mockReturnValueOnce(of(finalResults));
+    vi.mocked(api.openAdminPollResultsEvents).mockReturnValueOnce(source as unknown as EventSource);
+    vi.mocked(api.parseResultsDelta).mockReturnValueOnce({
+      pollId: poll.id,
+      final: true,
+      responseCount: 1,
+      responses: [],
+    });
+
+    const component = fixture.componentInstance as unknown as {
+      builder: PollBuilderDraftService;
+      loadResults(showLoading?: boolean): Promise<void>;
+      resultsFinalizationState: { (): string };
+      retryFinalResults(): void;
+    };
+    component.builder.setDraft({ ...poll, id: poll.id });
+    await component.loadResults();
+    source.onmessage?.({ data: '{}' } as MessageEvent<string>);
+    await new Promise<void>((resolve) => setTimeout(resolve));
+
+    expect(component.resultsFinalizationState()).toBe('failed');
+    component.retryFinalResults();
+    await new Promise<void>((resolve) => setTimeout(resolve));
+
+    expect(component.resultsFinalizationState()).toBe('complete');
+    expect(source.close).toHaveBeenCalledOnce();
   });
 
   it('should build charts for scalar, raw, dropdown, grid, and scheduling answers', () => {

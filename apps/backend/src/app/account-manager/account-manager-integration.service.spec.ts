@@ -72,6 +72,17 @@ describe('AccountManagerIntegrationService', () => {
     );
   });
 
+  it('treats omitted repeated protobuf fields as empty lookup results', async () => {
+    call.mockResolvedValue({});
+
+    await expect(service.lookupPeopleByEnrollmentNumbers(['123'])).resolves.toEqual([]);
+    await expect(
+      service.lookupPeopleByIdentifiers([
+        { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
+      ]),
+    ).resolves.toEqual(new Map());
+  });
+
   it('validates TOTP once and resolves the same fresh Account Manager identity', async () => {
     call
       .mockResolvedValueOnce({

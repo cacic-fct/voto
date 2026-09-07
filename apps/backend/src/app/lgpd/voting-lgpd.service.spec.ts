@@ -1,24 +1,32 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { VotingLgpdService } from './voting-lgpd.service';
 import { Prisma } from '@prisma/client';
-import { ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 
 type PrismaMock = {
   $transaction: jest.Mock;
+  $executeRaw: jest.Mock;
+  votingDeletionRequest: { findUnique: jest.Mock; upsert: jest.Mock };
+  revokedVotingSubject: { findUnique: jest.Mock; upsert: jest.Mock };
   user: { findUnique: jest.Mock; updateMany: jest.Mock; create: jest.Mock; delete: jest.Mock };
+  pollAdminAudit: { findMany: jest.Mock; updateMany: jest.Mock };
   pollImage: { updateMany: jest.Mock };
   pollResponse: { findMany: jest.Mock; updateMany: jest.Mock };
   pollVoter: { findMany: jest.Mock; updateMany: jest.Mock };
   poll: { findMany: jest.Mock; updateMany: jest.Mock };
   pollEligibilityEnrollment: { findMany: jest.Mock; updateMany: jest.Mock };
   cacicElectionSlate: { findMany: jest.Mock; updateMany: jest.Mock };
-  cacicElectionSlateMember: { findMany: jest.Mock };
+  cacicElectionSlateMember: { findMany: jest.Mock; updateMany: jest.Mock };
 };
 
 function createPrismaMock(): PrismaMock {
   return {
     $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
+    votingDeletionRequest: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockImplementation(({ create }) => Promise.resolve(create)) },
+    revokedVotingSubject: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
     user: { findUnique: jest.fn(), updateMany: jest.fn(), create: jest.fn(), delete: jest.fn() },
+    pollAdminAudit: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     pollImage: { updateMany: jest.fn() },
     pollResponse: { findMany: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     pollVoter: { findMany: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
@@ -28,18 +36,46 @@ function createPrismaMock(): PrismaMock {
       findMany: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
-    cacicElectionSlateMember: { findMany: jest.fn() },
+    cacicElectionSlateMember: { findMany: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   };
 }
 
 describe('VotingLgpdService', () => {
-  it('fails closed until durable LGPD scheduling state is available', async () => {
-    const service = new VotingLgpdService(createPrismaMock() as unknown as PrismaService);
+  it('persists schedule and cancellation, and rejects delayed deletion after cancellation', async () => {
+    const prisma = createPrismaMock();
+    const requests = new Map<string, { state: string }>();
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.votingDeletionRequest.findUnique.mockImplementation(({ where }) => Promise.resolve(requests.get(where.requestHash) ?? null));
+    prisma.votingDeletionRequest.upsert.mockImplementation(({ where, create, update }) => {
+      const record = requests.has(where.requestHash) ? { ...requests.get(where.requestHash), ...update } : create;
+      requests.set(where.requestHash, record);
+      return Promise.resolve(record);
+    });
+    const input = { requestId: 'request-1', userId: 'requester' };
+    const service = new VotingLgpdService(prisma as unknown as PrismaService);
+    await expect(service.scheduleDeletion(input)).resolves.toMatchObject({ success: true, state: 'pending', executionOwner: 'account_manager' });
+    // A new service instance uses the persisted ledger, with no timer to restore.
+    const restarted = new VotingLgpdService(prisma as unknown as PrismaService);
+    await expect(restarted.cancelDeletion(input)).resolves.toMatchObject({ success: true, state: 'cancelled' });
+    await expect(restarted.cancelDeletion(input)).resolves.toMatchObject({ success: true, state: 'cancelled' });
+    await expect(restarted.scheduleDeletion(input)).rejects.toBeInstanceOf(ConflictException);
+    await expect(restarted.hardDelete(input)).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+    expect(prisma.revokedVotingSubject.upsert).not.toHaveBeenCalled();
+  });
 
-    await expect(service.scheduleDeletion({ requestId: 'request-1', userId: 'requester' }))
-      .rejects.toBeInstanceOf(ServiceUnavailableException);
-    await expect(service.cancelDeletion({ requestId: 'request-1', userId: 'requester' }))
-      .rejects.toBeInstanceOf(ServiceUnavailableException);
+  it('keeps a subject revocation stable across different request IDs without plaintext identifiers', async () => {
+    const prisma = createPrismaMock();
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.revokedVotingSubject.findUnique.mockResolvedValue({ subjectHash: 'previous' });
+    const service = new VotingLgpdService(prisma as unknown as PrismaService);
+    await service.hardDelete({ requestId: 'first', userId: 'subject' });
+    await expect(service.hardDelete({ requestId: 'second', userId: 'subject' })).resolves.toMatchObject({ success: true, alreadyAnonymized: true });
+    const first = prisma.revokedVotingSubject.upsert.mock.calls[0][0];
+    expect(first).toEqual(prisma.revokedVotingSubject.upsert.mock.calls[1][0]);
+    expect(first.create.subjectHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(first)).not.toContain('"subject"');
   });
 
   it('exports only records selected by the requested user ID and omits unrelated identity fields', async () => {
@@ -100,7 +136,7 @@ describe('VotingLgpdService', () => {
     const service = new VotingLgpdService(prisma as unknown as PrismaService);
 
     await expect(service.collectUserData({ userId: 'requester', email: 'other@example.com' })).resolves.toMatchObject({
-      metadata: { source: 'cacic_voto', userId: 'requester' },
+      metadata: { source: 'cacic_voto', userId: 'requester', identityInventoryComplete: false },
       pollVotes: [{ pollId: 'poll-1' }],
       pollManagement: [{ id: 'poll-2', createdByRequester: true, updatedByRequester: false }],
       cacicElectionSlateActivities: [{ id: 'slate-1', submittedByRequester: true, reviewedByRequester: false }],
@@ -121,7 +157,7 @@ describe('VotingLgpdService', () => {
       }),
     );
     expect(prisma.cacicElectionSlateMember.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { identifierType: 'EMAIL', identifierValue: 'requester@example.com' },
+      where: { verifiedSubjectHash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     }));
     expect(prisma.cacicElectionSlate.findMany.mock.calls[0][0].select).not.toHaveProperty('members');
     expect(prisma.pollResponse.findMany.mock.calls[0][0].select).not.toHaveProperty('poll');
@@ -141,6 +177,8 @@ describe('VotingLgpdService', () => {
       success: true,
       usersAnonymized: 1,
       relatedRecordsAnonymized: 2,
+      identityInventoryComplete: false,
+      retainedUnlinkedData: ['legacy_unlinked_slate_member_identity_fields', 'eligibility_enrollment_numbers'],
     });
     expect(prisma.user.create).toHaveBeenCalledWith({
       data: {
@@ -155,6 +193,22 @@ describe('VotingLgpdService', () => {
       where: { createdById: 'requester' },
       data: { createdById: expect.stringMatching(/^anonymized:[a-f0-9]{64}$/) },
     });
+  });
+
+  it('redacts verified slate memberships even when the subject has no local profile', async () => {
+    const prisma = createPrismaMock();
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.cacicElectionSlateMember.updateMany.mockResolvedValue({ count: 2 });
+    const service = new VotingLgpdService(prisma as unknown as PrismaService);
+    await expect(service.hardDelete({ requestId: 'redact', userId: 'member-only' })).resolves.toMatchObject({
+      success: true, usersAnonymized: 0, relatedRecordsAnonymized: 2,
+    });
+    expect(prisma.cacicElectionSlateMember.updateMany).toHaveBeenCalledWith({
+      where: { verifiedSubjectHash: expect.stringMatching(/^[a-f0-9]{64}$/), NOT: { identifierValue: { startsWith: 'anonymized:' } } },
+      data: { fullName: 'Anonimizado', enrollmentNumber: null, identifierValue: expect.stringMatching(/^anonymized:[a-f0-9]{64}$/) },
+    });
+    expect(prisma.pollVoter.updateMany).not.toHaveBeenCalled();
   });
 
   it('does not collide when two subjects use the same request id', async () => {
@@ -195,7 +249,7 @@ describe('VotingLgpdService', () => {
     });
   });
 
-  it('reports a failed deletion when the user does not exist', async () => {
+  it('completes deletion idempotently when the user does not exist', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.pollImage.updateMany.mockResolvedValue({ count: 0 });
@@ -203,7 +257,7 @@ describe('VotingLgpdService', () => {
     const service = new VotingLgpdService(prisma as unknown as PrismaService);
 
     await expect(service.hardDelete({ requestId: 'request-1', userId: 'missing' })).resolves.toMatchObject({
-      success: false,
+      success: true,
       usersAnonymized: 0,
     });
   });

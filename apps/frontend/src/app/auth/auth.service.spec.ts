@@ -73,10 +73,7 @@ describe('AuthService', () => {
     expect(service.isAuthenticated()).toBe(true);
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/session',
-      {
-        credentials: 'include',
-        method: 'GET',
-      },
+      expect.objectContaining({ credentials: 'include', method: 'GET', signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -197,10 +194,7 @@ describe('AuthService', () => {
     expect(service.consumePostLogoutRedirect()).toBe(false);
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/clear',
-      {
-        credentials: 'include',
-        method: 'POST',
-      },
+      expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
     );
     expect(redirectSpy).toHaveBeenCalledWith(rootUrl);
 
@@ -221,10 +215,7 @@ describe('AuthService', () => {
     expect(service.user()).toBeNull();
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/clear',
-      {
-        credentials: 'include',
-        method: 'POST',
-      },
+      expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
     );
     expect(redirectSpy).toHaveBeenCalledWith('#logged-out');
 
@@ -238,6 +229,34 @@ describe('AuthService', () => {
     expect(redirectSpy).toHaveBeenLastCalledWith(rootUrl);
 
     redirectSpy.mockRestore();
+  });
+
+  it('does not let a stalled account-tracking cleanup block logout', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.mocked(fetch);
+    let trackingSignal: AbortSignal | undefined;
+    fetchMock.mockImplementation((_input, init) => {
+      trackingSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    });
+    const internals = service as unknown as { redirectTo(url: string): void };
+    const redirectSpy = vi.spyOn(internals, 'redirectTo').mockImplementation(() => undefined);
+    service.user.set(user);
+
+    const logout = service.logout();
+    const rootUrl = new URL('/', window.location.origin).toString();
+    http.expectOne('/api/auth/logout').flush({});
+    await logout;
+
+    expect(service.user()).toBeNull();
+    expect(redirectSpy).toHaveBeenCalledWith(rootUrl);
+    expect(trackingSignal?.aborted).toBe(false);
+
+    vi.advanceTimersByTime(3000);
+    expect(trackingSignal?.aborted).toBe(true);
+
+    redirectSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it('shares an in-flight refresh request and reloads the user after success', async () => {
@@ -268,6 +287,21 @@ describe('AuthService', () => {
     http.expectOne('/api/auth/refresh').flush({} as AuthRefreshResult);
     http.expectOne('/api/auth/me').flush(null);
     await nextRefresh;
+  });
+
+  it('preserves the current session when the identity provider is temporarily unavailable', async () => {
+    service.user.set(user);
+
+    const refresh = firstValueFrom(service.refreshTokenSilently());
+    http
+      .expectOne('/api/auth/refresh')
+      .flush(
+        { code: 'KEYCLOAK_UNAVAILABLE', message: 'Identity provider is temporarily unavailable.' },
+        { status: 503, statusText: 'Service Unavailable' },
+      );
+
+    await expect(refresh).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(service.user()).toEqual(user);
   });
 
   it('deduplicates permission evaluation requests', async () => {

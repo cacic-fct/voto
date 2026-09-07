@@ -7,6 +7,7 @@ import {
   PollVoterEligibilitySource,
 } from '@org/voting-contracts';
 import { AnswerMap, responseAnswersToAnswerMap } from './poll-vote-answer-state';
+import { readSchedulingAnswer } from './poll-vote-scheduling';
 import { voterEligibilityDeniedMessage } from './poll-vote-metadata';
 
 export type SubmittedResponseStateUpdate = {
@@ -20,8 +21,25 @@ export function buildPollResponseAnswers(
 ): PollResponseAnswer[] {
   return poll.elements.map((element) => ({
     elementId: element.id,
-    value: answers[element.id] ?? null,
+    value: normalizeAnswerValueForSubmission(element, answers[element.id] ?? null),
   }));
+}
+
+function normalizeAnswerValueForSubmission(
+  element: Poll['elements'][number],
+  value: PollResponseAnswer['value'],
+): PollResponseAnswer['value'] {
+  if (element.type !== 'scheduling' || value === null) {
+    return value;
+  }
+
+  const answer = readSchedulingAnswer(value);
+  return {
+    ...answer,
+    invitees: answer.invitees.filter(
+      (invitee) => invitee.name.trim().length > 0 || Boolean(invitee.email?.trim()),
+    ),
+  };
 }
 
 export function submittedResponseStateUpdate(

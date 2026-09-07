@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { EventManagerEvent, Poll, PollSummary } from '@org/voting-contracts';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
@@ -25,6 +25,7 @@ import { publicReadablePollWhere, shouldRequireVotingEligibilityForRead } from '
 
 @Injectable()
 export class PollQueryService {
+  private readonly logger = new Logger(PollQueryService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventManager: EventManagerIntegrationService,
@@ -75,21 +76,39 @@ export class PollQueryService {
       return polls.map((poll) => this.toPollSummary(poll));
     }
 
-    const readablePolls = await Promise.all(
-      polls.map(async (poll) => {
+    const readablePolls: typeof polls = [];
+    const attendanceChecks = new Map<string, Promise<void>>();
+    let unavailableCount = 0;
+    // Bound fan-out, and share equivalent attendance checks for this user/request.
+    for (let offset = 0; offset < polls.length; offset += 4) {
+      const batch = await Promise.all(polls.slice(offset, offset + 4).map(async (poll) => {
         try {
-          await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user ?? undefined));
+          const voter = requireAuthenticatedVoter(user ?? undefined);
+          const key = poll.voterEligibilitySource.startsWith('EVENT_ATTENDANCE')
+            ? JSON.stringify([poll.voterEligibilitySource, poll.linkedEventId, poll.requireVerifiedUnespRole])
+            : undefined;
+          let check = key ? attendanceChecks.get(key) : undefined;
+          if (!check) {
+            check = this.eligibility.ensureVotingAllowed(poll, voter, this.prisma, { remoteTimeoutMs: 2_000 });
+            if (key) attendanceChecks.set(key, check);
+          }
+          await check;
           return poll;
         } catch (error: unknown) {
-          if (error instanceof ForbiddenException || error instanceof UnauthorizedException) {
+          if (error instanceof ForbiddenException || error instanceof UnauthorizedException) return null;
+          if (error instanceof ServiceUnavailableException) {
+            unavailableCount += 1;
             return null;
           }
           throw error;
         }
-      }),
-    );
-
-    return readablePolls.filter((poll): poll is (typeof polls)[number] => poll !== null).map((poll) => this.toPollSummary(poll));
+      }));
+      readablePolls.push(...batch.filter((poll): poll is (typeof polls)[number] => poll !== null));
+    }
+    if (unavailableCount) {
+      this.logger.warn(`Omitted ${unavailableCount} catalog entries because eligibility verification was unavailable.`);
+    }
+    return readablePolls.map((poll) => this.toPollSummary(poll));
   }
 
   async getAdminPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {

@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, convertToParamMap, provideRouter } from '@angular/router';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -11,7 +11,7 @@ import {
   PollResults,
   SubmitCacicElectionSlateRequest,
 } from '@org/voting-contracts';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from './poll-api.service';
 import { PollVotePageComponent } from './poll-vote-page.component';
@@ -1236,5 +1236,192 @@ describe('PollVotePageComponent', () => {
       ['/admin/polls', 'poll-1', 'kiosk'],
       { replaceUrl: true, queryParams: { registered: '1' } },
     );
+  });
+
+  it('reloads the current poll when the reused route parameter changes', async () => {
+    TestBed.resetTestingModule();
+    const routeParams = new Subject<ParamMap>();
+    const pollB = { ...poll, id: 'poll-2', title: 'Outra votação' };
+    const dynamicApi = {
+      ...api,
+      getPublicPoll: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
+      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: dynamicApi },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: routeParams.asObservable(),
+            snapshot: {
+              data: {},
+              paramMap: convertToParamMap({ id: poll.id }),
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const dynamicFixture = TestBed.createComponent(PollVotePageComponent);
+    dynamicFixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    routeParams.next(convertToParamMap({ id: pollB.id }));
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    dynamicFixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    dynamicFixture.detectChanges();
+
+    expect(dynamicApi.getPublicPoll).toHaveBeenCalledWith(pollB.id);
+    expect(dynamicFixture.nativeElement.textContent).toContain(pollB.title);
+    expect(dynamicFixture.nativeElement.textContent).not.toContain(poll.title);
+    dynamicFixture.destroy();
+  });
+
+  it('ignores a pending response submission after the poll load generation changes', async () => {
+    const pendingResponse = new Subject<PollResponse>();
+    vi.mocked(api.submitResponse).mockReturnValueOnce(pendingResponse.asObservable());
+    const component = fixture.componentInstance as unknown as {
+      submit(poll: Poll): Promise<void>;
+      invalidatePollLoad(): void;
+      responseState: () => { hasSubmitted: boolean };
+    };
+
+    const submission = component.submit(poll);
+    component.invalidatePollLoad();
+    pendingResponse.next(response);
+    pendingResponse.complete();
+    await submission;
+
+    expect(component.responseState()).toMatchObject({ hasSubmitted: false });
+  });
+
+  it('ignores a pending slate submission after the poll load generation changes', async () => {
+    const pendingSlate = new Subject<{ id: string }>();
+    vi.mocked(api.submitCacicElectionSlate).mockReturnValueOnce(pendingSlate.asObservable());
+    const component = fixture.componentInstance as unknown as {
+      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
+      invalidatePollLoad(): void;
+      error: () => string | null;
+    };
+    const slatePoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'slateSubmission' } satisfies Poll;
+
+    const submission = component.submitSlate(slatePoll, { name: 'Chapa', members: [] });
+    component.invalidatePollLoad();
+    pendingSlate.next({ id: 'slate-1' });
+    pendingSlate.complete();
+    await submission;
+
+    expect(component.error()).toBeNull();
+  });
+
+  it('invalidates vote availability when the scheduled opening boundary passes', async () => {
+    TestBed.resetTestingModule();
+    vi.useFakeTimers();
+    const start = new Date('2026-09-07T12:00:00.000Z');
+    vi.setSystemTime(start);
+    const futurePoll = {
+      ...poll,
+      votingStartsAt: new Date(start.getTime() + 1000).toISOString(),
+      votingEndsAt: new Date(start.getTime() + 3600000).toISOString(),
+    };
+    const clockApi = {
+      ...api,
+      getPublicPoll: vi.fn().mockReturnValue(of(futurePoll)),
+      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: clockApi },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              data: {},
+              paramMap: convertToParamMap({ id: poll.id }),
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const clockFixture = TestBed.createComponent(PollVotePageComponent);
+    clockFixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    clockFixture.detectChanges();
+    const component = clockFixture.componentInstance as unknown as {
+      canVote: () => boolean;
+    };
+    expect(component.canVote()).toBe(false);
+
+    vi.advanceTimersByTime(1000);
+    clockFixture.detectChanges();
+    expect(component.canVote()).toBe(true);
+
+    clockFixture.destroy();
+    vi.useRealTimers();
+  });
+
+  it('uses the current time when a poll loads after its opening boundary', async () => {
+    TestBed.resetTestingModule();
+    vi.useFakeTimers();
+    const start = new Date('2026-09-07T12:00:00.000Z');
+    vi.setSystemTime(start);
+    const pendingPoll = new Subject<Poll>();
+    const delayedPoll = {
+      ...poll,
+      votingStartsAt: new Date(start.getTime() + 1000).toISOString(),
+      votingEndsAt: new Date(start.getTime() + 3600000).toISOString(),
+    };
+    const clockApi = {
+      ...api,
+      getPublicPoll: vi.fn().mockReturnValue(pendingPoll),
+      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollVotePageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: clockApi },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              data: {},
+              paramMap: convertToParamMap({ id: poll.id }),
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const clockFixture = TestBed.createComponent(PollVotePageComponent);
+    clockFixture.detectChanges();
+    vi.advanceTimersByTime(2000);
+    pendingPoll.next(delayedPoll);
+    pendingPoll.complete();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    clockFixture.detectChanges();
+
+    const component = clockFixture.componentInstance as unknown as { canVote: () => boolean };
+    expect(component.canVote()).toBe(true);
+
+    clockFixture.destroy();
+    vi.useRealTimers();
   });
 });

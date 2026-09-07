@@ -610,6 +610,7 @@ test('manages enrollment-list eligibility from the admin builder', async ({
     voterEligibilitySource: 'enrollmentList',
   } satisfies Poll;
   let addedRequest: unknown;
+  const updatedRequests: unknown[] = [];
   let removedEnrollment: string | null = null;
   let cleared = false;
 
@@ -623,6 +624,9 @@ test('manages enrollment-list eligibility from the admin builder', async ({
     },
     onAddEnrollment: (request) => {
       addedRequest = request;
+    },
+    onUpdate: (request) => {
+      updatedRequests.push(request);
     },
     onClearEligibility: () => {
       cleared = true;
@@ -641,6 +645,9 @@ test('manages enrollment-list eligibility from the admin builder', async ({
   await page.locator('.manual-enrollment-row textarea').fill('241200001');
   await page.getByRole('button', { name: /^Adicionar$/ }).click();
   await expect(page.getByText('241200001')).toBeVisible();
+  await page.getByRole('button', { name: /Salvar/ }).click();
+  await expect(page.getByText('Votação salva.')).toBeVisible();
+  expect(updatedRequests[0]).toEqual(expect.objectContaining({ expectedUpdatedAt: expect.any(String) }));
   await page.getByRole('button', { name: /Limpar/ }).click();
   await page.locator('.manual-enrollment-row textarea').fill('241200001');
   await page.getByRole('button', { name: /^Adicionar$/ }).click();
@@ -811,6 +818,7 @@ type AdminMocks = {
   onDelete?: () => void;
   onDeleteEnrollment?: (enrollmentNumber: string) => void;
   onStatus?: (status: string) => void;
+  onUpdate?: (request: unknown) => void;
   results?: PollResults;
   summaries?: PollSummary[];
 };
@@ -819,6 +827,13 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
   let currentPoll = mocks.initialPoll ?? poll;
   let summaries = mocks.summaries ?? [pollToSummary(currentPoll)];
   let eligibility = mocks.eligibility ?? { entries: [], totalCount: 0 };
+
+  const advancePollVersion = (): void => {
+    const currentTimestamp = Date.parse(currentPoll.updatedAt);
+    const nextTimestamp = Number.isNaN(currentTimestamp) ? Date.now() : currentTimestamp + 1000;
+    currentPoll = { ...currentPoll, updatedAt: new Date(nextTimestamp).toISOString() };
+    summaries = [pollToSummary(currentPoll)];
+  };
 
   await page.route('**/api/admin/polls', async (route) => {
     const method = route.request().method();
@@ -854,8 +869,17 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
     }
 
     if (method === 'PUT') {
-      const request = route.request().postDataJSON();
-      currentPoll = { ...currentPoll, ...request } as Poll;
+      const request = route.request().postDataJSON() as Record<string, unknown>;
+      if (request['expectedUpdatedAt'] !== currentPoll.updatedAt) {
+        await route.fulfill({ status: 409, json: { message: 'Poll version conflict.' } });
+        return;
+      }
+
+      mocks.onUpdate?.(request);
+      const changes = { ...request };
+      delete changes['expectedUpdatedAt'];
+      currentPoll = { ...currentPoll, ...changes } as Poll;
+      advancePollVersion();
       await route.fulfill({ json: currentPoll });
       return;
     }
@@ -885,6 +909,53 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
       },
     });
   });
+
+  await page.route(
+    '**/api/admin/polls/*/eligibility-enrollments/import',
+    async (route) => {
+      if (route.request().method() !== 'PUT') {
+        await route.fulfill({ status: 405 });
+        return;
+      }
+
+      const request = route.request().postDataJSON() as {
+        content?: string;
+        mode?: 'append' | 'replace';
+      };
+      const enrollmentNumbers = (request.content ?? '')
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const replacedCount = request.mode === 'replace' ? eligibility.totalCount : 0;
+      if (request.mode === 'replace') {
+        eligibility = { entries: [], totalCount: 0 };
+      }
+      const existing = new Set(eligibility.entries.map((entry) => entry.enrollmentNumber));
+      const newEntries = enrollmentNumbers
+        .filter((enrollmentNumber) => !existing.has(enrollmentNumber))
+        .map((enrollmentNumber) => ({
+          pollId: currentPoll.id,
+          enrollmentNumber,
+          createdAt: now,
+          people: [],
+        }));
+      eligibility = {
+        entries: [...eligibility.entries, ...newEntries],
+        totalCount: eligibility.totalCount + newEntries.length,
+      };
+      advancePollVersion();
+      await route.fulfill({
+        json: {
+          ...eligibility,
+          createdCount: newEntries.length,
+          duplicateCount: enrollmentNumbers.length - newEntries.length,
+          existingCount: enrollmentNumbers.length - newEntries.length,
+          invalidCount: 0,
+          replacedCount,
+        },
+      });
+    },
+  );
 
   await page.route(
     '**/api/admin/polls/*/eligibility-enrollments',
@@ -917,6 +988,7 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
           ),
           totalCount: request.enrollmentNumbers?.length ?? 0,
         };
+        advancePollVersion();
         await route.fulfill({
           status: 201,
           json: {
@@ -931,9 +1003,50 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
         return;
       }
 
+      if (method === 'PUT') {
+        const request = route.request().postDataJSON() as {
+          content?: string;
+          mode?: 'append' | 'replace';
+        };
+        const enrollmentNumbers = (request.content ?? '')
+          .split(/\r?\n/)
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (request.mode === 'replace') {
+          eligibility = { entries: [], totalCount: 0 };
+        }
+        const existing = new Set(eligibility.entries.map((entry) => entry.enrollmentNumber));
+        const newEntries = enrollmentNumbers
+          .filter((enrollmentNumber) => !existing.has(enrollmentNumber))
+          .map((enrollmentNumber) => ({
+            pollId: currentPoll.id,
+            enrollmentNumber,
+            createdAt: now,
+            people: [],
+          }));
+        eligibility = {
+          entries: [...eligibility.entries, ...newEntries],
+          totalCount: eligibility.totalCount + newEntries.length,
+        };
+        advancePollVersion();
+        await route.fulfill({
+          status: 200,
+          json: {
+            ...eligibility,
+            createdCount: newEntries.length,
+            duplicateCount: enrollmentNumbers.length - newEntries.length,
+            existingCount: enrollmentNumbers.length - newEntries.length,
+            invalidCount: 0,
+            replacedCount: request.mode === 'replace' ? 0 : undefined,
+          },
+        });
+        return;
+      }
+
       if (method === 'DELETE') {
         mocks.onClearEligibility?.();
         eligibility = { entries: [], totalCount: 0 };
+        advancePollVersion();
         await route.fulfill({ json: eligibility });
         return;
       }
@@ -953,6 +1066,7 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
         ),
         totalCount: Math.max(0, eligibility.totalCount - 1),
       };
+      advancePollVersion();
       await route.fulfill({ status: 204 });
     },
   );
@@ -960,13 +1074,18 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
   await page.route('**/api/admin/polls/*/status', async (route) => {
     const request = route.request().postDataJSON() as {
       status?: Poll['status'];
+      expectedUpdatedAt?: string;
     };
+    if (request.expectedUpdatedAt !== currentPoll.updatedAt) {
+      await route.fulfill({ status: 409, json: { message: 'Poll version conflict.' } });
+      return;
+    }
     mocks.onStatus?.(request.status ?? '');
     currentPoll = {
       ...currentPoll,
       status: request.status ?? currentPoll.status,
     };
-    summaries = [pollToSummary(currentPoll)];
+    advancePollVersion();
     await route.fulfill({ json: currentPoll });
   });
 }

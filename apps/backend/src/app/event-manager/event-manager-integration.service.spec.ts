@@ -75,6 +75,17 @@ describe('EventManagerIntegrationService', () => {
     );
   });
 
+  it('passes a bounded retry budget for vote-time attendance checks', async () => {
+    call.mockResolvedValue({ attended: true });
+    await expect(service.hasAttendance('event-1', 'user-1', { timeoutMs: 25, maxAttempts: 1 })).resolves.toBe(true);
+    expect(call).toHaveBeenCalledWith(
+      'CheckVotingAttendance',
+      { eventId: 'event-1', userId: 'user-1' },
+      authenticatedMetadata('token'),
+      { idempotent: true, maxAttempts: 1, timeoutMs: 25 },
+    );
+  });
+
   it('rejects an invalid attendance response', async () => {
     call.mockResolvedValue({ attended: 'true' });
     await expect(service.hasAttendance('event-1', 'user-1')).rejects.toEqual(

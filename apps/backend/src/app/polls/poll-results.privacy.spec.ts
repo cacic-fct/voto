@@ -19,7 +19,7 @@ describe('PollResultsService public privacy contracts', () => {
     votingEndsAt: null,
     publishedAt: new Date('2026-08-01T00:00:00.000Z'),
     createdAt: new Date('2026-08-01T00:00:00.000Z'),
-  } as never;
+  };
   const user = {
     sub: 'voter-1',
     claims: {},
@@ -136,6 +136,88 @@ describe('PollResultsService public privacy contracts', () => {
     expect(result.aggregates).toEqual(expect.any(Array));
     expect(JSON.stringify(result)).not.toContain('response-secret');
     expect(JSON.stringify(result)).not.toContain('ada@example.com');
+  });
+
+  it('keeps grid aggregate buckets distinct when row and column identifiers contain colons', async () => {
+    const { service, prisma } = createService();
+    (service as never as { getPollResultsMetadata: jest.Mock }).getPollResultsMetadata = jest.fn().mockResolvedValue({
+      ...metadata,
+      votingStyle: DbPollVotingStyle.ANONYMOUS,
+    });
+    prisma.pollElement.findMany.mockResolvedValue([{
+      id: 'grid-1',
+      type: 'SINGLE_SELECTION_GRID',
+      title: 'Grade',
+      description: null,
+      required: false,
+      settings: {
+        grid: {
+          rows: [
+            { id: 'a:b', label: 'Linha A:B', description: null, position: 0 },
+            { id: 'a', label: 'Linha A', description: null, position: 1 },
+          ],
+          columns: [
+            { id: 'c', label: 'Coluna C', description: null, position: 0 },
+            { id: 'b:c', label: 'Coluna B:C', description: null, position: 1 },
+          ],
+        },
+      },
+      position: 0,
+      options: [],
+    }]);
+    prisma.pollResponse.count.mockResolvedValue(2);
+    prisma.pollResponse.findMany.mockResolvedValue([
+      {
+        id: 'response-1',
+        pollId: 'poll-1',
+        submittedAt: null,
+        createdAt: new Date('2026-08-02T00:00:00.000Z'),
+        answers: [{ elementId: 'grid-1', value: { 'a:b': 'c' }, elementSnapshot: null }],
+        user: null,
+      },
+      {
+        id: 'response-2',
+        pollId: 'poll-1',
+        submittedAt: null,
+        createdAt: new Date('2026-08-02T00:00:01.000Z'),
+        answers: [{ elementId: 'grid-1', value: { a: 'b:c' }, elementSnapshot: null }],
+        user: null,
+      },
+    ]);
+
+    const result = await service.getPublicPollResults('poll-1', user);
+    const buckets = result.aggregates?.[0]?.buckets ?? [];
+    expect(buckets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rowId: 'a:b', columnId: 'c', count: 1 }),
+      expect.objectContaining({ rowId: 'a', columnId: 'b:c', count: 1 }),
+    ]));
+    expect(buckets).toHaveLength(2);
+  });
+
+  it('releases anonymous free-text answers without chronological ordering after close', async () => {
+    const { service, prisma } = createService();
+    const open = { ...metadata, votingStyle: DbPollVotingStyle.ANONYMOUS, status: DbPollStatus.PUBLISHED };
+    const closed = { ...open, status: DbPollStatus.CLOSED };
+    (service as unknown as { getPollResultsMetadata: jest.Mock }).getPollResultsMetadata = jest.fn()
+      .mockResolvedValueOnce(open).mockResolvedValueOnce(closed);
+    const chronological = ['c', 'a', 'b'].map((id, index) => ({
+      id, pollId: 'poll-1', submittedAt: null,
+      createdAt: new Date(Date.UTC(2026, 7, 2, 0, index)),
+      answers: [{ elementId: 'question-1', value: `Feedback ${id}`, elementSnapshot: null }], user: null,
+    }));
+    prisma.pollResponse.count.mockResolvedValue(3);
+    prisma.pollResponse.findMany.mockResolvedValue(chronological);
+    const openResult = await service.getAdminPollResults('poll-1');
+    const closedResult = await service.getAdminPollResults('poll-1');
+    expect(openResult).toMatchObject({ answersReleased: false, responses: [] });
+    expect(closedResult.responses.map((response) => response.id)).toEqual(['a', 'b', 'c']);
+    expect(closedResult.responses.map((response) => response.answers[0].value)).toEqual(['Feedback a', 'Feedback b', 'Feedback c']);
+    expect(JSON.stringify(closedResult.responses)).not.toContain('submittedAt');
+    expect(JSON.stringify(closedResult.responses)).not.toContain('createdAt');
+    expect(JSON.stringify(closedResult.responses)).not.toContain('voter');
+    expect(prisma.pollResponse.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ orderBy: [{ id: 'asc' }], skip: 0 }));
+    await service.getPollResultsDelta(closed, 1, 'admin');
+    expect(prisma.pollResponse.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ orderBy: [{ id: 'asc' }], skip: 1 }));
   });
 
   it('rejects live result reads for non-public voting styles to prevent timing correlation', async () => {

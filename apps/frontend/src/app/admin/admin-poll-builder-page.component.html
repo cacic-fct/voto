@@ -24,6 +24,7 @@
           type="button"
           role="listitem"
           [class.selected-list-item]="builder.draft().id === poll.id"
+          [disabled]="saving()"
           (click)="selectPoll(poll.id)">
           <span class="list-title">
             <mat-icon>ballot</mat-icon>
@@ -758,6 +759,19 @@
       }
 
       <mat-tab label="Resultados">
+        @if (resultsFinalizationState() === 'pending') {
+          <p aria-live="polite">Carregando os resultados finais…</p>
+        } @else if (resultsFinalizationState() === 'failed') {
+          <mat-card appearance="outlined" class="notice-card" aria-live="polite">
+            <mat-card-content>{{ resultsFinalizationError() }}</mat-card-content>
+            <mat-card-actions>
+              <button mat-stroked-button type="button" (click)="retryFinalResults()">
+                <mat-icon>refresh</mat-icon>
+                Tentar novamente
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        }
         @if (canExportCacicElectionVoters()) {
           <div class="tab-content">
             <section class="surface field-group">

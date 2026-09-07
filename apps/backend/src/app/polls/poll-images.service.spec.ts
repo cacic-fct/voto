@@ -9,11 +9,18 @@ import { UploadedPollImageFile } from './poll-image.utils';
 
 describe('PollImagesService', () => {
   const prisma = {
+    $transaction: jest.fn(),
+    pollObjectDeletion: {
+      create: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn(),
+      updateMany: jest.fn(), findMany: jest.fn(),
+    },
     poll: {
       findUnique: jest.fn(),
     },
     pollImage: {
       create: jest.fn(),
+      findMany: jest.fn(),
+      deleteMany: jest.fn(),
       delete: jest.fn(),
       findFirst: jest.fn(),
     },
@@ -52,13 +59,17 @@ describe('PollImagesService', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.pollImage.findFirst.mockResolvedValue(null);
+    prisma.pollImage.findMany.mockResolvedValue([]);
+    prisma.pollObjectDeletion.updateMany.mockResolvedValue({ count: 1 });
     service = new PollImagesService(prisma as unknown as PrismaService, s3 as unknown as S3Service);
   });
 
   it('converts uploads to AVIF, stores metadata, and maps the image URL', async () => {
     prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
-    s3.uploadFile.mockResolvedValue({ key: 'polls/poll-1/images/image-1.avif', size: 321 });
+    s3.uploadFile.mockImplementation(async (key: string) => ({ key, size: 321 }));
     prisma.pollImage.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
       ...data,
       altText: null,
@@ -115,11 +126,11 @@ describe('PollImagesService', () => {
 
   it('deletes the uploaded object when database persistence fails', async () => {
     prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
-    s3.uploadFile.mockResolvedValue({ key: 'polls/poll-1/images/image-1.avif', size: 321 });
+    s3.uploadFile.mockImplementation(async (key: string) => ({ key, size: 321 }));
     prisma.pollImage.create.mockRejectedValue(new Error('db failed'));
 
     await expect(service.uploadPollImage('poll-1', validFile, user)).rejects.toThrow('db failed');
-    expect(s3.deleteFile).toHaveBeenCalledWith('polls/poll-1/images/image-1.avif');
+    expect(s3.deleteFile).toHaveBeenCalledWith(expect.stringMatching(/^polls\/poll-1\/images\/.+\.avif$/));
   });
 
   it('serves eligible published images and blocks reads without access', async () => {
@@ -200,7 +211,7 @@ describe('PollImagesService', () => {
   });
 
   it('deletes image rows and storage objects', async () => {
-    prisma.pollImage.findFirst.mockResolvedValue({ objectKey: 'polls/poll-1/images/image-1.avif' });
+    prisma.pollImage.findFirst.mockResolvedValueOnce({ objectKey: 'polls/poll-1/images/image-1.avif' }).mockResolvedValue(null);
     prisma.pollImage.delete.mockResolvedValue({});
 
     await expect(service.deletePollImage('poll-1', 'image-1')).resolves.toBeUndefined();
@@ -220,6 +231,49 @@ describe('PollImagesService', () => {
     expect(s3.deleteFile).toHaveBeenNthCalledWith(1, 'same-key');
     expect(s3.deleteFile).toHaveBeenNthCalledWith(2, 'same-key');
     expect(s3.deleteFile).toHaveBeenNthCalledWith(3, 'other-key');
+  });
+
+  it('retains failed cleanup for another service instance and deletes the intent only after recovery', async () => {
+    const pending = { objectKey: 'orphan.avif', nextAttemptAt: new Date(0), attempts: 0 };
+    prisma.pollObjectDeletion.findMany.mockResolvedValue([pending]);
+    s3.deleteFile.mockRejectedValue(new Error('S3 unavailable'));
+    await service.retryPendingObjectDeletions();
+    expect(prisma.pollObjectDeletion.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.pollObjectDeletion.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { attempts: { increment: 1 }, nextAttemptAt: expect.any(Date) },
+    }));
+    s3.deleteFile.mockResolvedValue(undefined);
+    const restarted = new PollImagesService(prisma as unknown as PrismaService, s3 as unknown as S3Service);
+    await restarted.retryPendingObjectDeletions();
+    expect(prisma.pollObjectDeletion.deleteMany).toHaveBeenCalledWith({ where: { objectKey: pending.objectKey } });
+  });
+
+  it('expires abandoned staging with a placement recheck and preserves a concurrently attached image', async () => {
+    prisma.pollImage.findMany.mockResolvedValue([
+      { id: 'expired', objectKey: 'expired.avif' },
+      { id: 'attached-by-save', objectKey: 'keep.avif' },
+    ]);
+    prisma.pollImage.deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    prisma.pollObjectDeletion.findMany.mockResolvedValue([]);
+    await service.retryPendingObjectDeletions();
+    expect(prisma.pollObjectDeletion.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.pollObjectDeletion.upsert).toHaveBeenCalledWith({
+      where: { objectKey: 'expired.avif' }, create: { objectKey: 'expired.avif' }, update: {},
+    });
+    expect(prisma.pollImage.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'attached-by-save', placement: 'UNUSED', createdAt: { lt: expect.any(Date) } },
+    });
+  });
+
+  it('does not delete an object retained by a current image or claimed by another worker', async () => {
+    prisma.pollObjectDeletion.findMany.mockResolvedValue([{ objectKey: 'retained.avif', nextAttemptAt: new Date(0) }]);
+    prisma.pollImage.findFirst.mockResolvedValue({ id: 'retained' });
+    await service.retryPendingObjectDeletions();
+    expect(s3.deleteFile).not.toHaveBeenCalled();
+    prisma.pollObjectDeletion.updateMany.mockResolvedValue({ count: 0 });
+    prisma.pollImage.findFirst.mockClear();
+    await service.retryPendingObjectDeletions();
+    expect(prisma.pollImage.findFirst).not.toHaveBeenCalled();
   });
 
   it('maps optional alt text and captions into public image contracts', () => {

@@ -22,6 +22,7 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
   }
 
   protected async submit(poll: Poll): Promise<void> {
+    const generation = this.pollLoadGeneration;
     this.saving.set(true);
     this.error.set(null);
     const wasEditing = Boolean(
@@ -34,6 +35,9 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
       const response = await firstValueFrom(
         this.submitPollResponse(poll, { answers }),
       );
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
       if (this.isKioskMode) {
         this.snackBar.open('Voto registrado.', 'OK', { duration: 3000 });
         await this.router.navigate(
@@ -47,6 +51,9 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
         duration: 3000,
       });
     } catch (error) {
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
       if (this.isKioskMode) {
         await this.router.navigate(
           ['/admin/polls', poll.id, 'kiosk'],
@@ -56,11 +63,20 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
         this.error.set(this.submitErrorMessage(error));
       }
     } finally {
-      this.saving.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.saving.set(false);
+      }
     }
   }
 
-  protected async loadUserResponseState(poll: Poll): Promise<void> {
+  protected async loadUserResponseState(
+    poll: Poll,
+    generation = this.pollLoadGeneration,
+  ): Promise<void> {
+    if (!this.isPollLoadCurrent(generation)) {
+      return;
+    }
+
     if (this.isSlateSubmissionPoll(poll)) {
       this.responseStateError.set(null);
       this.responseState.set(emptyResponseState);
@@ -72,16 +88,23 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
     this.responseState.set(emptyResponseState);
     try {
       const state = await firstValueFrom(this.getMyPollResponse(poll.id));
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
       this.responseState.set(state);
       if (state.canEdit && state.response && !state.canSubmitAnother) {
         this.applyResponseAnswers(state.response.answers);
       }
     } catch {
-      this.responseStateError.set(
-        'Não foi possível confirmar se você já votou. O envio ficará bloqueado até a verificação ser concluída.',
-      );
+      if (this.isPollLoadCurrent(generation)) {
+        this.responseStateError.set(
+          'Não foi possível confirmar se você já votou. O envio ficará bloqueado até a verificação ser concluída.',
+        );
+      }
     } finally {
-      this.loadingResponseState.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.loadingResponseState.set(false);
+      }
     }
   }
 
@@ -89,18 +112,20 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
     poll: Poll,
     request: { answers: PollResponseAnswer[] },
   ) {
+    const access = this.pollAccess();
     return this.isKioskMode
       ? this.api.submitKioskResponse(poll.id, request)
-      : this.pollAccess?.kind === 'directLink'
-      ? this.api.submitDirectLinkResponse(this.pollAccess.value, request)
+      : access?.kind === 'directLink'
+      ? this.api.submitDirectLinkResponse(access.value, request)
       : this.api.submitResponse(poll.id, request);
   }
 
   private getMyPollResponse(pollId: string) {
+    const access = this.pollAccess();
     return this.isKioskMode
       ? this.api.getKioskVoterResponse(pollId)
-      : this.pollAccess?.kind === 'directLink'
-      ? this.api.getMyDirectLinkPollResponse(this.pollAccess.value)
+      : access?.kind === 'directLink'
+      ? this.api.getMyDirectLinkPollResponse(access.value)
       : this.api.getMyPollResponse(pollId);
   }
 

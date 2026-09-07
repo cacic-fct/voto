@@ -20,4 +20,21 @@ describe('PollResultsRealtimeService', () => {
     expect(replay.record).toHaveBeenCalledTimes(2);
     expect(redis.publish).toHaveBeenCalledTimes(2);
   });
+
+  it('passes the committed mutation identity to replay storage', async () => {
+    const replay = {
+      record: jest.fn().mockResolvedValue({ id: 'sse1.scope.1', data: { responseCount: 1 } }),
+      scope: jest.fn(),
+    };
+    const redis = { publish: jest.fn().mockResolvedValue(1) };
+    const service = new PollResultsRealtimeService(redis as never, replay as never);
+
+    await service.publish('public:scope', { responseCount: 1 }, 'response-1:200');
+
+    expect(replay.record).toHaveBeenCalledWith(
+      'public:scope',
+      { data: { responseCount: 1 }, retry: 3_000 },
+      { deduplicationKey: 'response-1:200' },
+    );
+  });
 });

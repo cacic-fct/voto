@@ -61,21 +61,39 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
   }
 
   ngOnDestroy(): void {
+    this.invalidatePollSelection();
     this.closeResultsEvents();
   }
 
   protected async selectPoll(id: string): Promise<void> {
+    const selectionGeneration = this.beginPollSelection();
     this.saving.set(true);
     this.resetResults();
+    this.eligibilityEntries.set([]);
+    this.loadingEligibility.set(false);
+    this.importingEligibility.set(false);
+    this.slates.set([]);
+    this.loadingSlates.set(false);
+    this.savingSlate.set(false);
+    this.editingSlate.set(null);
     try {
-      this.builder.setDraft(await firstValueFrom(this.api.getAdminPoll(id)));
-      await this.loadEligibilityEnrollments(false);
-      await this.loadCacicElectionSlates(false);
-      await this.loadResults(false);
+      const poll = await firstValueFrom(this.api.getAdminPoll(id));
+      if (!this.isPollSelectionCurrent(selectionGeneration)) {
+        return;
+      }
+
+      this.setServerPoll(poll);
+      await this.loadEligibilityEnrollments(false, selectionGeneration);
+      await this.loadCacicElectionSlates(false, selectionGeneration);
+      await this.loadResults(false, selectionGeneration);
     } catch {
-      this.snackBar.open('Não foi possível abrir a votação.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration)) {
+        this.snackBar.open('Não foi possível abrir a votação.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.saving.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration)) {
+        this.saving.set(false);
+      }
     }
   }
 
@@ -96,7 +114,7 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
       const saved = draft.id
         ? await firstValueFrom(this.api.updatePoll(draft.id, request))
         : await firstValueFrom(this.api.createPoll(request));
-      this.builder.setDraft(saved);
+      this.setServerPoll(saved);
       await this.loadEligibilityEnrollments(false);
       await this.loadCacicElectionSlates(false);
       await this.loadResults(false);
@@ -121,11 +139,10 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
 
     this.saving.set(true);
     try {
-      this.builder.setDraft(
-        await firstValueFrom(
-          this.api.updatePollStatus(id, status, this.builder.draft().updatedAt),
-        ),
+      const saved = await firstValueFrom(
+        this.api.updatePollStatus(id, status, this.builder.draft().updatedAt),
       );
+      this.setServerPoll(saved);
       await this.loadCacicElectionSlates(false);
       await this.loadPolls(false);
       this.snackBar.open('Status atualizado.', 'OK', { duration: 3000 });

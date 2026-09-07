@@ -25,21 +25,29 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
     poll: Poll,
     request: SubmitCacicElectionSlateRequest,
   ): Promise<void> {
+    const generation = this.pollLoadGeneration;
     this.savingSlate.set(true);
     this.error.set(null);
     try {
       await firstValueFrom(this.api.submitCacicElectionSlate(poll.id, request));
-      await this.loadCacicElectionSlates(poll);
-      await this.loadMyCacicElectionSlate(poll);
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
+      await this.loadCacicElectionSlates(poll, generation);
+      await this.loadMyCacicElectionSlate(poll, generation);
       this.snackBar.open('Chapa enviada para revisão.', 'OK', {
         duration: 3000,
       });
     } catch {
-      this.error.set(
-        'Não foi possível enviar a chapa. Confira os campos obrigatórios.',
-      );
+      if (this.isPollLoadCurrent(generation)) {
+        this.error.set(
+          'Não foi possível enviar a chapa. Confira os campos obrigatórios.',
+        );
+      }
     } finally {
-      this.savingSlate.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.savingSlate.set(false);
+      }
     }
   }
 
@@ -97,10 +105,17 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
     return slateRoleLabel(role, customRole);
   }
 
-  protected async loadCacicElectionSlates(poll: Poll): Promise<void> {
+  protected async loadCacicElectionSlates(
+    poll: Poll,
+    generation = this.pollLoadGeneration,
+  ): Promise<void> {
+    if (!this.isPollLoadCurrent(generation)) {
+      return;
+    }
+
     if (
       !this.isCacicElectionVotingPoll(poll) ||
-      this.pollAccess?.kind === 'directLink'
+      this.pollAccess()?.kind === 'directLink'
     ) {
       this.slates.set([]);
       return;
@@ -108,21 +123,34 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
 
     this.loadingSlates.set(true);
     try {
-      this.slates.set(
-        await firstValueFrom(
-          this.isKioskMode
-            ? this.api.listKioskCacicElectionSlates(poll.id)
-            : this.api.listPublicCacicElectionSlates(poll.id),
-        ),
+      const slates = await firstValueFrom(
+        this.isKioskMode
+          ? this.api.listKioskCacicElectionSlates(poll.id)
+          : this.api.listPublicCacicElectionSlates(poll.id),
       );
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
+      this.slates.set(slates);
     } catch {
-      this.slates.set([]);
+      if (this.isPollLoadCurrent(generation)) {
+        this.slates.set([]);
+      }
     } finally {
-      this.loadingSlates.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.loadingSlates.set(false);
+      }
     }
   }
 
-  protected async loadMyCacicElectionSlate(poll: Poll): Promise<void> {
+  protected async loadMyCacicElectionSlate(
+    poll: Poll,
+    generation = this.pollLoadGeneration,
+  ): Promise<void> {
+    if (!this.isPollLoadCurrent(generation)) {
+      return;
+    }
+
     if (!this.isSlateSubmissionPoll(poll)) {
       this.mySlate.set(null);
       return;
@@ -130,13 +158,19 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
 
     this.loadingSlates.set(true);
     try {
-      this.mySlate.set(
-        await firstValueFrom(this.api.getMyCacicElectionSlate(poll.id)),
-      );
+      const slate = await firstValueFrom(this.api.getMyCacicElectionSlate(poll.id));
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
+      this.mySlate.set(slate);
     } catch {
-      this.mySlate.set(null);
+      if (this.isPollLoadCurrent(generation)) {
+        this.mySlate.set(null);
+      }
     } finally {
-      this.loadingSlates.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.loadingSlates.set(false);
+      }
     }
   }
 }

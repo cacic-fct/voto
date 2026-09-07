@@ -546,6 +546,26 @@ describe('AuthController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects browser-normalized authorities and unsafe post-login destinations', () => {
+    const controllerInternals = controller as unknown as AuthControllerInternals;
+
+    for (const redirect of [
+      String.raw`/\attacker.example/`,
+      '//attacker.example/polls',
+      '/polls/%2f%2fattacker.example',
+      '/polls/%5cattacker.example',
+      '/polls/%00',
+      '/foo/../api/auth/login',
+      'https://user:password@app.example/polls',
+    ]) {
+      expect(() => controllerInternals.resolveReturnTo(redirect)).toThrow(BadRequestException);
+    }
+
+    expect(controllerInternals.resolveReturnTo('/api/auth/../../polls')).toBe('/polls');
+    expect(controllerInternals.resolveReturnTo('/polls?tab=1#results')).toBe('/polls?tab=1#results');
+    expect(controllerInternals.resolveReturnTo('https://app.example/polls')).toBe('https://app.example/polls');
+  });
+
   it('ignores blank allowed-origin entries and falls back to raw silent-login redirects when they cannot be parsed', async () => {
     process.env.KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS =
       ' , https://api.example';

@@ -23,7 +23,14 @@ const publicJwk = {
 type SessionStoreMock = jest.Mocked<
   Pick<
     AuthSessionStoreService,
-    'get' | 'set' | 'delete' | 'acquireRefreshLock' | 'releaseRefreshLock' | 'renewRefreshLock' | 'waitForRefreshLockRelease'
+    | 'get'
+    | 'set'
+    | 'commitRefreshedSession'
+    | 'delete'
+    | 'acquireRefreshLock'
+    | 'releaseRefreshLock'
+    | 'renewRefreshLock'
+    | 'waitForRefreshLockRelease'
   >
 >;
 
@@ -32,8 +39,13 @@ type AuthorizationStateMock = jest.Mocked<
 >;
 
 type PrismaMock = {
+  $executeRaw: jest.Mock<Promise<number>, [unknown] >;
+  $transaction: jest.Mock<Promise<unknown>, [(tx: PrismaMock) => Promise<unknown>]>;
   user: {
     upsert: jest.Mock<Promise<unknown>, [unknown]>;
+  };
+  revokedVotingSubject: {
+    findUnique: jest.Mock<Promise<unknown>, [unknown]>;
   };
 };
 
@@ -54,15 +66,21 @@ function tokenWithClaims(claims: Record<string, unknown>): string {
 }
 
 function createSessionStoreMock(): SessionStoreMock {
-  return {
+  const store: SessionStoreMock = {
     get: jest.fn(),
     set: jest.fn().mockResolvedValue(undefined),
+    commitRefreshedSession: jest.fn(),
     delete: jest.fn().mockResolvedValue(undefined),
     acquireRefreshLock: jest.fn().mockResolvedValue(true),
     releaseRefreshLock: jest.fn().mockResolvedValue(undefined),
     renewRefreshLock: jest.fn().mockResolvedValue(true),
     waitForRefreshLockRelease: jest.fn().mockResolvedValue(undefined),
   };
+  store.commitRefreshedSession.mockImplementation(async (sessionId, _generation, _owner, session) => {
+    await store.set(sessionId, session);
+    return true;
+  });
+  return store;
 }
 
 function createAuthorizationStateMock(): AuthorizationStateMock {
@@ -75,11 +93,18 @@ function createAuthorizationStateMock(): AuthorizationStateMock {
 }
 
 function createPrismaMock(): PrismaMock {
-  return {
+  const prisma = {
+    $executeRaw: jest.fn().mockResolvedValue(0),
+    $transaction: jest.fn(),
     user: {
       upsert: jest.fn().mockResolvedValue({}),
     },
+    revokedVotingSubject: {
+      findUnique: jest.fn().mockResolvedValue(undefined),
+    },
   };
+  prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+  return prisma;
 }
 
 describe('KeycloakAuthService', () => {
@@ -232,14 +257,14 @@ describe('KeycloakAuthService', () => {
     await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(UnauthorizedException);
 
     mockedAxios.post.mockRejectedValueOnce({});
-    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.refreshAccessToken('refresh')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refreshAccessToken('refresh')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('refreshes access tokens', async () => {
@@ -312,6 +337,40 @@ describe('KeycloakAuthService', () => {
     await expect(
       service.authenticateMachineToMachineToken(unrelatedClientRoleToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects a revoked human subject on every session authentication, including cached tokens', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({ sub: 'revoked-user' });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    });
+    mockUserInfo({ sub: 'revoked-user' });
+
+    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'revoked-user' });
+    prisma.revokedVotingSubject.findUnique.mockResolvedValue({ subjectHash: 'revoked' });
+
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.revokedVotingSubject.findUnique).toHaveBeenCalled();
+  });
+
+  it('does not apply human-subject tombstones to service-account gRPC tokens', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({
+      azp: 'cacic-account-manager-m2m',
+      preferred_username: 'service-account-cacic-account-manager-m2m',
+      realm_access: { roles: ['lgpd:read'] },
+      sub: 'revoked-service-account',
+    });
+    prisma.revokedVotingSubject.findUnique.mockResolvedValue({ subjectHash: 'revoked' });
+
+    await expect(
+      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+    ).resolves.toMatchObject({ sub: 'revoked-service-account' });
+    expect(prisma.revokedVotingSubject.findUnique).not.toHaveBeenCalled();
   });
 
   it('does not treat a same-named role on an unrelated client as a voting administrator role', async () => {
@@ -662,9 +721,73 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
-  it('refreshes after lock timeout with the original refresh token when the stored session lacks one', async () => {
+  it('does not recreate a session deleted while refresh is in flight', async () => {
     const service = createService();
+    const oldSession: AuthSession = {
+      accessToken: tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 10 }),
+      refreshToken: 'refresh-1',
+      accessTokenExpiresAt: Date.now() - 1,
+      sessionExpiresAt: Date.now() + 600000,
+    };
     const refreshedToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    sessions.get.mockResolvedValueOnce(oldSession).mockResolvedValueOnce(oldSession);
+    sessions.acquireRefreshLock.mockResolvedValue(true);
+    sessions.commitRefreshedSession.mockResolvedValue(false);
+    mockUserInfo({ sub: 'user-1' });
+
+    let resolveToken: ((value: { access_token: string; expires_in: number }) => void) | undefined;
+    jest.spyOn(service, 'refreshAccessToken').mockImplementation(
+      () => new Promise((resolve) => {
+        resolveToken = resolve;
+      }),
+    );
+
+    const refresh = service.authenticateSession('session-1');
+    for (let index = 0; index < 10 && !resolveToken; index += 1) {
+      await Promise.resolve();
+    }
+    expect(resolveToken).toBeDefined();
+
+    await service.clearSession('session-1');
+    resolveToken?.({ access_token: refreshedToken, expires_in: 120 });
+
+    await expect(refresh).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(sessions.commitRefreshedSession).toHaveBeenCalled();
+    expect(sessions.set).not.toHaveBeenCalled();
+    expect(sessions.releaseRefreshLock).toHaveBeenCalledWith('session-1', expect.any(String));
+  });
+
+  it('rereads the session after acquiring the lock and never reuses a rotated token', async () => {
+    const service = createService();
+    const staleAccessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 10 });
+    const currentAccessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    sessions.get
+      .mockResolvedValueOnce({
+        accessToken: staleAccessToken,
+        refreshToken: 'refresh-1',
+        accessTokenExpiresAt: Date.now() - 1,
+        sessionExpiresAt: Date.now() + 600000,
+      })
+      .mockResolvedValueOnce({
+        accessToken: currentAccessToken,
+        refreshToken: 'refresh-2',
+        accessTokenExpiresAt: Date.now() + 120000,
+        sessionExpiresAt: Date.now() + 600000,
+        refreshGeneration: 1,
+      });
+    sessions.acquireRefreshLock.mockResolvedValue(true);
+    mockUserInfo({ sub: 'user-1' });
+
+    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({
+      sub: 'user-1',
+      token: currentAccessToken,
+    });
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+    expect(sessions.commitRefreshedSession).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the authoritative session lacks a refresh token', async () => {
+    const service = createService();
     sessions.get
       .mockResolvedValueOnce({
         accessToken: 'old-access',
@@ -676,33 +799,11 @@ describe('KeycloakAuthService', () => {
         accessToken: 'still-old',
         accessTokenExpiresAt: Date.now() - 1,
         sessionExpiresAt: Date.now() + 600000,
-      })
-      .mockResolvedValueOnce({
-        accessToken: 'still-old',
-        accessTokenExpiresAt: Date.now() - 1,
-        sessionExpiresAt: Date.now() + 600000,
-        idTokenHint: 'old-id',
       });
-    sessions.acquireRefreshLock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    mockedAxios.post.mockResolvedValue({
-      data: {
-        access_token: refreshedToken,
-        refresh_token: 'refresh-2',
-        id_token: 'new-id',
-        expires_in: 120,
-        refresh_expires_in: 600,
-      },
-    });
-    mockUserInfo({ sub: 'user-1' });
+    sessions.acquireRefreshLock.mockResolvedValue(false);
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('refresh_token=refresh');
-    expect(sessions.set).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({
-        idTokenHint: 'new-id',
-      }),
-    );
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
   it('retries refresh after lock timeout and tolerates a second lock holder', async () => {
@@ -845,6 +946,11 @@ describe('KeycloakAuthService', () => {
     );
     const unknownKeyToken = `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
     sessions.get.mockResolvedValueOnce({
+      accessToken: unknownKeyToken,
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 120000,
+      sessionExpiresAt: Date.now() + 600000,
+    }).mockResolvedValueOnce({
       accessToken: unknownKeyToken,
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 120000,

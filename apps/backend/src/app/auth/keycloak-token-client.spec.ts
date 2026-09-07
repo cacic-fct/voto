@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
 import { Buffer } from 'node:buffer';
 import { KeycloakTokenClient, KeycloakTokenClientOptions } from './keycloak-token-client';
@@ -110,14 +110,33 @@ describe('KeycloakTokenClient', () => {
     expect(logger.warn.mock.calls[1][0]).toContain('Suppressed 1 similar Keycloak failure log');
   });
 
-  it('wraps refresh failures without axios response details', async () => {
+  it('classifies transport and dependency failures as retriable unavailability', async () => {
     const { client, logger } = createClient();
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValue(new Error('network down'));
 
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('message=network down'));
+  });
+
+  it.each([429, 500, 502, 503])('classifies HTTP %s token endpoint failures as unavailable', async (status) => {
+    const { client } = createClient();
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post.mockRejectedValue({ response: { status, data: { error: 'temporarily_unavailable' } } });
+
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toMatchObject({
+      status: 503,
+      response: expect.objectContaining({ code: 'KEYCLOAK_UNAVAILABLE' }),
+    });
+  });
+
+  it('keeps invalid grants as authentication failures', async () => {
+    const { client } = createClient();
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post.mockRejectedValue({ response: { status: 400, data: { error: 'invalid_grant' } } });
+
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('revokes refresh tokens only when a client secret is configured', async () => {
@@ -174,10 +193,10 @@ describe('KeycloakTokenClient', () => {
 
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValue(new Error('offline'));
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
     jest.advanceTimersByTime(1_001);
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(logger.warn.mock.calls.at(-1)?.[0]).toContain('Suppressed 1 similar Keycloak failure log');
   });

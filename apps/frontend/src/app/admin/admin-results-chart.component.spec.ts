@@ -113,6 +113,9 @@ describe('AdminResultsChartComponent', () => {
     };
     expect(option.tooltip.valueFormatter(2.5)).toBe('2,5');
     expect(option.tooltip.formatter({ name: 'Sim', value: 10 })).toContain('Quantidade: 10');
+    expect(option.tooltip.formatter({ name: '<img src=x onerror=alert(1)> & "opção"', value: 10 })).toContain(
+      '&lt;img src=x onerror=alert(1)&gt; &amp; &quot;opção&quot;',
+    );
     expect(option.tooltip.formatter({ value: 10 })).toBe('');
   });
 

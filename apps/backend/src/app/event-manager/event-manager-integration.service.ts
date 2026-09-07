@@ -70,7 +70,11 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
     }
   }
 
-  async hasAttendance(eventId: string, userId: string): Promise<boolean> {
+  async hasAttendance(
+    eventId: string,
+    userId: string,
+    options: { timeoutMs?: number; maxAttempts?: number } = {},
+  ): Promise<boolean> {
     const accessToken = await this.getAccessToken();
 
     try {
@@ -78,7 +82,11 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
         'CheckVotingAttendance',
         { eventId, userId },
         authorizationMetadata(accessToken),
-        { idempotent: true, maxAttempts: 3, timeoutMs: 10_000 },
+        {
+          idempotent: true,
+          maxAttempts: options.maxAttempts ?? 3,
+          timeoutMs: options.timeoutMs ?? 10_000,
+        },
       );
 
       if (!this.isRecord(data) || typeof data['attended'] !== 'boolean') {

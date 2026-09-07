@@ -73,6 +73,31 @@ describe('AuthorizationStateService', () => {
     expect(JSON.parse(redis.set.mock.calls[4][1] as string)).not.toHaveProperty('returnTo');
   });
 
+  it('canonicalizes relative paths before applying the auth-loop policy', async () => {
+    const redirects = [
+      String.raw`/\attacker.example/`,
+      '//attacker.example/polls',
+      '/polls/%2f%2fattacker.example',
+      '/polls/%5cattacker.example',
+      '/polls/%00',
+      '/foo/../api/auth/login',
+      'https://user:password@app.example/polls',
+    ];
+
+    for (const returnTo of redirects) {
+      await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo });
+      expect(JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string)).not.toHaveProperty('returnTo');
+    }
+
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: '/api/auth/../../polls?tab=1#results',
+    });
+    expect(JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string)).toMatchObject({
+      returnTo: '/polls?tab=1#results',
+    });
+  });
+
   it('consumes, deletes, and parses stored state values atomically', async () => {
     redis.eval.mockResolvedValueOnce(
       JSON.stringify({

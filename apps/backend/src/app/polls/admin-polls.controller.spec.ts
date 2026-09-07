@@ -135,16 +135,16 @@ describe('AdminPollsController', () => {
     await controller.rejectCacicElectionSlate('poll-1', 'slate-1', request, {
       reason: 'Documentos incompletos.',
     });
-    await controller.updateCacicElectionSlateEnabled('poll-1', 'slate-1', { enabled: false });
-    await controller.deleteCacicElectionSlate('poll-1', 'slate-1');
-    await controller.clearEligibilityEnrollments('poll-1');
-    await controller.deleteEligibilityEnrollment('poll-1', '20240001');
+    await controller.updateCacicElectionSlateEnabled('poll-1', 'slate-1', { enabled: false }, request);
+    await controller.deleteCacicElectionSlate('poll-1', 'slate-1', request);
+    await controller.clearEligibilityEnrollments('poll-1', request);
+    await controller.deleteEligibilityEnrollment('poll-1', '20240001', request);
     await controller.uploadPollImage('poll-1', { originalname: 'image.png' } as never, request);
     await controller.deletePollImage('poll-1', 'image-1');
     await controller.createPoll(request, savePoll as never);
     await controller.updatePoll('poll-1', request, savePoll as never);
     await controller.updateStatus('poll-1', request, { status: 'published' });
-    await controller.deletePoll('poll-1');
+    await controller.deletePoll('poll-1', request);
 
     expect(polls.addEligibilityEnrollments).toHaveBeenCalledWith('poll-1', { enrollmentNumbers: ['20240001'] }, user);
     expect(polls.importEligibilityEnrollments).toHaveBeenCalledWith(
@@ -160,14 +160,14 @@ describe('AdminPollsController', () => {
       { reason: 'Documentos incompletos.' },
       user,
     );
-    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith('poll-1', 'slate-1', { enabled: false });
-    expect(polls.deleteCacicElectionSlate).toHaveBeenCalledWith('poll-1', 'slate-1');
+    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith('poll-1', 'slate-1', { enabled: false }, user);
+    expect(polls.deleteCacicElectionSlate).toHaveBeenCalledWith('poll-1', 'slate-1', user);
     expect(pollImages.uploadPollImage).toHaveBeenCalledWith('poll-1', { originalname: 'image.png' }, user);
     expect(pollImages.deletePollImage).toHaveBeenCalledWith('poll-1', 'image-1');
     expect(polls.createPoll).toHaveBeenCalledWith(savePoll, user);
     expect(polls.updatePoll).toHaveBeenCalledWith('poll-1', savePoll, user);
     expect(polls.updatePollStatus).toHaveBeenCalledWith('poll-1', 'published', user, undefined);
-    expect(polls.deletePoll).toHaveBeenCalledWith('poll-1');
+    expect(polls.deletePoll).toHaveBeenCalledWith('poll-1', user);
   });
 
   it('rejects write operations without an authenticated user', async () => {

@@ -41,4 +41,28 @@ describe('PollMutationOptionsService integrity rules', () => {
     expect(metadata.linkedEventName).toBe('Renamed event');
     expect(metadata.linkedEventLocationDescription).toBe('Room 2');
   });
+
+  it('inherits existing election metadata when a full save omits policy fields', async () => {
+    const service = new PollMutationOptionsService({ listLinkableEvents: jest.fn() } as never);
+    await expect(service.resolvePollMetadata(
+      { title: 'Poll', elements: [] } as never,
+      {
+        mode: DbPollMode.CACIC_ELECTION,
+        cacicElectionPhase: 'ELECTION',
+        votingStyle: 'ANONYMOUS',
+        voterEligibilitySource: 'ENROLLMENT_LIST',
+        requireVerifiedUnespRole: false,
+        linkedEventId: null,
+        linkedEventName: null,
+        linkedEventStartDate: null,
+        linkedEventEndDate: null,
+        linkedEventLocationDescription: null,
+      } as never,
+    )).resolves.toMatchObject({
+      mode: DbPollMode.CACIC_ELECTION,
+      cacicElectionPhase: 'ELECTION',
+      votingStyle: 'ANONYMOUS',
+      voterEligibilitySource: 'ENROLLMENT_LIST',
+    });
+  });
 });

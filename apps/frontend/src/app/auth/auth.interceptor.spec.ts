@@ -81,6 +81,61 @@ describe('authInterceptor', () => {
     expect(auth.clearSession).toHaveBeenCalled();
   });
 
+  it('keeps the session when refresh reports a transient identity-provider outage', async () => {
+    const initialError = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const refreshError = new HttpErrorResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      error: { code: 'KEYCLOAK_UNAVAILABLE' },
+    });
+    vi.mocked(auth.refreshTokenSilently).mockReturnValue(throwError(() => refreshError));
+    const next = vi.fn().mockReturnValue(throwError(() => initialError));
+
+    await expect(
+      firstValueFrom(
+        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+      ),
+    ).rejects.toBe(refreshError);
+
+    expect(auth.clearSession).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh or replay a kiosk authorization validation failure', async () => {
+    const error = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const next = vi.fn().mockReturnValue(throwError(() => error));
+
+    await expect(
+      firstValueFrom(
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(
+            new HttpRequest('POST', '/api/admin/polls/poll-1/kiosk/authorization', {}),
+            next,
+          ),
+        ),
+      ),
+    ).rejects.toBe(error);
+
+    expect(auth.refreshTokenSilently).not.toHaveBeenCalled();
+    expect(auth.clearSession).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not clear the session when the retried business request fails', async () => {
+    const initialError = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const retryError = new HttpErrorResponse({ status: 409, statusText: 'Conflict' });
+    const next = vi.fn().mockReturnValueOnce(throwError(() => initialError)).mockReturnValueOnce(throwError(() => retryError));
+
+    await expect(
+      firstValueFrom(
+        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+      ),
+    ).rejects.toBe(retryError);
+
+    expect(auth.refreshTokenSilently).toHaveBeenCalledTimes(1);
+    expect(auth.clearSession).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
   it('passes non-auth errors through without refreshing', async () => {
     const error = new HttpErrorResponse({ status: 500, statusText: 'Server Error' });
     const next = vi.fn().mockReturnValue(throwError(() => error));

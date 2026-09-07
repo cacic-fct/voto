@@ -36,6 +36,10 @@ import type {
   AuthorizationState,
 } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
+import {
+  DEFAULT_POST_LOGIN_APPLICATION_ORIGIN,
+  normalizePostLoginRedirect,
+} from './post-login-redirect';
 
 type RequestWithCookies = Request & {
   cookies?: Record<string, unknown>;
@@ -421,29 +425,22 @@ export class AuthController {
   }
 
   private resolveReturnTo(returnTo?: string): string | undefined {
-    const redirectUri = returnTo?.trim();
-    if (!redirectUri) {
+    if (!returnTo?.trim()) {
       return undefined;
     }
 
-    if (redirectUri.startsWith('/') && !redirectUri.startsWith('//')) {
-      return redirectUri;
-    }
-
-    const url = this.parseHttpUrl(
-      redirectUri,
-      'Invalid post-login redirect URI.',
-    );
-    if (!this.allowedPostLoginRedirectOrigins.has(url.origin)) {
+    const normalized = normalizePostLoginRedirect(returnTo, {
+      allowedOrigins: this.allowedPostLoginRedirectOrigins,
+      applicationOrigin:
+        this.readCanonicalOrigin() ?? DEFAULT_POST_LOGIN_APPLICATION_ORIGIN,
+    });
+    if (!normalized) {
       throw new BadRequestException(
-        'Post-login redirect URI origin is not allowed.',
+        'Invalid post-login redirect URI.',
       );
     }
 
-    url.username = '';
-    url.password = '';
-    url.hash = '';
-    return url.toString();
+    return normalized;
   }
 
   private resolvePostLogoutRedirectUri(

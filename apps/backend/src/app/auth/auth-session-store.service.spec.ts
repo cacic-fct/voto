@@ -94,6 +94,45 @@ describe('AuthSessionStoreService', () => {
     expect(redis.del).toHaveBeenCalledWith('test:session:expired');
   });
 
+  it('atomically fences a refreshed session by lock owner and generation', async () => {
+    const session: AuthSession = {
+      accessToken: 'new-access',
+      accessTokenExpiresAt: Date.now() + 1000,
+      sessionExpiresAt: Date.now() + 1500,
+      refreshGeneration: 3,
+    };
+    redis.eval.mockResolvedValue(1);
+
+    await expect(service.commitRefreshedSession('session-1', 2, 'owner-1', session)).resolves.toBe(true);
+
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('local lockOwner'),
+      2,
+      'test:session:session-1',
+      'test:session:session-1:refresh-lock',
+      'owner-1',
+      '2',
+      JSON.stringify(session),
+      '2',
+    );
+  });
+
+  it('does not issue a write when the refreshed session is already expired', async () => {
+    await expect(
+      service.commitRefreshedSession(
+        'session-1',
+        0,
+        'owner-1',
+        {
+          accessToken: 'new-access',
+          accessTokenExpiresAt: Date.now() - 1,
+          sessionExpiresAt: Date.now() - 1,
+        },
+      ),
+    ).resolves.toBe(false);
+    expect(redis.eval).not.toHaveBeenCalled();
+  });
+
   it('deletes sessions', async () => {
     await service.delete('session-1');
 

@@ -19,6 +19,10 @@ import {
   isEventAttendanceEligibilitySource,
   isGridElement,
   parseEventDate,
+  toContractCacicElectionPhase,
+  toContractPollMode,
+  toContractVoterEligibilitySource,
+  toContractVotingStyle,
   toDbCacicElectionPhase,
   toDbPollMode,
   toDbVoterEligibilitySource,
@@ -38,10 +42,14 @@ export class PollMutationOptionsService {
   constructor(private readonly eventManager: EventManagerIntegrationService) {}
 
   async resolvePollMetadata(input: SavePollDto, existing?: PollMetadataData): Promise<PollMetadataData> {
-    const mode = toDbPollMode(input.mode ?? 'regular');
+    const mode = toDbPollMode(input.mode ?? (existing ? toContractPollMode(existing.mode) : 'regular'));
     const cacicElectionPhase =
       mode === DbPollMode.CACIC_ELECTION
-        ? toDbCacicElectionPhase(input.cacicElectionPhase ?? 'slateSubmission')
+        ? toDbCacicElectionPhase(
+            input.cacicElectionPhase ??
+              (existing ? toContractCacicElectionPhase(existing.cacicElectionPhase) : undefined) ??
+              'slateSubmission',
+          )
         : null;
 
     if (mode === DbPollMode.CACIC_ELECTION && cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
@@ -59,11 +67,17 @@ export class PollMutationOptionsService {
       };
     }
 
-    const votingStyle = toDbVotingStyle(input.votingStyle ?? 'secret');
-    const voterEligibilitySource = toDbVoterEligibilitySource(input.voterEligibilitySource ?? 'authenticatedUsers');
+    const votingStyle = toDbVotingStyle(input.votingStyle ?? (existing ? toContractVotingStyle(existing.votingStyle) : 'secret'));
+    const voterEligibilitySource = toDbVoterEligibilitySource(
+      input.voterEligibilitySource ??
+        (existing ? toContractVoterEligibilitySource(existing.voterEligibilitySource) : 'authenticatedUsers'),
+    );
     const requireVerifiedUnespRole =
-      input.requireVerifiedUnespRole === true && isComputerScienceEligibilitySource(voterEligibilitySource);
-    const linkedEventId = cleanOptionalText(input.linkedEventId) ?? null;
+      (input.requireVerifiedUnespRole ?? existing?.requireVerifiedUnespRole ?? false) === true &&
+      isComputerScienceEligibilitySource(voterEligibilitySource);
+    const linkedEventId = cleanOptionalText(
+      input.linkedEventId === undefined ? existing?.linkedEventId ?? undefined : input.linkedEventId,
+    ) ?? null;
 
     if (!linkedEventId) {
       if (isEventAttendanceEligibilitySource(voterEligibilitySource)) {

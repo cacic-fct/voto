@@ -34,13 +34,14 @@ export function canVoteInPoll(
   state: PollUserResponseState,
   loadingResponseState: boolean,
   responseStateError: string | null = null,
+  now = new Date(),
 ): boolean {
   if (!poll) {
     return false;
   }
 
   return (
-    isPollVotingOpen(poll) &&
+    isPollVotingOpen(poll, now) &&
     !isSlateSubmissionPoll(poll) &&
     !loadingResponseState &&
     !responseStateError &&
@@ -48,16 +49,16 @@ export function canVoteInPoll(
   );
 }
 
-export function canSubmitSlateInPoll(poll: Poll | null): boolean {
-  return Boolean(poll && isSlateSubmissionPoll(poll) && isPollVotingOpen(poll));
+export function canSubmitSlateInPoll(poll: Poll | null, now = new Date()): boolean {
+  return Boolean(poll && isSlateSubmissionPoll(poll) && isPollVotingOpen(poll, now));
 }
 
-export function votingUnavailableTitle(poll: Poll | null): string {
+export function votingUnavailableTitle(poll: Poll | null, now = new Date()): string {
   if (!poll || poll.status !== 'published') {
     return 'Votação encerrada';
   }
 
-  if (readInstantTime(poll.votingStartsAt) > Date.now()) {
+  if (readInstantTime(poll.votingStartsAt) > now.getTime()) {
     return 'Votação ainda não aberta';
   }
 

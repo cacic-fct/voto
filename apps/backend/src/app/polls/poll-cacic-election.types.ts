@@ -29,6 +29,7 @@ export type CacicElectionSlateMemberInput = SubmitCacicElectionSlateMemberReques
 
 export type NormalizedCacicElectionSlateMember = {
   id?: string;
+  verifiedSubjectHash: string | null;
   fullName: string;
   enrollmentNumber: string | null;
   role: DbCacicElectionSlateMemberRole;

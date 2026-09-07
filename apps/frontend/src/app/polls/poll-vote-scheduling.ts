@@ -74,20 +74,22 @@ export function readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
   }
 
   const invitees = Array.isArray(recordValue['invitees'])
-    ? recordValue['invitees']
-        .map((invitee) => asRecord(invitee))
-        .filter((invitee): invitee is Record<string, unknown> => invitee !== null)
+    ? Array.from(recordValue['invitees'], (invitee) => asRecord(invitee))
+        .map((invitee) => (invitee ? readSchedulingInvitee(invitee) : { name: '', email: '' }))
     : [];
 
   return {
     slotId: typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '',
-    invitees: invitees.map(readSchedulingInvitee),
+    invitees,
   };
 }
 
 function readSchedulingInvitee(invitee: Record<string, unknown>): PollSchedulingInvitee {
+  const email = 'email' in invitee
+    ? typeof invitee['email'] === 'string' ? invitee['email'] : ''
+    : undefined;
   return {
     name: typeof invitee['name'] === 'string' ? invitee['name'] : '',
-    email: typeof invitee['email'] === 'string' ? invitee['email'] : '',
+    ...(email === undefined ? {} : { email }),
   };
 }

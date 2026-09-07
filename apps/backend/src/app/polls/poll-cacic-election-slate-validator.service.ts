@@ -5,6 +5,7 @@ import {
   CacicElectionSlateMemberRole as DbCacicElectionSlateMemberRole,
 } from '@prisma/client';
 import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
+import { revokedSubjectHash } from '../lgpd/subject-revocation';
 import {
   toContractCacicElectionSlateMemberIdentifierType,
   toDbCacicElectionSlateMemberIdentifierType,
@@ -61,8 +62,7 @@ export class PollCacicElectionSlateValidatorService {
       }
     }
 
-    await this.verifySlateMembers(members);
-    return members;
+    return this.verifySlateMembers(members);
   }
 
   private assertCanonicalMemberUniqueness(members: readonly NormalizedCacicElectionSlateMember[]): void {
@@ -105,6 +105,7 @@ export class PollCacicElectionSlateValidatorService {
     const identifierType = toDbCacicElectionSlateMemberIdentifierType(member.identifierType);
     return {
       id: member.id,
+      verifiedSubjectHash: null,
       fullName,
       enrollmentNumber: normalizeEnrollmentNumber(member.enrollmentNumber ?? '') ?? null,
       role,
@@ -154,7 +155,7 @@ export class PollCacicElectionSlateValidatorService {
 
   private async verifySlateMembers(
     members: readonly NormalizedCacicElectionSlateMember[],
-  ): Promise<void> {
+  ): Promise<NormalizedCacicElectionSlateMember[]> {
     const peopleByRequestId = await this.accountManager.lookupPeopleByIdentifiers(
       members.map((member, index) => ({
         requestId: `member-${index}`,
@@ -163,7 +164,7 @@ export class PollCacicElectionSlateValidatorService {
       })),
     );
     const seenPeople = new Set<string>();
-    for (const [index, member] of members.entries()) {
+    return members.map((member, index) => {
       const people = peopleByRequestId.get(`member-${index}`) ?? [];
       if (people.length !== 1) {
         throw new BadRequestException('Each slate member must match exactly one Account Manager identity.');
@@ -176,7 +177,12 @@ export class PollCacicElectionSlateValidatorService {
         throw new BadRequestException('A CACiC election slate cannot repeat the same person.');
       }
       seenPeople.add(personKey);
-    }
+
+      return {
+        ...member,
+        verifiedSubjectHash: person.userId ? revokedSubjectHash(person.userId) : null,
+      };
+    });
   }
 
   private assertMatchingPerson(member: NormalizedCacicElectionSlateMember, person: AccountManagerPerson): void {

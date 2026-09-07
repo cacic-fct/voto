@@ -246,25 +246,43 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
   private parseEnrollmentLookupResponse(
     value: unknown,
   ): AccountManagerPerson[] {
-    if (!this.isRecord(value) || !Array.isArray(value['users'])) {
+    if (!this.isRecord(value)) {
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid user lookup response.',
+      );
+    }
+    const users = value['users'];
+    if (users === undefined) {
+      return [];
+    }
+    if (!Array.isArray(users)) {
       throw new ServiceUnavailableException(
         'Account Manager returned an invalid user lookup response.',
       );
     }
 
-    return value['users'].map((user) => this.parseUserProfile(user));
+    return users.map((user) => this.parseUserProfile(user));
   }
 
   private parseIdentifierLookupResponse(
     value: unknown,
   ): (AccountManagerPerson & { requestId: string })[] {
-    if (!this.isRecord(value) || !Array.isArray(value['users'])) {
+    if (!this.isRecord(value)) {
+      throw new ServiceUnavailableException(
+        'Account Manager returned an invalid user identifier lookup response.',
+      );
+    }
+    const users = value['users'];
+    if (users === undefined) {
+      return [];
+    }
+    if (!Array.isArray(users)) {
       throw new ServiceUnavailableException(
         'Account Manager returned an invalid user identifier lookup response.',
       );
     }
 
-    return value['users'].map((user) => {
+    return users.map((user) => {
       if (!this.isRecord(user)) {
         throw new ServiceUnavailableException(
           'Account Manager returned an invalid user item.',

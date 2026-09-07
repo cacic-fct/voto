@@ -49,6 +49,10 @@ export class PollMutationValidationService {
         throw new BadRequestException('Element title is required.');
       }
 
+      if ((element.type === 'section' || element.type === 'statement') && element.required) {
+        throw new BadRequestException(`Display-only element "${element.title}" cannot be required.`);
+      }
+
       const isOptionChoice = isOptionChoiceElement(element.type);
       if (isOptionChoice && element.options.length < 2) {
         throw new BadRequestException(`Element "${element.title}" needs at least two options.`);

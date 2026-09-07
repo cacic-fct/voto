@@ -2,6 +2,7 @@ import { Logger, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
 import { Buffer } from 'node:buffer';
 import { TokenResponse } from './auth.types';
+import { keycloakUnavailableException } from './keycloak-auth-errors';
 import { summarizeKeycloakFailure } from './keycloak-error-logging';
 
 export type KeycloakTokenEndpointAuthMethod =
@@ -55,7 +56,8 @@ export class KeycloakTokenClient {
         error,
         this.getTokenExchangeFailureContext(redirectUri),
       );
-      throw new UnauthorizedException(
+      this.throwTokenEndpointFailure(
+        error,
         'Could not exchange authorization code for tokens.',
       );
     }
@@ -78,7 +80,7 @@ export class KeycloakTokenClient {
       return data;
     } catch (error) {
       this.logKeycloakFailure('refresh token exchange', error);
-      throw new UnauthorizedException('Could not refresh access token.');
+      this.throwTokenEndpointFailure(error, 'Could not refresh access token.');
     }
   }
 
@@ -185,6 +187,40 @@ export class KeycloakTokenClient {
         ? this.options.tokenEndpointAuthMethod
         : 'none'
     }.`;
+  }
+
+  private throwTokenEndpointFailure(error: unknown, authenticationMessage: string): never {
+    if (this.isAuthenticationFailure(error)) {
+      throw new UnauthorizedException(authenticationMessage);
+    }
+
+    throw keycloakUnavailableException();
+  }
+
+  private isAuthenticationFailure(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) {
+      return false;
+    }
+
+    const status = error.response?.status;
+    if (status === 401) {
+      return true;
+    }
+
+    const providerError = this.readProviderError(error.response?.data);
+    return (
+      (status === undefined || status === 400) &&
+      new Set(['invalid_grant', 'invalid_client', 'invalid_request', 'unauthorized_client']).has(providerError ?? '')
+    );
+  }
+
+  private readProviderError(data: unknown): string | undefined {
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      return undefined;
+    }
+
+    const value = (data as Record<string, unknown>)['error'];
+    return typeof value === 'string' ? value : undefined;
   }
 
   private formatRedirectUriForLog(redirectUri: string): string {

@@ -60,6 +60,10 @@ export abstract class PollBuilderDraftState {
     this.draft.set(this.applyCacicElectionRules(poll));
   }
 
+  setDraftUpdatedAt(updatedAt: string): void {
+    this.draft.update((poll) => ({ ...poll, updatedAt }));
+  }
+
   newPoll(): void {
     this.draft.set(createBlankPoll());
   }

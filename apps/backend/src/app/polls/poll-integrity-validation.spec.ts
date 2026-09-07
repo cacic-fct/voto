@@ -52,6 +52,17 @@ describe('poll mutation integrity validation', () => {
     } as never)).toThrow(BadRequestException);
   });
 
+  it('rejects required display-only elements at definition validation', () => {
+    const service = new PollMutationValidationService();
+
+    for (const type of ['section', 'statement'] as const) {
+      expect(() => service.validatePollInput({
+        title: 'Poll',
+        elements: [{ id: `${type}-1`, type, title: 'Informação', required: true, options: [] }],
+      } as never)).toThrow('cannot be required');
+    }
+  });
+
   it('rejects invalid time zones and overlapping scheduling windows', () => {
     const service = new PollMutationValidationService();
     expect(() => service.validatePollInput({

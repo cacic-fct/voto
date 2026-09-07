@@ -140,8 +140,8 @@ export class AdminPollsController {
   @RequirePermissions('poll#edit')
   @ApiOperation({ summary: 'Remove every enrollment number from a poll eligibility list' })
   @ApiOkResponse({ description: 'Empty enrollment eligibility list.' })
-  clearEligibilityEnrollments(@Param('id') id: string): Promise<PollEligibilityEnrollmentList> {
-    return this.polls.clearEligibilityEnrollments(id);
+  clearEligibilityEnrollments(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<PollEligibilityEnrollmentList> {
+    return this.polls.clearEligibilityEnrollments(id, this.getUser(request));
   }
 
   @Delete(':id/eligibility-enrollments/:enrollmentNumber')
@@ -151,8 +151,9 @@ export class AdminPollsController {
   async deleteEligibilityEnrollment(
     @Param('id') id: string,
     @Param('enrollmentNumber') enrollmentNumber: string,
+    @Req() request: AuthenticatedRequest,
   ): Promise<void> {
-    await this.polls.deleteEligibilityEnrollment(id, enrollmentNumber);
+    await this.polls.deleteEligibilityEnrollment(id, enrollmentNumber, this.getUser(request));
   }
 
   @Get(':id/results')
@@ -251,8 +252,9 @@ export class AdminPollsController {
     @Param('id') id: string,
     @Param('slateId') slateId: string,
     @Body() body: UpdateCacicElectionSlateEnabledDto,
+    @Req() request: AuthenticatedRequest,
   ): Promise<AdminCacicElectionSlate> {
-    return this.polls.updateCacicElectionSlateEnabled(id, slateId, body);
+    return this.polls.updateCacicElectionSlateEnabled(id, slateId, body, this.getUser(request));
   }
 
   @Delete(':id/cacic-election/slates/:slateId')
@@ -262,8 +264,9 @@ export class AdminPollsController {
   async deleteCacicElectionSlate(
     @Param('id') id: string,
     @Param('slateId') slateId: string,
+    @Req() request: AuthenticatedRequest,
   ): Promise<void> {
-    await this.polls.deleteCacicElectionSlate(id, slateId);
+    await this.polls.deleteCacicElectionSlate(id, slateId, this.getUser(request));
   }
 
   @Get(':id')
@@ -345,8 +348,8 @@ export class AdminPollsController {
   @RequirePermissions('poll#delete')
   @ApiOperation({ summary: 'Delete a poll and its responses' })
   @ApiNoContentResponse({ description: 'Poll deleted.' })
-  async deletePoll(@Param('id') id: string): Promise<void> {
-    await this.polls.deletePoll(id);
+  async deletePoll(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<void> {
+    await this.polls.deletePoll(id, this.getUser(request));
   }
 
   private getUser(request: AuthenticatedRequest): AuthenticatedPrincipal {

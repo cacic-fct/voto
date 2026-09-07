@@ -17,15 +17,25 @@ import { isPollVotingOpen, readInstantTime } from './poll-vote-availability';
 import { voterEligibilityDeniedMessage as buildVoterEligibilityDeniedMessage } from './poll-vote-metadata';
 import { PollVotePageResponse } from './poll-vote-page-response';
 import { applyResultsDelta as applyResultsDeltaToResults } from './poll-vote-results-state';
+import { reconcilePollResults } from './poll-results-reconciliation';
 
 export abstract class PollVotePageResults extends PollVotePageResponse {
   private resultsRefreshTimer?: ReturnType<typeof setTimeout>;
   private reconnectAttempts = 0;
+  private resultsRequestRevision = 0;
 
   protected async loadPublicResults(poll: Poll): Promise<void> {
+    const generation = this.pollLoadGeneration;
+    if (!this.isPollLoadCurrent(generation)) {
+      return;
+    }
+    this.resultsRequestRevision += 1;
     this.closeResultsEvents();
     this.results.set(null);
     this.resultsError.set(null);
+    this.resultsFinalizationState.set('idle');
+    this.resultsFinalizationError.set(null);
+    this.pendingFinalResultsPollId.set(null);
 
     if (!this.shouldShowPublicResults(poll)) {
       return;
@@ -34,14 +44,21 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
     this.loadingResults.set(true);
     try {
       const results = await firstValueFrom(this.getPublicPollResults(poll.id));
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
       this.results.set(results);
       if (poll.status === 'published' && poll.resultsLive && poll.votingStyle === 'public') {
-        this.openPublicResultsEvents(poll.id);
+        this.openPublicResultsEvents(poll.id, generation);
       }
     } catch (error: unknown) {
-      this.resultsError.set(this.resultsLoadErrorMessage(error));
+      if (this.isPollLoadCurrent(generation)) {
+        this.resultsError.set(this.resultsLoadErrorMessage(error));
+      }
     } finally {
-      this.loadingResults.set(false);
+      if (this.isPollLoadCurrent(generation)) {
+        this.loadingResults.set(false);
+      }
     }
   }
 
@@ -59,8 +76,9 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
   }
 
   protected resultsLink(poll: Poll): unknown[] {
-    return this.pollAccess
-      ? pollResultsLink(this.pollAccess, poll.id)
+    const access = this.pollAccess();
+    return access
+      ? pollResultsLink(access, poll.id)
       : ['/polls', poll.id, 'results'];
   }
 
@@ -71,37 +89,67 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
     return calculateResultBucketPercent(summary, bucket);
   }
 
+  protected retryFinalResults(): void {
+    const pollId = this.pendingFinalResultsPollId();
+    const poll = this.poll();
+    if (!pollId || !poll || poll.id !== pollId) {
+      return;
+    }
+
+    this.resultsFinalizationState.set('pending');
+    this.resultsFinalizationError.set(null);
+    void this.reconcileFinalResults(pollId, this.pollLoadGeneration);
+  }
+
   private getPublicPollResults(pollId: string) {
-    return this.pollAccess?.kind === 'directLink'
-      ? this.api.getDirectLinkPollResults(this.pollAccess.value)
+    const access = this.pollAccess();
+    return access?.kind === 'directLink'
+      ? this.api.getDirectLinkPollResults(access.value)
       : this.api.getPublicPollResults(pollId);
   }
 
-  private openPublicResultsEvents(pollId: string): void {
+  private openPublicResultsEvents(pollId: string, generation: number): void {
     if (!this.isBrowser) {
       return;
     }
 
+    const access = this.pollAccess();
     const source =
-      this.pollAccess?.kind === 'directLink'
-        ? this.api.openDirectLinkPollResultsEvents(this.pollAccess.value)
+      access?.kind === 'directLink'
+        ? this.api.openDirectLinkPollResultsEvents(access.value)
         : this.api.openPublicPollResultsEvents(pollId);
     source.onmessage = (event) => {
+      if (!this.isPollLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
         if (delta.final) {
-          void this.reconcileFinalResults(pollId);
+          this.resultsRequestRevision += 1;
+          this.pendingFinalResultsPollId.set(pollId);
+          this.resultsFinalizationState.set('pending');
+          this.resultsFinalizationError.set(null);
+          void this.reconcileFinalResults(pollId, generation);
         } else if (delta.refreshRequired) {
-          this.scheduleResultsRefresh(pollId);
+          this.scheduleResultsRefresh(pollId, generation);
         }
       }
     };
     source.onopen = () => {
+      if (!this.isPollLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       this.reconnectAttempts = 0;
       this.resultsConnectionState.set('connected');
     };
     source.onerror = () => {
+      if (!this.isPollLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       this.reconnectAttempts += 1;
       if (this.reconnectAttempts >= 5) {
         source.close();
@@ -120,24 +168,49 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
     this.results.update((current) => applyResultsDeltaToResults(current, delta));
   }
 
-  private async reconcileFinalResults(pollId: string): Promise<void> {
-    try {
-      this.results.set(await firstValueFrom(this.getPublicPollResults(pollId)));
-    } finally {
-      this.closeResultsEvents();
-    }
+  private async reconcileFinalResults(pollId: string, generation: number): Promise<void> {
+    await reconcilePollResults(
+      () => firstValueFrom(this.getPublicPollResults(pollId)),
+      {
+        isCurrent: () => this.isPollLoadCurrent(generation),
+        apply: (results) => {
+          this.results.set(results);
+          this.resultsFinalizationState.set('complete');
+          this.resultsFinalizationError.set(null);
+          this.closeResultsEvents();
+        },
+        fail: () => {
+          this.resultsFinalizationState.set('failed');
+          this.resultsFinalizationError.set(
+            'Os resultados finais ainda não estão disponíveis. Tente novamente.',
+          );
+        },
+      },
+    );
   }
 
-  private scheduleResultsRefresh(pollId: string): void {
+  private scheduleResultsRefresh(pollId: string, generation: number): void {
     if (this.resultsRefreshTimer) {
       return;
     }
 
     this.resultsRefreshTimer = setTimeout(() => {
       this.resultsRefreshTimer = undefined;
+      if (!this.isPollLoadCurrent(generation)) {
+        return;
+      }
+      const requestRevision = this.resultsRequestRevision;
       void firstValueFrom(this.getPublicPollResults(pollId))
-        .then((results) => this.results.set(results))
-        .catch(() => this.resultsError.set('A atualização dos resultados está temporariamente indisponível.'));
+        .then((results) => {
+          if (this.isPollLoadCurrent(generation) && requestRevision === this.resultsRequestRevision) {
+            this.results.set(results);
+          }
+        })
+        .catch(() => {
+          if (this.isPollLoadCurrent(generation)) {
+            this.resultsError.set('A atualização dos resultados está temporariamente indisponível.');
+          }
+        });
     }, 250);
   }
 

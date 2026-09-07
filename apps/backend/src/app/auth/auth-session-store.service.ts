@@ -54,6 +54,53 @@ export class AuthSessionStoreService {
     await this.redis.set(this.getKey(sessionId), JSON.stringify(boundedSession), 'EX', ttlSeconds);
   }
 
+  /**
+   * Commit a refreshed session only while the caller still owns the refresh
+   * lease and the session revision it read is current. The checks and SET are
+   * one Redis operation so logout or a newer refresh cannot be overwritten by
+   * an in-flight token exchange.
+   */
+  async commitRefreshedSession(
+    sessionId: string,
+    expectedGeneration: number,
+    owner: string,
+    session: AuthSession,
+  ): Promise<boolean> {
+    const boundedSession =
+      session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > session.sessionAbsoluteDeadline
+        ? { ...session, sessionExpiresAt: session.sessionAbsoluteDeadline }
+        : session;
+    const ttlSeconds = this.resolveTtlSeconds(boundedSession.sessionExpiresAt);
+    if (ttlSeconds <= 0) {
+      return false;
+    }
+
+    const result = await this.redis.eval(
+      `
+local lockOwner = redis.call("get", KEYS[2])
+if lockOwner ~= ARGV[1] then return 0 end
+local rawSession = redis.call("get", KEYS[1])
+if not rawSession then return 0 end
+local decoded, session = pcall(cjson.decode, rawSession)
+if not decoded or type(session) ~= "table" then return 0 end
+local generation = session["refreshGeneration"]
+if generation == nil then generation = 0 end
+if tonumber(generation) ~= tonumber(ARGV[2]) then return 0 end
+redis.call("set", KEYS[1], ARGV[3], "EX", ARGV[4])
+return 1
+`,
+      2,
+      this.getKey(sessionId),
+      this.getRefreshLockKey(sessionId),
+      owner,
+      String(Number.isFinite(expectedGeneration) ? expectedGeneration : 0),
+      JSON.stringify(boundedSession),
+      String(ttlSeconds),
+    );
+
+    return result === 1;
+  }
+
   async delete(sessionId: string): Promise<void> {
     await this.redis.del(this.getKey(sessionId));
   }

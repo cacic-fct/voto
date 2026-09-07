@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle, PollMode as DbPollMode, PollVoterEligibilitySource as DbEligibility, PollElementType as DbElementType } from '@prisma/client';
 import { PollResponsesService } from './poll-responses.service';
 
@@ -20,10 +20,34 @@ function poll() {
 }
 
 describe('PollResponsesService transaction rechecks', () => {
+  it('publishes distinct edit mutations even when the database timestamp is identical', async () => {
+    const current = { ...poll(), allowResponseEditing: true };
+    const response = { id: 'response-1', pollId: current.id, submittedAt: current.updatedAt, answers: [] };
+    const prisma = {
+      poll: { findFirst: jest.fn().mockResolvedValue(current) },
+      $transaction: jest.fn().mockResolvedValue(response),
+    };
+    const results = { publishPollResultsForResponse: jest.fn().mockResolvedValue(undefined) };
+    const service = new PollResponsesService(prisma as never, {} as never, results as never);
+    await service.submitResponse(current.id, { answers: [{ elementId: 'question-1', value: 'first' }] }, { sub: 'user-1' } as never);
+    await service.submitResponse(current.id, { answers: [{ elementId: 'question-1', value: 'second' }] }, { sub: 'user-1' } as never);
+    const keys = results.publishPollResultsForResponse.mock.calls.map((call) => call[2]);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys.every((key) => typeof key === 'string' && key.length > 0)).toBe(true);
+  });
+
   it('rejects when the poll closes after pre-validation', async () => {
     const current = poll();
-    const prisma = {} as { poll: { findFirst: jest.Mock }; $transaction: jest.Mock };
+    const prisma = {} as {
+      poll: { findFirst: jest.Mock };
+      $transaction: jest.Mock;
+      $executeRaw: jest.Mock;
+      revokedVotingSubject: { findUnique: jest.Mock };
+    };
     prisma.poll = { findFirst: jest.fn().mockResolvedValueOnce(current).mockResolvedValueOnce(null) };
+    prisma.$executeRaw = jest.fn().mockResolvedValue(0);
+    prisma.revokedVotingSubject = { findUnique: jest.fn().mockResolvedValue(null) };
     prisma.$transaction = jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma));
     const service = new PollResponsesService(
       prisma as never,
@@ -37,5 +61,29 @@ describe('PollResponsesService transaction rechecks', () => {
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       isolationLevel: expect.anything(),
     }));
+  });
+
+  it('rejects a voter whose subject was revoked before the transaction writes markers', async () => {
+    const current = poll();
+    const prisma = {} as {
+      poll: { findFirst: jest.Mock };
+      $transaction: jest.Mock;
+      $executeRaw: jest.Mock;
+      revokedVotingSubject: { findUnique: jest.Mock };
+    };
+    prisma.poll = { findFirst: jest.fn().mockResolvedValue(current) };
+    prisma.$executeRaw = jest.fn().mockResolvedValue(0);
+    prisma.revokedVotingSubject = { findUnique: jest.fn().mockResolvedValue({ subjectHash: 'revoked' }) };
+    prisma.$transaction = jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma));
+    const service = new PollResponsesService(
+      prisma as never,
+      { ensureVotingAllowed: jest.fn().mockResolvedValue(undefined) } as never,
+      { publishPollResultsForResponse: jest.fn() } as never,
+    );
+
+    await expect(service.submitResponse('poll-1', {
+      answers: [{ elementId: 'question-1', value: 'answer' }],
+    }, { sub: 'user-1' } as never)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 });

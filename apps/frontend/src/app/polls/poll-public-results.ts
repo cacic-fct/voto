@@ -2,6 +2,7 @@ import {
   PollAnswerValue,
   PollElement,
   Poll,
+  PollResultsAggregateBucket,
   PollResultsAggregate,
   PollResultsResponse,
 } from '@org/voting-contracts';
@@ -46,7 +47,7 @@ export function buildPublicQuestionSummaries(
         element,
         answeredCount: aggregate.answeredCount,
         buckets: (aggregate.buckets ?? [])
-          .map((bucket) => ({ label: aggregateBucketLabel(element, bucket.key), count: bucket.count }))
+          .map((bucket) => ({ label: aggregateBucketLabel(element, bucket), count: bucket.count }))
           .sort((first, second) => second.count - first.count || first.label.localeCompare(second.label, 'pt-BR')),
         textAnswers: [],
       }];
@@ -128,17 +129,19 @@ function buildPublicTextAnswers(element: PollElement, values: (PollAnswerValue |
   return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 
-function aggregateBucketLabel(element: PollElement, key: string): string {
+function aggregateBucketLabel(element: PollElement, bucket: PollResultsAggregateBucket): string {
+  const key = bucket.key;
   const option = element.options.find((item) => item.id === key);
   if (option) {
     return option.label;
   }
 
   if (element.settings?.grid) {
-    const separator = key.indexOf(':');
-    if (separator > 0) {
-      const rowId = key.slice(0, separator);
-      const columnId = key.slice(separator + 1);
+    const coordinates = bucket.rowId !== undefined && bucket.columnId !== undefined
+      ? { rowId: bucket.rowId, columnId: bucket.columnId }
+      : readGridAggregateCoordinates(key);
+    if (coordinates) {
+      const { rowId, columnId } = coordinates;
       const row = element.settings.grid.rows.find((item) => item.id === rowId);
       const column = element.settings.grid.columns.find((item) => item.id === columnId);
       if (row && column) {
@@ -152,4 +155,25 @@ function aggregateBucketLabel(element: PollElement, key: string): string {
   }
 
   return answerValueLabel(element, key);
+}
+
+function readGridAggregateCoordinates(key: string): { rowId: string; columnId: string } | undefined {
+  try {
+    const parsed: unknown = JSON.parse(key);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === 'string' &&
+      typeof parsed[1] === 'string'
+    ) {
+      return { rowId: parsed[0], columnId: parsed[1] };
+    }
+  } catch {
+    // Legacy colon-delimited aggregate keys are handled below.
+  }
+
+  const separator = key.indexOf(':');
+  return separator > 0
+    ? { rowId: key.slice(0, separator), columnId: key.slice(separator + 1) }
+    : undefined;
 }

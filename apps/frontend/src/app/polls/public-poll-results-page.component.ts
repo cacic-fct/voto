@@ -6,15 +6,17 @@ import {
   OnDestroy,
   PLATFORM_ID,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, RouterLink } from '@angular/router';
 import {
   Poll,
   PollAnswerValue,
@@ -26,10 +28,12 @@ import {
   PollSchedulingAvailabilityWindow,
   PollVotingStyle,
 } from '@org/voting-contracts';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { votingStylePublicResultsDescription } from './poll-metadata';
 import { PollApiService } from './poll-api.service';
 import { buildPublicQuestionSummaries } from './poll-public-results';
+import { answerValueLabel, isAnswerElement, isEmptyAnswerValue } from './poll-result-formatting';
+import { reconcilePollResults } from './poll-results-reconciliation';
 
 type PublicPollAccess =
   | {
@@ -77,7 +81,11 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   private readonly api = inject(PollApiService);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly route = inject(ActivatedRoute);
-  private readonly pollAccess = this.resolvePollAccess();
+  private readonly routeParamMap = toSignal(
+    this.route.paramMap ?? of(this.route.snapshot.paramMap),
+    { initialValue: this.route.snapshot.paramMap },
+  );
+  private readonly pollAccess = computed(() => this.resolvePollAccess(this.routeParamMap()));
   private readonly dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
@@ -88,10 +96,13 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly resultsConnectionState = signal<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting');
+  protected readonly resultsFinalizationState = signal<'idle' | 'pending' | 'failed' | 'complete'>('idle');
+  protected readonly resultsFinalizationError = signal<string | null>(null);
+  protected readonly pendingFinalResultsPollId = signal<string | null>(null);
   protected readonly votingStylePublicResultsDescription =
     votingStylePublicResultsDescription;
   protected readonly backLink = computed(() => {
-    const access = this.pollAccess;
+    const access = this.pollAccess();
     if (!access) {
       return '/polls';
     }
@@ -128,14 +139,21 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   private resultsEvents?: EventSource;
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private reconnectAttempts = 0;
+  private loadGeneration = 0;
+  private resultsRequestRevision = 0;
 
   constructor() {
-    void this.load();
+    effect(() => {
+      const access = this.pollAccess();
+      void this.load(access);
+    });
   }
 
   ngOnDestroy(): void {
+    this.loadGeneration += 1;
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
     }
     this.closeResultsEvents();
   }
@@ -144,7 +162,19 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     this.closeResultsEvents();
     this.error.set(null);
     this.loading.set(true);
-    void this.load();
+    void this.load(this.pollAccess());
+  }
+
+  protected retryFinalResults(): void {
+    const pollId = this.pendingFinalResultsPollId();
+    const poll = this.poll();
+    if (!pollId || !poll || poll.id !== pollId) {
+      return;
+    }
+
+    this.resultsFinalizationState.set('pending');
+    this.resultsFinalizationError.set(null);
+    void this.reconcileFinalResults(pollId, this.loadGeneration);
   }
 
   protected resultBucketPercent(
@@ -185,50 +215,77 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       return [];
     }
 
-    return poll.elements
-      .filter((element) => this.isAnswerElement(element))
-      .map((element) => ({
-        question: element.title,
-        value: this.answerValueLabels(
-          element,
-          this.findAnswerValue(response, element.id),
-        ).join(', '),
-      }))
+    const currentElementsById = new Map(poll.elements.map((element) => [element.id, element]));
+    return response.answers
+      .map((answer) => {
+        const element = answer.element ?? currentElementsById.get(answer.elementId);
+        if (!element || !isAnswerElement(element) || isEmptyAnswerValue(answer.value)) {
+          return null;
+        }
+
+        return {
+          question: element.title,
+          value: answerValueLabel(element, answer.value, { includeSchedulingInvitees: false }),
+        };
+      })
+      .filter((row): row is ResultAnswerRow => row !== null)
       .filter((row) => row.value.length > 0);
   }
 
-  private async load(): Promise<void> {
-    if (!this.pollAccess) {
+  private async load(access: PublicPollAccess | null): Promise<void> {
+    const generation = ++this.loadGeneration;
+    this.resultsRequestRevision += 1;
+    this.closeResultsEvents();
+    this.poll.set(null);
+    this.results.set(null);
+    this.resultsFinalizationState.set('idle');
+    this.resultsFinalizationError.set(null);
+    this.pendingFinalResultsPollId.set(null);
+    this.resultsConnectionState.set('connecting');
+    this.error.set(null);
+    this.loading.set(true);
+
+    if (!access) {
       this.error.set('Votação não encontrada.');
       this.loading.set(false);
       return;
     }
 
     try {
-      const poll = await firstValueFrom(this.getPoll(this.pollAccess));
+      const poll = await firstValueFrom(this.getPoll(access));
+      if (!this.isLoadCurrent(generation)) {
+        return;
+      }
       this.poll.set(poll);
-      const results = await firstValueFrom(this.getResults(poll.id));
+      const results = await firstValueFrom(this.getResults(access, poll.id));
+      if (!this.isLoadCurrent(generation)) {
+        return;
+      }
       this.results.set(results);
 
       if (poll.status === 'published' && poll.resultsLive && poll.votingStyle === 'public') {
-        this.openResultsEvents(poll.id);
+        this.openResultsEvents(access, poll.id, generation);
       }
     } catch (error: unknown) {
-      this.error.set(this.resultLoadErrorMessage(error));
+      if (this.isLoadCurrent(generation)) {
+        this.error.set(this.resultLoadErrorMessage(error));
+      }
     } finally {
-      this.loading.set(false);
+      if (this.isLoadCurrent(generation)) {
+        this.loading.set(false);
+      }
     }
   }
 
-  private resolvePollAccess(): PublicPollAccess | null {
-    const directLinkToken = this.route.snapshot.paramMap
+  private resolvePollAccess(paramMap: ParamMap): PublicPollAccess | null {
+    const directLinkToken = paramMap
       .get('directLinkToken')
       ?.trim();
     if (directLinkToken) {
       return { kind: 'directLink', value: directLinkToken };
     }
 
-    const id = this.route.snapshot.paramMap.get('id')?.trim();
+    const id = paramMap.get('id')?.trim();
     return id ? { kind: 'id', value: id } : null;
   }
 
@@ -238,37 +295,64 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       : this.api.getPublicPoll(access.value);
   }
 
-  private getResults(pollId: string) {
-    return this.pollAccess?.kind === 'directLink'
-      ? this.api.getDirectLinkPollResults(this.pollAccess.value)
+  private getResults(access: PublicPollAccess, pollId: string) {
+    return access.kind === 'directLink'
+      ? this.api.getDirectLinkPollResults(access.value)
       : this.api.getPublicPollResults(pollId);
   }
 
-  private openResultsEvents(pollId: string): void {
+  private openResultsEvents(
+    accessOrPollId: PublicPollAccess | string,
+    pollIdOrGeneration?: string | number,
+    generationArgument?: number,
+  ): void {
     if (!this.isBrowser) {
       return;
     }
 
+    const access = typeof accessOrPollId === 'string'
+      ? { kind: 'id', value: accessOrPollId } as const
+      : accessOrPollId;
+    const pollId = typeof pollIdOrGeneration === 'string' ? pollIdOrGeneration : access.value;
+    const generation = typeof pollIdOrGeneration === 'number'
+      ? pollIdOrGeneration
+      : generationArgument ?? this.loadGeneration;
     const source =
-      this.pollAccess?.kind === 'directLink'
-        ? this.api.openDirectLinkPollResultsEvents(this.pollAccess.value)
+      access.kind === 'directLink'
+        ? this.api.openDirectLinkPollResultsEvents(access.value)
         : this.api.openPublicPollResultsEvents(pollId);
     source.onmessage = (event) => {
+      if (!this.isLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
         if (delta.final) {
-          void this.reconcileFinalResults(pollId);
+          this.resultsRequestRevision += 1;
+          this.pendingFinalResultsPollId.set(pollId);
+          this.resultsFinalizationState.set('pending');
+          this.resultsFinalizationError.set(null);
+          void this.reconcileFinalResults(pollId, generation);
         } else if (delta.refreshRequired) {
-          this.scheduleResultsRefresh(pollId);
+          this.scheduleResultsRefresh(pollId, generation);
         }
       }
     };
     source.onopen = () => {
+      if (!this.isLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       this.reconnectAttempts = 0;
       this.resultsConnectionState.set('connected');
     };
     source.onerror = () => {
+      if (!this.isLoadCurrent(generation)) {
+        source.close();
+        return;
+      }
       if (typeof EventSource !== 'undefined' && source.readyState === EventSource.CLOSED) {
         this.resultsConnectionState.set('closed');
         return;
@@ -286,6 +370,10 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   }
 
   private closeResultsEvents(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     this.resultsEvents?.close();
     this.resultsEvents = undefined;
   }
@@ -308,25 +396,64 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     });
   }
 
-  private async reconcileFinalResults(pollId: string): Promise<void> {
-    try {
-      this.results.set(await firstValueFrom(this.getResults(pollId)));
-    } finally {
-      this.closeResultsEvents();
+  private async reconcileFinalResults(pollId: string, generation: number): Promise<void> {
+    const access = this.pollAccess();
+    if (!access) {
+      return;
     }
+
+    await reconcilePollResults(
+      () => firstValueFrom(this.getResults(access, pollId)),
+      {
+        isCurrent: () => this.isLoadCurrent(generation),
+        apply: (results) => {
+          this.results.set(results);
+          this.resultsFinalizationState.set('complete');
+          this.resultsFinalizationError.set(null);
+          this.closeResultsEvents();
+        },
+        fail: () => {
+          this.resultsFinalizationState.set('failed');
+          this.resultsFinalizationError.set(
+            'Os resultados finais ainda não estão disponíveis. Tente novamente.',
+          );
+        },
+      },
+    );
   }
 
-  private scheduleResultsRefresh(pollId: string): void {
+  private scheduleResultsRefresh(pollId: string, generation: number): void {
     if (this.refreshTimer) {
       return;
     }
 
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      void firstValueFrom(this.getResults(this.poll()?.id ?? pollId))
-        .then((results) => this.results.set(results))
-        .catch(() => this.error.set('A atualização dos resultados está temporariamente indisponível.'));
+      if (!this.isLoadCurrent(generation)) {
+        return;
+      }
+
+      const requestRevision = this.resultsRequestRevision;
+      const access = this.pollAccess();
+      if (!access) {
+        return;
+      }
+      void firstValueFrom(this.getResults(access, this.poll()?.id ?? pollId))
+        .then((results) => {
+          if (this.isLoadCurrent(generation) && requestRevision === this.resultsRequestRevision) {
+            this.results.set(results);
+          }
+        })
+        .catch(() => {
+          if (this.isLoadCurrent(generation)) {
+            this.error.set('A atualização dos resultados está temporariamente indisponível.');
+          }
+        });
     }, 250);
+  }
+
+  private isLoadCurrent(generation: number): boolean {
+    return generation === this.loadGeneration;
   }
 
   private resultLoadErrorMessage(error: unknown): string {

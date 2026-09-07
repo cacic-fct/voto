@@ -38,6 +38,11 @@ interface StoredSseEvent {
   type?: string;
 }
 
+export type SseRecordOptions = {
+  /** Stable identity of the committed mutation represented by this event. */
+  deduplicationKey?: string;
+};
+
 @Injectable()
 export class SseReplayService {
   private readonly cursorSecret = this.readCursorSecret();
@@ -130,11 +135,16 @@ export class SseReplayService {
     }
   }
 
-  async record(scope: string, event: MessageEvent): Promise<MessageEvent> {
+  async record(scope: string, event: MessageEvent, options: SseRecordOptions = {}): Promise<MessageEvent> {
     const serialized = typeof event.data === 'string'
       ? { data: event.data, dataEncoding: 'text-v1' as const }
       : { data: JSON.stringify(event.data) ?? 'null', dataEncoding: DATA_ENCODING };
-    const fingerprint = createHash('sha256').update(JSON.stringify({ ...serialized, retry: event.retry ?? 3_000, type: event.type })).digest('base64url');
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      ...serialized,
+      retry: event.retry ?? 3_000,
+      type: event.type,
+      deduplicationKey: options.deduplicationKey,
+    })).digest('base64url');
     const generation = Math.floor(Date.now() / GENERATION_DURATION_MS).toString(36);
     const stored = await this.redis.eval(
       PUBLISH_SCRIPT,

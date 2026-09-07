@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PollImage } from '@org/voting-contracts';
 import { PollStatus as DbPollStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +24,71 @@ type PollImageRecord = {
 };
 
 @Injectable()
-export class PollImagesService {
+export class PollImagesService implements OnModuleInit, OnModuleDestroy {
+  private stopping = false;
+  private cleanupTimer?: ReturnType<typeof setInterval>;
+  private cleanupRun?: Promise<void>;
+
+  onModuleInit(): void {
+    this.cleanupTimer = setInterval(() => this.startCleanup(), 60_000);
+    this.cleanupTimer.unref();
+    this.startCleanup();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
+    clearInterval(this.cleanupTimer);
+    await this.cleanupRun;
+  }
+
+  private startCleanup(): void {
+    if (this.stopping || this.cleanupRun) return;
+    this.cleanupRun = this.retryPendingObjectDeletions()
+      .catch(() => this.logger.warn('Poll image cleanup queue is unavailable; pending work is retained.'))
+      .finally(() => { this.cleanupRun = undefined; });
+  }
+
+  async retryPendingObjectDeletions(): Promise<void> {
+    await this.expireAbandonedStaging();
+    const pending = await this.prisma.pollObjectDeletion.findMany({
+      where: { nextAttemptAt: { lte: new Date() } },
+      orderBy: { nextAttemptAt: 'asc' },
+      take: 25,
+    });
+    for (const item of pending) {
+      if (this.stopping) break;
+      const claimed = await this.prisma.pollObjectDeletion.updateMany({
+        where: { objectKey: item.objectKey, nextAttemptAt: item.nextAttemptAt },
+        data: { nextAttemptAt: new Date(Date.now() + 120_000) },
+      });
+      if (claimed.count !== 1) continue;
+      await this.deleteObjectBestEffort(item.objectKey);
+    }
+  }
+
+  private async expireAbandonedStaging(): Promise<void> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await this.prisma.$transaction(async (tx) => {
+      const expired = await tx.pollImage.findMany({
+        where: { placement: 'UNUSED', createdAt: { lt: cutoff } },
+        orderBy: { createdAt: 'asc' }, take: 25,
+        select: { id: true, objectKey: true },
+      });
+      for (const image of expired) {
+        // Recheck placement in the DELETE so a concurrent save that attaches
+        // the image wins rather than leaving an outbox intent for a live image.
+        const removed = await tx.pollImage.deleteMany({
+          where: { id: image.id, placement: 'UNUSED', createdAt: { lt: cutoff } },
+        });
+        if (removed.count === 1) {
+          await tx.pollObjectDeletion.upsert({
+            where: { objectKey: image.objectKey }, create: { objectKey: image.objectKey }, update: {},
+          });
+        }
+      }
+    });
+  }
+
   private readonly logger = new Logger(PollImagesService.name);
   private readonly deleteAttempts = this.positiveInteger(process.env.S3_DELETE_RETRY_ATTEMPTS, 3);
 
@@ -46,62 +110,57 @@ export class PollImagesService {
     const imageId = randomUUID();
     const converted = await convertPollImageToAvif(file);
     const objectKey = buildPollImageObjectKey(pollId, imageId);
-    const uploadResult = await this.s3.uploadFile(
-      objectKey,
-      converted.buffer,
-      'image/avif',
-      {
-        pollId,
-        imageId,
-        uploadedBy: user.sub,
-        originalMimeType: converted.originalMimeType,
-      },
-    );
-
+    // Persist compensation before S3 can succeed. Delay abandoned-upload cleanup
+    // so a second instance cannot collect an upload while it is being attached.
+    await this.prisma.pollObjectDeletion.create({
+      data: { objectKey, nextAttemptAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+    });
     try {
-      const image = await this.prisma.pollImage.create({
-        data: {
-          id: imageId,
-          pollId,
-          objectKey: uploadResult.key,
-          originalFileName: file?.originalname || 'imagem',
-          originalMimeType: converted.originalMimeType,
-          mimeType: 'image/avif',
-          sizeBytes: uploadResult.size,
-          width: converted.width,
-          height: converted.height,
-          createdById: user.sub,
-        },
+      const uploadResult = await this.s3.uploadFile(
+        objectKey,
+        converted.buffer,
+        'image/avif',
+        { pollId, imageId, uploadedBy: user.sub, originalMimeType: converted.originalMimeType },
+      );
+      const image = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.pollImage.create({
+          data: {
+            id: imageId,
+            pollId,
+            objectKey: uploadResult.key,
+            originalFileName: file?.originalname || 'imagem',
+            originalMimeType: converted.originalMimeType,
+            mimeType: 'image/avif',
+            sizeBytes: uploadResult.size,
+            width: converted.width,
+            height: converted.height,
+            createdById: user.sub,
+          },
+        });
+        await tx.pollObjectDeletion.deleteMany({ where: { objectKey } });
+        return created;
       });
-
       return this.toContractImage(image);
     } catch (error) {
-      await this.deleteObjectBestEffort(uploadResult.key);
+      await this.deleteObjectBestEffort(objectKey);
       throw error;
     }
   }
 
   async deletePollImage(pollId: string, imageId: string): Promise<void> {
-    const image = await this.prisma.pollImage.findFirst({
-      where: {
-        id: imageId,
-        pollId,
-      },
-      select: {
-        objectKey: true,
-      },
+    const objectKey = await this.prisma.$transaction(async (tx) => {
+      const image = await tx.pollImage.findFirst({
+        where: { id: imageId, pollId }, select: { objectKey: true },
+      });
+      if (!image) throw new NotFoundException('Poll image not found.');
+      await tx.pollObjectDeletion.upsert({
+        where: { objectKey: image.objectKey },
+        create: { objectKey: image.objectKey }, update: {},
+      });
+      await tx.pollImage.delete({ where: { id: imageId } });
+      return image.objectKey;
     });
-
-    if (!image) {
-      throw new NotFoundException('Poll image not found.');
-    }
-
-    await this.prisma.pollImage.delete({
-      where: {
-        id: imageId,
-      },
-    });
-    await this.deleteObjectBestEffort(image.objectKey);
+    await this.deleteObjectBestEffort(objectKey);
   }
 
   async getPollImage(
@@ -197,16 +256,28 @@ export class PollImagesService {
     let lastError: unknown;
     for (let attempt = 1; attempt <= this.deleteAttempts; attempt += 1) {
       try {
-        await this.s3.deleteFile(objectKey);
+        // A surviving reference always wins over a stale compensation intent.
+        const referenced = await this.prisma.pollImage.findFirst({ where: { objectKey }, select: { id: true } });
+        if (!referenced) await this.s3.deleteFile(objectKey);
+        await this.prisma.pollObjectDeletion.deleteMany({ where: { objectKey } });
         return;
       } catch (error: unknown) {
         lastError = error;
+        if (this.stopping) break;
         if (attempt < this.deleteAttempts) {
           await new Promise((resolve) => setTimeout(resolve, 25 * attempt));
         }
       }
     }
 
+    try {
+      await this.prisma.pollObjectDeletion.updateMany({
+        where: { objectKey },
+        data: { attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 5 * 60_000) },
+      });
+    } catch {
+      // The existing durable intent remains eligible for the next worker/restart.
+    }
     this.logger.warn(
       `Failed to delete poll image object ${objectKey} after ${this.deleteAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
     );

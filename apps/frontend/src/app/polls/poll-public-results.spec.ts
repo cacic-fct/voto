@@ -147,4 +147,35 @@ describe('poll public result helpers', () => {
       'Prioridade revisada',
     ]);
   });
+
+  it('labels grid aggregate buckets from explicit coordinates when identifiers contain colons', () => {
+    const gridElement: PollElement = {
+      id: 'grid',
+      type: 'singleSelectionGrid',
+      title: 'Grade',
+      required: true,
+      options: [],
+      settings: {
+        grid: {
+          rows: [{ id: 'a:b', label: 'Linha A:B' }, { id: 'a', label: 'Linha A' }],
+          columns: [{ id: 'c', label: 'Coluna C' }, { id: 'b:c', label: 'Coluna B:C' }],
+        },
+      },
+    };
+
+    const summaries = buildPublicQuestionSummaries([], [], [{
+      elementId: gridElement.id,
+      elementSnapshot: gridElement,
+      answeredCount: 2,
+      buckets: [
+        { key: '["a:b","c"]', rowId: 'a:b', columnId: 'c', count: 1 },
+        { key: '["a","b:c"]', rowId: 'a', columnId: 'b:c', count: 1 },
+      ],
+    }]);
+
+    expect(summaries[0]?.buckets).toEqual([
+      { label: 'Linha A: Coluna B:C', count: 1 },
+      { label: 'Linha A:B: Coluna C', count: 1 },
+    ]);
+  });
 });

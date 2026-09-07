@@ -293,13 +293,17 @@ export type PollResultsResponse = {
 
 /**
  * A question-level aggregate used when individual ballots cannot be exposed.
- * `key` is an option/slot identifier (or a canonical scalar value), never a
- * response or voter identifier. Free-text answers intentionally have no
- * buckets and expose only their answered count.
+ * `key` is an option/slot identifier (or a canonical scalar/tuple value), never
+ * a response or voter identifier. Grid buckets also expose row/column fields
+ * so valid identifiers containing delimiters remain unambiguous. Free-text
+ * answers intentionally have no buckets and expose only their answered count.
  */
 export type PollResultsAggregateBucket = {
   key: string;
   count: number;
+  /** Present for grid answers; keeps row/column coordinates unambiguous. */
+  rowId?: string;
+  columnId?: string;
 };
 
 export type PollResultsAggregate = {

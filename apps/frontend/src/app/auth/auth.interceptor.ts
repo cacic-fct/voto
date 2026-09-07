@@ -2,7 +2,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { HttpErrorResponse, HttpEvent, HttpHandlerFn, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
 import { PLATFORM_ID, inject } from '@angular/core';
 import { Observable, catchError, switchMap, throwError } from 'rxjs';
-import { AuthService } from './auth.service';
+import { AuthService, isTransientIdentityProviderFailure } from './auth.service';
 
 export const authInterceptor: HttpInterceptorFn = (
   request: HttpRequest<unknown>,
@@ -19,11 +19,13 @@ export const authInterceptor: HttpInterceptorFn = (
     catchError((error) => {
       if (error instanceof HttpErrorResponse && error.status === 401) {
         return auth.refreshTokenSilently().pipe(
-          switchMap(() => next(request)),
           catchError((refreshError) => {
-            auth.clearSession();
+            if (!isTransientIdentityProviderFailure(refreshError)) {
+              auth.clearSession();
+            }
             return throwError(() => refreshError);
           }),
+          switchMap(() => next(request)),
         );
       }
 
@@ -36,6 +38,10 @@ function shouldSkipRefresh(request: HttpRequest<unknown>): boolean {
   return (
     request.url.includes('/api/auth/refresh') ||
     request.url.includes('/api/auth/me') ||
-    request.url.includes('/api/auth/logout')
+    request.url.includes('/api/auth/logout') ||
+    // Kiosk authorization uses 401 for an invalid voter's TOTP. It is a
+    // business validation failure and must not refresh the administrator's
+    // session or replay the one-time authorization attempt.
+    request.url.includes('/api/admin/polls/') && request.url.includes('/kiosk/authorization')
   );
 }

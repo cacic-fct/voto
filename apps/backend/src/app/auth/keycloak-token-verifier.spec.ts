@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
 import { generateKeyPairSync, sign as signToken, type JsonWebKey, type KeyObject } from 'node:crypto';
 import { KeycloakTokenVerifier, KeycloakTokenVerifierOptions } from './keycloak-token-verifier';
@@ -207,19 +207,19 @@ describe('KeycloakTokenVerifier', () => {
     const { verifier, logger } = createVerifier();
     axiosGet.mockResolvedValueOnce(jwksResponse({}, { status: 503, statusText: 'Unavailable' }) as never);
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
+    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('status=503 Unavailable'));
 
     axiosGet.mockResolvedValueOnce(jwksResponse({ keys: [{ kid: 'bad', kty: 'oct' }, 'not-record'] }) as never);
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
-      'Unable to load Keycloak signing keys.',
+    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
     );
 
     axiosGet.mockResolvedValueOnce(
       jwksResponse({ keys: [{ kid: 'broken', kty: 'RSA', use: 'sig', alg: 'RS256' }] }) as never,
     );
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
-      'Unable to load Keycloak signing keys.',
+    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
     );
   });
 
@@ -227,20 +227,20 @@ describe('KeycloakTokenVerifier', () => {
     const { verifier, logger } = createVerifier();
     axiosGet.mockRejectedValueOnce(new Error('offline'));
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
+    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('message=offline'));
   });
 
   it('handles non-record JWKS bodies and non-Error lookup failures', async () => {
     axiosGet.mockResolvedValueOnce(jwksResponse(null) as never);
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow(
-      'Unable to load Keycloak signing keys.',
+    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
     );
 
     const { verifier, logger } = createVerifier();
     axiosGet.mockRejectedValueOnce('offline');
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toThrow('Unable to load Keycloak signing keys.');
+    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
   });
 });

@@ -117,7 +117,7 @@ export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageRes
     this.saving.set(true);
     try {
       const saved = await firstValueFrom(this.api.createPoll(this.builder.toSaveRequest(draft)));
-      this.builder.setDraft(saved);
+      this.setServerPoll(saved);
       await this.loadPolls(false);
       return saved.id;
     } catch {
@@ -130,7 +130,7 @@ export abstract class AdminPollBuilderPageImages extends AdminPollBuilderPageRes
 
   private async persistCurrentDraftAfterImageChange(pollId: string): Promise<void> {
     const saved = await firstValueFrom(this.api.updatePoll(pollId, this.builder.toSaveRequest()));
-    this.builder.setDraft(saved);
+    this.setServerPoll(saved);
     await this.loadPolls(false);
   }
 }

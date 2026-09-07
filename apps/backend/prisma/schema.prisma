@@ -109,6 +109,8 @@ model User {
   adminCreatedCacicElectionSlates CacicElectionSlate[] @relation("CacicElectionSlateAdminCreatedBy")
   reviewedCacicElectionSlates CacicElectionSlate[] @relation("CacicElectionSlateReviewedBy")
 
+  administrativeAuditEvents PollAdminAudit[]
+
   @@index([email])
 }
 
@@ -189,6 +191,7 @@ model CacicElectionSlate {
 }
 
 model CacicElectionSlateMember {
+  verifiedSubjectHash String?
   id               String                                  @id @default(cuid())
   slateId          String
   fullName         String
@@ -203,6 +206,7 @@ model CacicElectionSlateMember {
   updatedAt       DateTime                                @updatedAt
   slate           CacicElectionSlate                      @relation(fields: [slateId], references: [id], onDelete: Cascade)
 
+  @@index([verifiedSubjectHash])
   @@index([slateId, position])
 }
 
@@ -313,4 +317,53 @@ model PollAnswer {
 
   @@unique([responseId, elementId])
   @@index([elementId])
+}
+
+// No plaintext subject identifiers: this keyed digest blocks identity recreation after anonymization.
+model RevokedVotingSubject {
+  subjectHash String   @id
+  revokedAt   DateTime @default(now())
+}
+
+enum VotingDeletionState {
+  PENDING
+  CANCELLED
+  COMPLETED
+}
+
+// Account Manager owns due times and dispatches deletion; Voto persists intent and cancellation.
+model VotingDeletionRequest {
+  requestHash String              @id
+  subjectHash String
+  state       VotingDeletionState @default(PENDING)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([subjectHash])
+}
+
+// Independent of PollImage/Poll so cascading deletes cannot discard cleanup work.
+model PollObjectDeletion {
+  objectKey     String   @id
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([nextAttemptAt])
+}
+
+// Administrative provenance only. No ballot, voter, or private member data belongs here.
+// No poll FK: deletion of the poll must retain its administrative history.
+model PollAdminAudit {
+  id            String   @id @default(cuid())
+  pollId        String
+  actorId       String?
+  actor         User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action        String
+  beforeVersion DateTime?
+  afterVersion  DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([pollId, createdAt])
+  @@index([actorId])
 }

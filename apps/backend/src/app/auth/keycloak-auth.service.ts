@@ -30,6 +30,7 @@ import {
 import { KeycloakTokenClient } from './keycloak-token-client';
 import { KeycloakTokenVerifier } from './keycloak-token-verifier';
 import { PrismaService } from '../prisma/prisma.service';
+import { revokedSubjectHash } from '../lgpd/subject-revocation';
 
 type CachedUser = {
   expiresAt: number;
@@ -207,7 +208,7 @@ export class KeycloakAuthService {
       throw new UnauthorizedException('Missing refresh token in session.');
     }
 
-    const refreshedSession = await this.refreshStoredSession(sessionId, session.refreshToken);
+    const refreshedSession = await this.refreshStoredSession(sessionId, session);
 
     return {
       expiresAt: refreshedSession.accessTokenExpiresAt,
@@ -222,18 +223,18 @@ export class KeycloakAuthService {
     }
 
     if (this.shouldRefreshSessionAccessToken(session.accessTokenExpiresAt) && session.refreshToken) {
-      session = await this.refreshStoredSession(sessionId, session.refreshToken);
+      session = await this.refreshStoredSession(sessionId, session);
     }
 
     let principal: AuthenticatedPrincipal;
     try {
       principal = await this.getOrCreatePrincipal(session.accessToken);
     } catch (error) {
-      if (!session.refreshToken || !(error instanceof UnauthorizedException)) {
+      if (!session.refreshToken || !this.isRefreshableAccessTokenFailure(error)) {
         throw error;
       }
 
-      session = await this.refreshStoredSession(sessionId, session.refreshToken);
+      session = await this.refreshStoredSession(sessionId, session);
       principal = await this.getOrCreatePrincipal(session.accessToken);
     }
     const missingPermissions = requiredPermissions.filter((permission) => !principal.permissionSet.has(permission));
@@ -258,7 +259,7 @@ export class KeycloakAuthService {
     }
 
     await this.syncUser(principal);
-    return principal;
+    return { ...principal, sessionId };
   }
 
   async authenticateMachineToMachineToken(
@@ -266,7 +267,7 @@ export class KeycloakAuthService {
     requiredRoles: readonly string[],
     allowedClientIds: readonly string[],
   ): Promise<AuthenticatedPrincipal> {
-    const principal = await this.getOrCreatePrincipal(accessToken);
+    const principal = await this.getOrCreatePrincipal(accessToken, { checkRevocation: false });
 
     if (!this.isServiceAccountPrincipal(principal)) {
       throw new ForbiddenException('Access token is not a service account token.');
@@ -362,7 +363,7 @@ export class KeycloakAuthService {
     return this.authorizationState.consume(state);
   }
 
-  private async refreshStoredSession(sessionId: string, refreshToken: string): Promise<AuthSession> {
+  private async refreshStoredSession(sessionId: string, observedSession: AuthSession): Promise<AuthSession> {
     const lockOwner = randomBytes(16).toString('base64url');
     const hasLock = await this.sessions.acquireRefreshLock(sessionId, lockOwner);
 
@@ -377,17 +378,20 @@ export class KeycloakAuthService {
         return session;
       }
 
-      return this.refreshStoredSessionAfterLockTimeout(sessionId, session.refreshToken ?? refreshToken);
+      return this.refreshStoredSessionAfterLockTimeout(sessionId, session);
     }
 
     try {
-      return await this.refreshStoredSessionWithLock(sessionId, refreshToken, lockOwner);
+      return await this.refreshStoredSessionWithLock(sessionId, observedSession, lockOwner);
     } finally {
       await this.sessions.releaseRefreshLock(sessionId, lockOwner);
     }
   }
 
-  private async refreshStoredSessionAfterLockTimeout(sessionId: string, refreshToken: string): Promise<AuthSession> {
+  private async refreshStoredSessionAfterLockTimeout(
+    sessionId: string,
+    observedSession: AuthSession,
+  ): Promise<AuthSession> {
     const lockOwner = randomBytes(16).toString('base64url');
     const hasLock = await this.sessions.acquireRefreshLock(sessionId, lockOwner);
 
@@ -406,15 +410,19 @@ export class KeycloakAuthService {
     }
 
     try {
-      return await this.refreshStoredSessionWithLock(sessionId, refreshToken, lockOwner);
+      return await this.refreshStoredSessionWithLock(sessionId, observedSession, lockOwner);
     } finally {
       await this.sessions.releaseRefreshLock(sessionId, lockOwner);
     }
   }
 
-  private async refreshStoredSessionWithLock(sessionId: string, refreshToken: string, lockOwner: string): Promise<AuthSession> {
+  private async refreshStoredSessionWithLock(
+    sessionId: string,
+    observedSession: AuthSession,
+    lockOwner: string,
+  ): Promise<AuthSession> {
     let lockLost = false;
-    let renewalInFlight: Promise<void> | undefined;
+    let renewalInFlight = Promise.resolve();
     const renewLock = async (): Promise<void> => {
       try {
         const renewed = await this.sessions.renewRefreshLock(sessionId, lockOwner);
@@ -433,50 +441,95 @@ export class KeycloakAuthService {
       throw new ServiceUnavailableException('Authentication refresh lock was lost.');
     }
 
-    // The caller already holds the lock. Keep the lease alive for a slow
-    // Keycloak response so a second request cannot reuse a rotating token.
+    // The caller already holds the lock. Keep the lease alive through the
+    // authoritative reread, token verification, user synchronization, and
+    // fenced commit so a second request cannot reuse a rotating token.
     const lockRenewal: ReturnType<typeof setInterval> = setInterval(() => {
-      renewalInFlight = renewLock();
+      renewalInFlight = renewalInFlight.then(renewLock);
     }, this.refreshLockRenewalMs);
-    const tokenResponse = await this.refreshAccessToken(refreshToken).finally(() => {
+
+    try {
+      const currentSession = await this.sessions.get(sessionId);
+      if (!currentSession) {
+        throw new UnauthorizedException('Missing authenticated session.');
+      }
+
+      const observedGeneration = observedSession.refreshGeneration ?? 0;
+      const currentGeneration = currentSession.refreshGeneration ?? 0;
+      const sessionChanged =
+        currentGeneration !== observedGeneration ||
+        currentSession.accessToken !== observedSession.accessToken ||
+        currentSession.refreshToken !== observedSession.refreshToken;
+      if (sessionChanged && !this.shouldRefreshSessionAccessToken(currentSession.accessTokenExpiresAt)) {
+        return currentSession;
+      }
+
+      const refreshToken = currentSession.refreshToken;
+      if (!refreshToken) {
+        throw new UnauthorizedException('Missing refresh token in session.');
+      }
+
+      const tokenResponse = await this.refreshAccessToken(refreshToken);
+      await renewalInFlight;
+      if (lockLost) {
+        throw new ServiceUnavailableException('Authentication refresh lock was lost.');
+      }
+      if (!tokenResponse.access_token) {
+        throw new UnauthorizedException('Missing authenticated session.');
+      }
+
+      const accessTokenExpiresAt = this.resolveAccessTokenExpiration(tokenResponse.access_token, tokenResponse.expires_in);
+      const sessionAbsoluteDeadline = currentSession.sessionAbsoluteDeadline ?? currentSession.sessionExpiresAt;
+      const sessionExpiresAt = this.resolveRefreshTokenExpiration(tokenResponse, sessionAbsoluteDeadline);
+      const principal = await this.getOrCreatePrincipal(tokenResponse.access_token);
+      await this.syncUser(principal);
+      await renewalInFlight;
+      if (lockLost) {
+        throw new ServiceUnavailableException('Authentication refresh lock was lost.');
+      }
+
+      const updatedSession: AuthSession = {
+        accessToken: tokenResponse.access_token,
+        refreshToken: tokenResponse.refresh_token ?? currentSession.refreshToken,
+        idTokenHint: tokenResponse.id_token ?? currentSession.idTokenHint,
+        accessTokenExpiresAt,
+        sessionExpiresAt,
+        sessionAbsoluteDeadline,
+        refreshGeneration: currentGeneration + 1,
+      };
+
+      const committed = await this.sessions.commitRefreshedSession(
+        sessionId,
+        currentGeneration,
+        lockOwner,
+        updatedSession,
+      );
+      if (!committed) {
+        if (lockLost) {
+          throw new ServiceUnavailableException('Authentication refresh lock was lost.');
+        }
+        throw new UnauthorizedException('Missing authenticated session.');
+      }
+
+      return updatedSession;
+    } finally {
       clearInterval(lockRenewal);
-    });
-    if (renewalInFlight) {
       await renewalInFlight;
     }
-    if (lockLost) {
-      throw new ServiceUnavailableException('Authentication refresh lock was lost.');
-    }
-    const currentSession = await this.sessions.get(sessionId);
-    if (!currentSession || !tokenResponse.access_token) {
-      throw new UnauthorizedException('Missing authenticated session.');
-    }
-
-    const accessTokenExpiresAt = this.resolveAccessTokenExpiration(tokenResponse.access_token, tokenResponse.expires_in);
-    const sessionAbsoluteDeadline = currentSession.sessionAbsoluteDeadline ?? currentSession.sessionExpiresAt;
-    const sessionExpiresAt = this.resolveRefreshTokenExpiration(tokenResponse, sessionAbsoluteDeadline);
-    const principal = await this.getOrCreatePrincipal(tokenResponse.access_token);
-    await this.syncUser(principal);
-
-    const updatedSession = {
-      accessToken: tokenResponse.access_token,
-      refreshToken: tokenResponse.refresh_token ?? currentSession.refreshToken,
-      idTokenHint: tokenResponse.id_token ?? currentSession.idTokenHint,
-      accessTokenExpiresAt,
-      sessionExpiresAt,
-      sessionAbsoluteDeadline,
-    };
-
-    await this.sessions.set(sessionId, updatedSession);
-    return updatedSession;
   }
 
-  private async getOrCreatePrincipal(accessToken: string): Promise<AuthenticatedPrincipal> {
+  private async getOrCreatePrincipal(
+    accessToken: string,
+    options: { checkRevocation?: boolean } = {},
+  ): Promise<AuthenticatedPrincipal> {
     const now = Date.now();
     const cachedUser = this.userCache.get(accessToken);
     if (cachedUser && cachedUser.expiresAt > now) {
       this.userCache.delete(accessToken);
       this.userCache.set(accessToken, cachedUser);
+      if (options.checkRevocation !== false && !this.isServiceAccountPrincipal(cachedUser.user)) {
+        await this.assertSubjectNotRevoked(cachedUser.user.sub);
+      }
       return cachedUser.user;
     }
     this.pruneUserCache(now);
@@ -501,6 +554,9 @@ export class KeycloakAuthService {
       permissionSet: new Set(permissions),
     };
     this.assertAccessTokenClientAllowed(principal);
+    if (options.checkRevocation !== false && !this.isServiceAccountPrincipal(principal)) {
+      await this.assertSubjectNotRevoked(principal.sub);
+    }
 
     const expSeconds = readNumberClaim(mergedClaims, 'exp');
     const expBasedCache = expSeconds ? expSeconds * 1000 : now + this.cacheTtlMs;
@@ -562,34 +618,64 @@ export class KeycloakAuthService {
   }
 
   private async syncUser(principal: AuthenticatedPrincipal): Promise<void> {
-    if (!principal.sub) {
+    const subjectId = principal.sub;
+    if (!subjectId || this.isServiceAccountPrincipal(principal)) {
       return;
     }
 
     const name = this.readName(principal.claims);
+    const subjectHash = revokedSubjectHash(subjectId);
 
-    await this.prisma.user.upsert({
-      where: { id: principal.sub },
-      create: {
-        id: principal.sub,
-        preferredUsername: principal.preferredUsername,
-        email: principal.email,
-        name,
-        roles: principal.roles,
-        permissions: principal.permissions,
-        claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
-        lastLoginAt: new Date(),
-      },
-      update: {
-        preferredUsername: principal.preferredUsername,
-        email: principal.email,
-        name,
-        roles: principal.roles,
-        permissions: principal.permissions,
-        claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
-        lastLoginAt: new Date(),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      // Match hard deletion's lock so a token arriving during deletion cannot
+      // recreate the user between the revocation check and the upsert.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${subjectHash}, 0))`;
+      const revoked = await tx.revokedVotingSubject.findUnique({
+        where: { subjectHash },
+        select: { subjectHash: true },
+      });
+      if (revoked) {
+        throw new UnauthorizedException('Subject access has been revoked.');
+      }
+
+      await tx.user.upsert({
+        where: { id: subjectId },
+        create: {
+          id: subjectId,
+          preferredUsername: principal.preferredUsername,
+          email: principal.email,
+          name,
+          roles: principal.roles,
+          permissions: principal.permissions,
+          claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
+          lastLoginAt: new Date(),
+        },
+        update: {
+          preferredUsername: principal.preferredUsername,
+          email: principal.email,
+          name,
+          roles: principal.roles,
+          permissions: principal.permissions,
+          claims: this.minimizePersistedClaims(principal.claims) as Prisma.InputJsonValue,
+          lastLoginAt: new Date(),
+        },
+      });
     });
+  }
+
+  private async assertSubjectNotRevoked(subjectId: string | undefined): Promise<void> {
+    if (!subjectId) {
+      return;
+    }
+
+    const subjectHash = revokedSubjectHash(subjectId);
+    const revoked = await this.prisma.revokedVotingSubject.findUnique({
+      where: { subjectHash },
+      select: { subjectHash: true },
+    });
+    if (revoked) {
+      throw new UnauthorizedException('Subject access has been revoked.');
+    }
   }
 
   private readName(claims: Record<string, unknown>): string | undefined {
@@ -606,6 +692,10 @@ export class KeycloakAuthService {
 
   private shouldRefreshSessionAccessToken(expiresAt: number): boolean {
     return expiresAt - Date.now() <= this.accessTokenRefreshSkewMs;
+  }
+
+  private isRefreshableAccessTokenFailure(error: unknown): boolean {
+    return error instanceof UnauthorizedException && error.message === 'Token expired.';
   }
 
   private resolveAccessTokenExpiration(accessToken: string, expiresInSeconds?: number): number {

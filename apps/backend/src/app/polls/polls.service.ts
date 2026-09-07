@@ -203,8 +203,8 @@ export class PollsService {
     return poll;
   }
 
-  deletePoll(id: string): Promise<void> {
-    return this.mutations.deletePoll(id);
+  deletePoll(id: string, user?: AuthenticatedPrincipal): Promise<void> {
+    return this.mutations.deletePoll(id, user);
   }
 
   listEligibilityEnrollments(
@@ -237,12 +237,12 @@ export class PollsService {
     return this.eligibility.importEligibilityEnrollments(pollId, input, user);
   }
 
-  deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string): Promise<void> {
-    return this.eligibility.deleteEligibilityEnrollment(pollId, enrollmentNumber);
+  deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string, user?: AuthenticatedPrincipal): Promise<void> {
+    return this.eligibility.deleteEligibilityEnrollment(pollId, enrollmentNumber, user);
   }
 
-  clearEligibilityEnrollments(pollId: string): Promise<PollEligibilityEnrollmentList> {
-    return this.eligibility.clearEligibilityEnrollments(pollId);
+  clearEligibilityEnrollments(pollId: string, user?: AuthenticatedPrincipal): Promise<PollEligibilityEnrollmentList> {
+    return this.eligibility.clearEligibilityEnrollments(pollId, user);
   }
 
   listPublicCacicElectionSlates(pollId: string, user?: AuthenticatedPrincipal): Promise<CacicElectionSlate[]> {
@@ -301,12 +301,13 @@ export class PollsService {
     pollId: string,
     slateId: string,
     input: UpdateCacicElectionSlateEnabledDto,
+    user?: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
-    return this.cacicElection.updateCacicElectionSlateEnabled(pollId, slateId, input);
+    return this.cacicElection.updateCacicElectionSlateEnabled(pollId, slateId, input, user);
   }
 
-  deleteCacicElectionSlate(pollId: string, slateId: string): Promise<void> {
-    return this.cacicElection.deleteCacicElectionSlate(pollId, slateId);
+  deleteCacicElectionSlate(pollId: string, slateId: string, user?: AuthenticatedPrincipal): Promise<void> {
+    return this.cacicElection.deleteCacicElectionSlate(pollId, slateId, user);
   }
 
   submitResponse(id: string, input: SubmitPollResponseDto, user?: AuthenticatedPrincipal): Promise<PollResponse> {

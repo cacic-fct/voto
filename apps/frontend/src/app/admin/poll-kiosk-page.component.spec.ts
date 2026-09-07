@@ -1,9 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormGroup } from '@angular/forms';
-import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { Poll } from '@org/voting-contracts';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollApiService } from '../polls/poll-api.service';
 import { PollKioskPageComponent } from './poll-kiosk-page.component';
@@ -137,5 +137,48 @@ describe('PollKioskPageComponent', () => {
     expect(component.form.get('totpCode')?.value).toBe('');
     expect(component.error()).toBe('E-mail principal ou código TOTP inválido.');
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('reloads the kiosk poll when the reused route parameter changes', async () => {
+    TestBed.resetTestingModule();
+    const routeParams = new Subject<ParamMap>();
+    const pollB = { ...poll, id: 'poll-2', title: 'Outra votação' };
+    const dynamicApi = {
+      ...api,
+      getAdminPoll: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
+    };
+    await TestBed.configureTestingModule({
+      imports: [PollKioskPageComponent],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: dynamicApi },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: routeParams.asObservable(),
+            queryParamMap: of(convertToParamMap({})),
+            snapshot: {
+              paramMap: convertToParamMap({ id: poll.id }),
+              queryParamMap: convertToParamMap({}),
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const dynamicFixture = TestBed.createComponent(PollKioskPageComponent);
+    dynamicFixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    routeParams.next(convertToParamMap({ id: pollB.id }));
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    dynamicFixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    dynamicFixture.detectChanges();
+
+    expect(dynamicApi.getAdminPoll).toHaveBeenCalledWith(pollB.id);
+    expect(dynamicFixture.nativeElement.textContent).toContain(pollB.title);
+    dynamicFixture.destroy();
   });
 });

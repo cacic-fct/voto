@@ -1,7 +1,7 @@
 import { Injectable, Logger, MessageEvent, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { Observable, Subject } from 'rxjs';
-import { SseReplayService } from '../realtime/sse-replay.service';
+import { SseReplayService, type SseRecordOptions } from '../realtime/sse-replay.service';
 
 const REDIS_CHANNEL = 'poll-results:realtime:v1';
 const MAX_PUBLICATION_ATTEMPTS = 3;
@@ -51,11 +51,12 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
     });
   }
 
-  async publish(scope: string, data: object): Promise<void> {
+  async publish(scope: string, data: object, deduplicationKey?: string): Promise<void> {
     let event: MessageEvent | undefined;
+    const recordOptions: SseRecordOptions = deduplicationKey ? { deduplicationKey } : {};
     for (let attempt = 1; attempt <= MAX_PUBLICATION_ATTEMPTS; attempt += 1) {
       try {
-        event = await this.replay.record(scope, { data, retry: 3_000 });
+        event = await this.replay.record(scope, { data, retry: 3_000 }, recordOptions);
         break;
       } catch (error) {
         if (attempt === MAX_PUBLICATION_ATTEMPTS) {

@@ -4,6 +4,7 @@ import { PrismaService } from './prisma/prisma.service';
 
 type ReadinessComponent = {
   status: 'ok' | 'error';
+  reason?: 'timeout';
 };
 
 type ReadinessResult = {
@@ -14,8 +15,31 @@ type ReadinessResult = {
   };
 };
 
+type ProbeOutcome = {
+  status: 'ok' | 'error';
+  timedOut?: boolean;
+};
+
+type ProbeHandle = {
+  result: Promise<ProbeOutcome>;
+  completion: Promise<void>;
+};
+
+type ActiveReadinessProbe = {
+  result: Promise<ReadinessResult>;
+  completion: Promise<void>;
+};
+
+const DEFAULT_READINESS_PROBE_TIMEOUT_MS = 1_500;
+
 @Injectable()
 export class AppService {
+  private readonly readinessProbeTimeoutMs = this.parsePositiveInteger(
+    process.env.READINESS_PROBE_TIMEOUT_MS,
+    DEFAULT_READINESS_PROBE_TIMEOUT_MS,
+  );
+  private activeReadinessProbe?: ActiveReadinessProbe;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: Redis,
@@ -30,19 +54,73 @@ export class AppService {
   }
 
   async getReadiness(): Promise<ReadinessResult> {
-    const [database, redis] = await Promise.allSettled([
-      this.prisma.$queryRaw`SELECT 1`,
-      this.redis.ping(),
-    ]);
-    const components = {
-      database: { status: database.status === 'fulfilled' ? 'ok' : 'error' },
-      redis: { status: redis.status === 'fulfilled' ? 'ok' : 'error' },
-    } as const;
-
-    if (database.status === 'rejected' || redis.status === 'rejected') {
-      throw new ServiceUnavailableException({ status: 'error', components });
+    if (this.activeReadinessProbe) {
+      return this.activeReadinessProbe.result;
     }
 
-    return { status: 'ok', components };
+    const databaseProbe = this.startProbe(() => this.prisma.$queryRaw`SELECT 1`);
+    const redisProbe = this.startProbe(() => this.redis.ping());
+    const result = Promise.all([databaseProbe.result, redisProbe.result]).then(
+      ([database, redis]) => {
+        const components = {
+          database: this.toReadinessComponent(database),
+          redis: this.toReadinessComponent(redis),
+        } as const;
+
+        if (database.status === 'error' || redis.status === 'error') {
+          throw new ServiceUnavailableException({ status: 'error', components });
+        }
+
+        return { status: 'ok' as const, components };
+      },
+    );
+    const completion = Promise.all([databaseProbe.completion, redisProbe.completion]).then(() => undefined);
+    const activeProbe: ActiveReadinessProbe = { result, completion };
+    this.activeReadinessProbe = activeProbe;
+    void completion.finally(() => {
+      if (this.activeReadinessProbe === activeProbe) {
+        this.activeReadinessProbe = undefined;
+      }
+    });
+
+    return result;
+  }
+
+  private startProbe(operation: () => Promise<unknown>): ProbeHandle {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const operationResult: Promise<ProbeOutcome> = Promise.resolve()
+      .then(operation)
+      .then(
+        () => ({ status: 'ok' }),
+        () => ({ status: 'error' }),
+      );
+    const completion = operationResult.then(() => undefined);
+    const result = Promise.race([
+      operationResult,
+      new Promise<ProbeOutcome>((resolve) => {
+        timeout = setTimeout(() => resolve({ status: 'error', timedOut: true }), this.readinessProbeTimeoutMs);
+      }),
+    ]).finally(() => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    });
+
+    return { result, completion };
+  }
+
+  private toReadinessComponent(outcome: ProbeOutcome): ReadinessComponent {
+    return outcome.timedOut
+      ? { status: 'error', reason: 'timeout' }
+      : { status: outcome.status };
+  }
+
+  private parsePositiveInteger(rawValue: string | undefined, fallback: number): number {
+    const value = Number.parseInt(rawValue ?? '', 10);
+    if (!Number.isFinite(value) || value <= 0) {
+      return fallback;
+    }
+
+    return value;
   }
 }

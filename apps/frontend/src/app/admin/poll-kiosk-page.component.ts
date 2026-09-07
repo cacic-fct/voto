@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,7 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Poll } from '@org/voting-contracts';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { PollApiService } from '../polls/poll-api.service';
 
 @Component({
@@ -29,20 +29,27 @@ import { PollApiService } from '../polls/poll-api.service';
   templateUrl: './poll-kiosk-page.component.html',
   styleUrl: './poll-kiosk-page.component.scss',
 })
-export class PollKioskPageComponent {
+export class PollKioskPageComponent implements OnDestroy {
   private readonly api = inject(PollApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected readonly pollId = this.route.snapshot.paramMap.get('id')?.trim() ?? '';
+  private readonly routeParamMap = toSignal(
+    this.route.paramMap ?? of(this.route.snapshot.paramMap),
+    { initialValue: this.route.snapshot.paramMap },
+  );
+  private readonly routeQueryParamMap = toSignal(
+    this.route.queryParamMap ?? of(this.route.snapshot.queryParamMap),
+    { initialValue: this.route.snapshot.queryParamMap },
+  );
+  protected readonly pollId = computed(() => this.routeParamMap().get('id')?.trim() ?? '');
   protected readonly poll = signal<Poll | null>(null);
   protected readonly loading = signal(true);
   protected readonly authorizing = signal(false);
   protected readonly error = signal<string | null>(
     this.initialReturnMessage(),
   );
-  protected readonly voteRegistered =
-    this.route.snapshot.queryParamMap.get('registered') === '1';
+  protected readonly voteRegistered = computed(() => this.routeQueryParamMap().get('registered') === '1');
   protected readonly form = new FormGroup({
     primaryEmail: new FormControl('', {
       nonNullable: true,
@@ -62,12 +69,26 @@ export class PollKioskPageComponent {
       this.formStatus() === 'VALID' &&
       Boolean(this.poll()),
   );
+  private loadGeneration = 0;
 
   constructor() {
-    void this.loadPoll();
+    effect(() => {
+      const pollId = this.pollId();
+      void this.loadPoll(pollId);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.loadGeneration += 1;
   }
 
   protected async authorize(): Promise<void> {
+    const generation = this.loadGeneration;
+    const pollId = this.pollId();
+    if (!pollId) {
+      return;
+    }
+
     if (!this.canAuthorize()) {
       this.form.markAllAsTouched();
       return;
@@ -78,21 +99,28 @@ export class PollKioskPageComponent {
     try {
       const value = this.form.getRawValue();
       await firstValueFrom(
-        this.api.authorizeKioskVote(this.pollId, {
+        this.api.authorizeKioskVote(pollId, {
           primaryEmail: value.primaryEmail.trim(),
           totpCode: value.totpCode,
         }),
       );
+      if (generation !== this.loadGeneration || pollId !== this.pollId()) {
+        return;
+      }
       this.form.reset();
       await this.router.navigate(
-        ['/admin/polls', this.pollId, 'kiosk', 'vote'],
+        ['/admin/polls', pollId, 'kiosk', 'vote'],
         { replaceUrl: true },
       );
     } catch (error) {
-      this.form.controls.totpCode.reset();
-      this.error.set(this.authorizationError(error));
+      if (generation === this.loadGeneration && pollId === this.pollId()) {
+        this.form.controls.totpCode.reset();
+        this.error.set(this.authorizationError(error));
+      }
     } finally {
-      this.authorizing.set(false);
+      if (generation === this.loadGeneration && pollId === this.pollId()) {
+        this.authorizing.set(false);
+      }
     }
   }
 
@@ -105,18 +133,33 @@ export class PollKioskPageComponent {
     this.form.controls.totpCode.setValue(code);
   }
 
-  private async loadPoll(): Promise<void> {
-    if (!this.pollId) {
+  private async loadPoll(pollId: string): Promise<void> {
+    const generation = ++this.loadGeneration;
+    this.poll.set(null);
+    this.error.set(this.initialReturnMessage(untracked(() => this.routeQueryParamMap())));
+    this.loading.set(true);
+    this.authorizing.set(false);
+    this.form.reset();
+
+    if (!pollId) {
       this.error.set('Votação não encontrada.');
       this.loading.set(false);
       return;
     }
     try {
-      this.poll.set(await firstValueFrom(this.api.getAdminPoll(this.pollId)));
+      const poll = await firstValueFrom(this.api.getAdminPoll(pollId));
+      if (generation !== this.loadGeneration || pollId !== this.pollId()) {
+        return;
+      }
+      this.poll.set(poll);
     } catch {
-      this.error.set('Não foi possível abrir o modo quiosque desta votação.');
+      if (generation === this.loadGeneration && pollId === this.pollId()) {
+        this.error.set('Não foi possível abrir o modo quiosque desta votação.');
+      }
     } finally {
-      this.loading.set(false);
+      if (generation === this.loadGeneration && pollId === this.pollId()) {
+        this.loading.set(false);
+      }
     }
   }
 
@@ -135,8 +178,8 @@ export class PollKioskPageComponent {
     return 'E-mail principal ou código TOTP inválido.';
   }
 
-  private initialReturnMessage(): string | null {
-    switch (this.route.snapshot.queryParamMap.get('reason')) {
+  private initialReturnMessage(queryParamMap = this.routeQueryParamMap()): string | null {
+    switch (queryParamMap.get('reason')) {
       case 'expired':
         return 'A autorização expirou. Identifique a pessoa novamente para continuar.';
       case 'submit':

@@ -4,6 +4,8 @@ import { Request } from 'express';
 export type AuthenticatedPrincipal = AuthenticatedUser & {
   claims: Record<string, unknown>;
   token: string;
+  /** Local session binding used to reauthorize long-lived streams. */
+  sessionId?: string;
   roleSet: Set<string>;
   permissionSet: Set<string>;
 };
@@ -24,6 +26,8 @@ export type AuthSession = {
   accessTokenExpiresAt: number;
   sessionExpiresAt: number;
   sessionAbsoluteDeadline?: number;
+  /** Monotonic local revision used to fence refresh commits. */
+  refreshGeneration?: number;
 };
 
 export type TokenResponse = {

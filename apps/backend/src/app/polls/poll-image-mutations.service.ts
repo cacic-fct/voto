@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { PollImagePlacement as DbPollImagePlacement, Prisma } from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
 import { PollMutationValidationService } from './poll-mutation-validation.service';
 import { externalPollElementId } from './poll-identifiers';
@@ -19,6 +19,7 @@ export class PollImageMutationsService {
       select: {
         id: true,
         objectKey: true,
+        placement: true,
       },
     });
     const elements = await tx.pollElement.findMany({
@@ -57,8 +58,16 @@ export class PollImageMutationsService {
     }
 
     const referencedIds = new Set(references.map((reference) => reference.id));
-    const removedImages = existingImages.filter((image) => !referencedIds.has(image.id));
+    // UNUSED rows are staged uploads. Keep them across every editor's save;
+    // explicit image deletion and the durable staging cleanup own their lifecycle.
+    const removedImages = existingImages.filter(
+      (image) => image.placement !== DbPollImagePlacement.UNUSED && !referencedIds.has(image.id),
+    );
     if (removedImages.length > 0) {
+      await tx.pollObjectDeletion.createMany({
+        data: removedImages.map((image) => ({ objectKey: image.objectKey })),
+        skipDuplicates: true,
+      });
       await tx.pollImage.deleteMany({
         where: {
           pollId,

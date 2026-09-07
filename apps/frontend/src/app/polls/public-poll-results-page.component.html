@@ -19,6 +19,22 @@
     @if (results(); as currentResults) {
       <p class="result-count">{{ voteCountText(currentResults.responseCount) }}</p>
 
+      @if (resultsFinalizationState() === 'pending') {
+        <mat-card appearance="outlined" class="notice-card" aria-live="polite">
+          <mat-card-content>Carregando os resultados finais…</mat-card-content>
+        </mat-card>
+      } @else if (resultsFinalizationState() === 'failed') {
+        <mat-card appearance="outlined" class="notice-card" aria-live="polite">
+          <mat-card-content>{{ resultsFinalizationError() }}</mat-card-content>
+          <mat-card-actions>
+            <button mat-stroked-button type="button" (click)="retryFinalResults()">
+              <mat-icon>refresh</mat-icon>
+              Tentar novamente
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      }
+
       @if (resultsConnectionState() === 'reconnecting') {
         <mat-card appearance="outlined" class="notice-card">
           <mat-card-content>Conexão instável. Tentando atualizar os resultados novamente.</mat-card-content>

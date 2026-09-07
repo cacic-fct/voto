@@ -322,9 +322,28 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
           return '';
         }
 
-        return `<strong>${params.name}</strong><br/>Quantidade: ${this.formatNumber(params.value)}`;
+        return `<strong>${this.escapeTooltipText(params.name)}</strong><br/>Quantidade: ${this.formatNumber(params.value)}`;
       },
     };
+  }
+
+  private escapeTooltipText(value: string): string {
+    return value.replace(/[&<>"']/g, (character) => {
+      switch (character) {
+        case '&':
+          return '&amp;';
+        case '<':
+          return '&lt;';
+        case '>':
+          return '&gt;';
+        case '"':
+          return '&quot;';
+        case "'":
+          return '&#39;';
+        default:
+          return character;
+      }
+    });
   }
 
   private isTooltipParam(value: unknown): value is { name: string; value: number } {

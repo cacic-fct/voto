@@ -1,11 +1,24 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PollResponse, PollResponseAnswer, PollUserResponseState } from '@org/voting-contracts';
 import { PollStatus as DbPollStatus, PollVotingStyle as DbPollVotingStyle, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
+import { revokedSubjectHash } from '../lgpd/subject-revocation';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitPollResponseDto } from './dto/poll.dto';
-import { isUniqueConstraintError, requireAuthenticatedVoter } from './poll-auth';
+import {
+  isSerializationConflictError,
+  isTransactionTimeoutError,
+  isUniqueConstraintError,
+  requireAuthenticatedVoter,
+} from './poll-auth';
 import { PollEligibilityService } from './poll-eligibility.service';
 import { normalizeDirectLinkToken } from './poll-identifiers';
 import {
@@ -24,6 +37,10 @@ import {
   pollVotingOpenWhere,
   publicReadablePollWhere,
 } from './poll-visibility';
+
+const REMOTE_ELIGIBILITY_TIMEOUT_MS = 2_000;
+const VOTE_TRANSACTION_MAX_WAIT_MS = 2_500;
+const VOTE_TRANSACTION_TIMEOUT_MS = 4_000;
 
 @Injectable()
 export class PollResponsesService {
@@ -55,11 +72,10 @@ export class PollResponsesService {
 
     assertPollAcceptsVoteResponses(poll);
     const voter = requireAuthenticatedVoter(user);
-    await this.eligibility.ensureVotingAllowed(poll, voter);
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter, answers, undefined, input);
-    await this.publishResultsBestEffort(poll.id);
+    await this.publishResultsBestEffort(poll.id, randomUUID());
 
     return toContractPollResponse(response);
   }
@@ -90,7 +106,7 @@ export class PollResponsesService {
     const answers = validatePollResponse(poll, input);
 
     const response = await this.saveResponse(poll, voter, answers, normalizedToken, input);
-    await this.publishResultsBestEffort(poll.id);
+    await this.publishResultsBestEffort(poll.id, randomUUID());
 
     return toContractPollResponse(response);
   }
@@ -128,13 +144,14 @@ export class PollResponsesService {
     return this.readUserResponseState(poll, voter);
   }
 
-  private async publishResultsBestEffort(pollId: string): Promise<void> {
+  private async publishResultsBestEffort(pollId: string, deduplicationKey: string): Promise<void> {
     try {
-      await this.results.publishPollResultsForResponse(pollId);
+      await this.results.publishPollResultsForResponse(pollId, false, deduplicationKey);
     } catch (error) {
       this.logger.warn(`Could not publish the committed poll response for ${pollId}.`, error);
     }
   }
+
 
   async getDirectLinkUserResponseState(
     directLinkToken: string,
@@ -232,6 +249,18 @@ export class PollResponsesService {
           throw new ConflictException('Poll definition or eligibility changed. Please reload and try again.');
         }
 
+        const subjectHash = revokedSubjectHash(voter.sub);
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${subjectHash}, 0))
+        `;
+        const revokedSubject = await tx.revokedVotingSubject.findUnique({
+          where: { subjectHash },
+          select: { subjectHash: true },
+        });
+        if (revokedSubject) {
+          throw new ForbiddenException('This subject is no longer allowed to vote.');
+        }
+
         const currentAnswers = validatePollResponse(
           currentPoll,
           rawInput ?? {
@@ -242,7 +271,9 @@ export class PollResponsesService {
           },
         );
         if (!directLinkToken) {
-          await this.eligibility.ensureVotingAllowed(currentPoll, voter, tx);
+          await this.eligibility.ensureVotingAllowed(currentPoll, voter, tx, {
+            remoteTimeoutMs: REMOTE_ELIGIBILITY_TIMEOUT_MS,
+          });
         }
         const isAnonymous = currentPoll.votingStyle === DbPollVotingStyle.ANONYMOUS;
         const userId = voter.sub;
@@ -329,7 +360,11 @@ export class PollResponsesService {
         });
 
         return this.createResponse(tx, currentPoll, userId, currentAnswers, isAnonymous);
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: VOTE_TRANSACTION_MAX_WAIT_MS,
+        timeout: VOTE_TRANSACTION_TIMEOUT_MS,
+      });
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -341,6 +376,10 @@ export class PollResponsesService {
 
       if (this.isSerializationConflict(error)) {
         throw new ConflictException('The poll changed concurrently. Please reload and retry.');
+      }
+
+      if (isTransactionTimeoutError(error)) {
+        throw new ServiceUnavailableException('Voting could not be completed within the eligibility verification window.');
       }
 
       throw error;
@@ -399,7 +438,6 @@ export class PollResponsesService {
   }
 
   private isSerializationConflict(error: unknown): error is { code: 'P2034' } {
-    return typeof error === 'object' && error !== null && 'code' in error &&
-      (error as { code?: unknown }).code === 'P2034';
+    return isSerializationConflictError(error);
   }
 }

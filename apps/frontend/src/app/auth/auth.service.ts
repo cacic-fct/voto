@@ -24,6 +24,24 @@ import {
 } from 'rxjs';
 import { SilentSsoService } from './silent-sso.service';
 
+export function isTransientIdentityProviderFailure(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse)) {
+    return false;
+  }
+
+  const response = error.error;
+  return (
+    error.status === 429 ||
+    error.status === 502 ||
+    error.status === 503 ||
+    error.status === 504 ||
+    (typeof response === 'object' &&
+      response !== null &&
+      !Array.isArray(response) &&
+      (response as { code?: unknown }).code === 'KEYCLOAK_UNAVAILABLE')
+  );
+}
+
 @Service()
 export class AuthService {
   private readonly accountTrackingClearUrl =
@@ -34,6 +52,7 @@ export class AuthService {
     'cacic-voto:silent-sso-attempted';
   private readonly postLogoutRedirectStorageKey =
     'cacic-voto:post-logout-redirect';
+  private readonly accountTrackingTimeoutMs = 3000;
 
   private readonly http = inject(HttpClient);
   private readonly document = inject(DOCUMENT);
@@ -129,18 +148,18 @@ export class AuthService {
           postLogoutRedirectUri,
         }),
       );
-      await this.clearAccountTrackingCookies();
       this.clearSession();
       this.markPostLogoutRedirect();
+      void this.clearAccountTrackingCookies();
 
       if (logoutUrl) {
         this.redirectTo(logoutUrl);
         return;
       }
     } catch {
-      await this.clearAccountTrackingCookies();
       this.clearSession();
       this.markPostLogoutRedirect();
+      void this.clearAccountTrackingCookies();
     }
 
     this.redirectTo(postLogoutRedirectUri);
@@ -158,7 +177,9 @@ export class AuthService {
           void this.loadCurrentUser();
         }),
         catchError((error) => {
-          this.clearSession();
+          if (!isTransientIdentityProviderFailure(error)) {
+            this.clearSession();
+          }
           return throwError(() => error);
         }),
         finalize(() => {
@@ -211,14 +232,19 @@ export class AuthService {
       }
       return Boolean(user);
     } catch (error) {
-      this.user.set(null);
-
       if (
         error instanceof HttpErrorResponse &&
         (error.status === 401 || error.status === 403)
       ) {
+        this.user.set(null);
         return false;
       }
+
+      if (isTransientIdentityProviderFailure(error)) {
+        throw error;
+      }
+
+      this.user.set(null);
 
       throw error;
     }
@@ -270,13 +296,18 @@ export class AuthService {
       return;
     }
 
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => controller.abort(), this.accountTrackingTimeoutMs);
     try {
       await fetch(url, {
         credentials: 'include',
         method,
+        signal: controller.signal,
       });
     } catch {
       return;
+    } finally {
+      globalThis.clearTimeout(timeout);
     }
   }
 

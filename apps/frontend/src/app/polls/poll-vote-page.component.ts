@@ -45,6 +45,7 @@ import { PollVotePageLoader } from './poll-vote-page-loader';
 })
 export class PollVotePageComponent extends PollVotePageLoader implements OnDestroy {
   ngOnDestroy(): void {
+    this.destroyPollState();
     this.closeResultsEvents();
   }
 }

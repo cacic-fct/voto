@@ -22,6 +22,14 @@
         "command": "node tools/run-backend-keycloak-e2e.mjs",
         "forwardAllArgs": true
       }
+    },
+    "e2e-database": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/coverage/backend-database-integration"],
+      "options": {
+        "command": "bunx jest --config apps/backend-e2e/jest.database.config.cts --runInBand",
+        "forwardAllArgs": true
+      }
     }
   }
 }

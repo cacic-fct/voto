@@ -5,10 +5,18 @@ import {
   PollElementSettings,
   PollStatus,
 } from '@org/voting-contracts';
-import { PollStatus as DbPollStatus, Prisma } from '@prisma/client';
+import {
+  CacicElectionPhase as DbCacicElectionPhase,
+  PollMode as DbPollMode,
+  PollStatus as DbPollStatus,
+  PollVoterEligibilitySource as DbPollVoterEligibilitySource,
+  PollVotingStyle as DbPollVotingStyle,
+  Prisma,
+} from '@prisma/client';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { recordPollAdminAudit } from './poll-admin-audit';
 import { SavePollDto } from './dto/poll.dto';
 import { PollCacicElectionService } from './poll-cacic-election.service';
 import { cleanOptionalText, toContractPoll, toDbStatus } from './poll-contract.mapper';
@@ -17,6 +25,7 @@ import { PollImageMutationsService } from './poll-image-mutations.service';
 import { PollImagesService } from './poll-images.service';
 import { PollMutationOptionsService } from './poll-mutation-options.service';
 import { PollMutationValidationService } from './poll-mutation-validation.service';
+import { isSerializationConflictError } from './poll-auth';
 import {
   PollMetadataData,
   PollPublicationScheduleData,
@@ -56,7 +65,7 @@ export class PollMutationsService {
     const status = DbPollStatus.DRAFT;
 
     const removedImageObjectKeys: string[] = [];
-    const poll = await this.prisma.$transaction(async (tx) => {
+    const poll = await this.runSerializableTransaction(async (tx) => {
       const created = await tx.poll.create({
         data: {
           title: input.title.trim(),
@@ -81,10 +90,9 @@ export class PollMutationsService {
       );
       removedImageObjectKeys.push(...(await this.imageMutations.reconcilePollImages(tx, created.id, input)));
 
-      return tx.poll.findUniqueOrThrow({
-        where: { id: created.id },
-        include: pollInclude,
-      });
+      const saved = await tx.poll.findUniqueOrThrow({ where: { id: created.id }, include: pollInclude });
+      await recordPollAdminAudit(tx, { pollId: created.id, actorId: user.sub, action: 'poll.created', afterVersion: saved.updatedAt });
+      return saved;
     });
 
     await this.pollImages.deleteObjectKeysBestEffort(removedImageObjectKeys);
@@ -97,7 +105,16 @@ export class PollMutationsService {
       throw new ConflictException('Poll status changes must use the publish endpoint.');
     }
     const expectedUpdatedAt = this.parseExpectedUpdatedAt(input.expectedUpdatedAt);
-    const existing = await this.prisma.poll.findUnique({ where: { id } });
+    const existing = await this.prisma.poll.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            responses: true,
+          },
+        },
+      },
+    });
     if (!existing) {
       throw new NotFoundException('Poll not found.');
     }
@@ -108,8 +125,26 @@ export class PollMutationsService {
     const directLink = this.options.resolvePollDirectLink(input, existing, metadata);
     const publicationSchedule = this.resolvePollPublicationSchedule(input, existing);
     this.validatePollPublicationSchedule(publicationSchedule);
+    this.assertPollPolicyTransition(existing, metadata, responseOptions, directLink);
     const removedImageObjectKeys: string[] = [];
-    const poll = await this.prisma.$transaction(async (tx) => {
+    const poll = await this.runSerializableTransaction(async (tx) => {
+      const current = await tx.poll.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              responses: true,
+            },
+          },
+        },
+      });
+      if (!current || current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+        throw new ConflictException('Poll was changed by another administrator. Reload before saving.');
+      }
+      // Recheck the response count in the same serializable transaction. A vote
+      // can be committed after the initial read without changing poll.updatedAt.
+      this.assertPollPolicyTransition(current, metadata, responseOptions, directLink);
+      await this.assertElectionTransitionReady(tx, id, current, metadata);
       const updated = await this.updatePollWithVersion(tx, id, expectedUpdatedAt, {
         title: input.title.trim(),
         description: cleanOptionalText(input.description),
@@ -135,10 +170,9 @@ export class PollMutationsService {
       );
       removedImageObjectKeys.push(...(await this.imageMutations.reconcilePollImages(tx, id, input)));
 
-      return tx.poll.findUniqueOrThrow({
-        where: { id },
-        include: pollInclude,
-      });
+      const saved = await tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
+      await recordPollAdminAudit(tx, { pollId: id, actorId: user.sub, action: 'poll.updated', beforeVersion: expectedUpdatedAt, afterVersion: saved.updatedAt });
+      return saved;
     });
 
     await this.pollImages.deleteObjectKeysBestEffort(removedImageObjectKeys);
@@ -170,7 +204,9 @@ export class PollMutationsService {
       if (!updated) {
         throw new ConflictException('Poll was changed by another administrator. Reload before updating status.');
       }
-      return tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
+      const saved = await tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
+      await recordPollAdminAudit(tx, { pollId: id, actorId: user.sub, action: `poll.${status}`, beforeVersion: expectedVersion, afterVersion: saved.updatedAt });
+      return saved;
     });
 
     return toContractPoll(poll, { includeDirectLinkToken: true });
@@ -186,6 +222,123 @@ export class PollMutationsService {
       throw new ConflictException('The poll version is invalid. Reload before retrying.');
     }
     return date;
+  }
+
+  private assertPollPolicyTransition(
+    existing: {
+      status: DbPollStatus;
+      mode: DbPollMode;
+      cacicElectionPhase: DbCacicElectionPhase | null;
+      votingStyle: DbPollVotingStyle;
+      voterEligibilitySource: DbPollVoterEligibilitySource;
+      requireVerifiedUnespRole: boolean;
+      linkedEventId: string | null;
+      directLinkEnabled: boolean;
+      allowResponseEditing: boolean;
+      allowMultipleResponses: boolean;
+      _count?: { responses: number };
+    },
+    metadata: PollMetadataData,
+    responseOptions: PollResponseOptionsData,
+    directLink: { directLinkEnabled: boolean; directLinkToken: string | null },
+  ): void {
+    const hasPublishedOrCollectedBallots =
+      existing.status !== DbPollStatus.DRAFT || (existing._count?.responses ?? 0) > 0;
+    if (!hasPublishedOrCollectedBallots) {
+      return;
+    }
+
+    if (existing.mode !== metadata.mode) {
+      throw new ConflictException('A published poll cannot change its voting mode.');
+    }
+
+    const isSubmissionToElection =
+      existing.mode === DbPollMode.CACIC_ELECTION &&
+      existing.cacicElectionPhase === DbCacicElectionPhase.SLATE_SUBMISSION &&
+      metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION &&
+      (existing.status === DbPollStatus.DRAFT || existing.status === DbPollStatus.PUBLISHED) &&
+      (existing._count?.responses ?? 0) === 0;
+    if (existing.cacicElectionPhase !== metadata.cacicElectionPhase && !isSubmissionToElection) {
+      throw new ConflictException('A published poll cannot change its election phase.');
+    }
+
+    if (isSubmissionToElection) {
+      return;
+    }
+
+    if (
+      existing.voterEligibilitySource !== metadata.voterEligibilitySource ||
+      existing.requireVerifiedUnespRole !== metadata.requireVerifiedUnespRole ||
+      existing.linkedEventId !== metadata.linkedEventId
+    ) {
+      throw new ConflictException('A published poll cannot change its voter eligibility policy.');
+    }
+
+    if ((existing._count?.responses ?? 0) > 0) {
+      if (existing.votingStyle !== metadata.votingStyle) {
+        throw new ConflictException('A poll with responses cannot change its voting privacy policy.');
+      }
+      if (
+        existing.directLinkEnabled !== directLink.directLinkEnabled ||
+        existing.allowResponseEditing !== responseOptions.allowResponseEditing ||
+        existing.allowMultipleResponses !== responseOptions.allowMultipleResponses
+      ) {
+        throw new ConflictException('A poll with responses cannot change its response policy.');
+      }
+    }
+  }
+
+  private async assertElectionTransitionReady(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+    existing: {
+      mode: DbPollMode;
+      cacicElectionPhase: DbCacicElectionPhase | null;
+    },
+    metadata: PollMetadataData,
+  ): Promise<void> {
+    if (
+      metadata.mode !== DbPollMode.CACIC_ELECTION ||
+      metadata.cacicElectionPhase !== DbCacicElectionPhase.ELECTION ||
+      (existing.mode === DbPollMode.CACIC_ELECTION && existing.cacicElectionPhase === DbCacicElectionPhase.ELECTION)
+    ) {
+      return;
+    }
+
+    const approvedSlate = await tx.cacicElectionSlate.findFirst({
+      where: {
+        pollId,
+        status: 'APPROVED',
+        enabled: true,
+      },
+      select: { id: true },
+    });
+    if (!approvedSlate) {
+      throw new ConflictException('At least one approved and enabled slate is required before the election starts.');
+    }
+
+    const enrollment = await tx.pollEligibilityEnrollment.findFirst({
+      where: { pollId },
+      select: { enrollmentNumber: true },
+    });
+    if (!enrollment) {
+      throw new ConflictException('At least one eligible enrollment is required before the election starts.');
+    }
+  }
+
+  private async runSerializableTransaction<T>(
+    callback: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.prisma.$transaction(callback, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error: unknown) {
+      if (isSerializationConflictError(error)) {
+        throw new ConflictException('The poll changed concurrently. Reload and retry.');
+      }
+      throw error;
+    }
   }
 
   private assertValidStatusTransition(current: DbPollStatus, next: DbPollStatus): void {
@@ -216,13 +369,19 @@ export class PollMutationsService {
     return typeof value === 'string' ? (value as PollStatus) : undefined;
   }
 
-  async deletePoll(id: string): Promise<void> {
-    const images = await this.prisma.pollImage.findMany({
-      where: { pollId: id },
-      select: { objectKey: true },
+  async deletePoll(id: string, user?: AuthenticatedPrincipal): Promise<void> {
+    const objectKeys = await this.runSerializableTransaction(async (tx) => {
+      const poll = await tx.poll.findUnique({ where: { id }, select: { updatedAt: true } });
+      if (!poll) return [];
+      const images = await tx.pollImage.findMany({ where: { pollId: id }, select: { objectKey: true } });
+      if (images.length) {
+        await tx.pollObjectDeletion.createMany({ data: images, skipDuplicates: true });
+      }
+      await tx.poll.deleteMany({ where: { id } });
+      await recordPollAdminAudit(tx, { pollId: id, actorId: user?.sub, action: 'poll.deleted', beforeVersion: poll.updatedAt });
+      return images.map((image) => image.objectKey);
     });
-    await this.prisma.poll.deleteMany({ where: { id } });
-    await this.pollImages.deleteObjectKeysBestEffort(images.map((image) => image.objectKey));
+    await this.pollImages.deleteObjectKeysBestEffort(objectKeys);
   }
 
   validatePollInput(input: SavePollDto): void {

@@ -3,9 +3,11 @@ import { PollResultsDelta, PollResultsResponse } from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
 import { responseVoterLabel } from './admin-poll-results';
 import { AdminPollBuilderPageBase } from './admin-poll-builder-page-base';
+import { reconcilePollResults } from '../polls/poll-results-reconciliation';
 
 export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBase {
   private resultsRefreshTimer?: ReturnType<typeof setTimeout>;
+  private resultsRequestRevision = 0;
   protected updateSelectedResultsElement(event: MatSelectChange): void {
     this.selectedResultsElementId.set(typeof event.value === 'string' ? event.value : null);
   }
@@ -36,12 +38,19 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     }
   }
 
-  protected async loadResults(showLoading = true): Promise<void> {
+  protected async loadResults(
+    showLoading = true,
+    selectionGeneration = this.currentPollSelectionGeneration(),
+  ): Promise<void> {
     const pollId = this.builder.draft().id;
+    if (pollId && !this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+      return;
+    }
     if (!pollId) {
       this.resetResults();
       return;
     }
+    this.resultsRequestRevision += 1;
 
     if (showLoading) {
       this.loadingResults.set(true);
@@ -49,23 +58,48 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
 
     try {
       const results = await firstValueFrom(this.api.getAdminPollResults(pollId));
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
       this.results.set(results);
+      this.resultsFinalizationState.set('idle');
+      this.resultsFinalizationError.set(null);
+      this.pendingFinalResultsPollId.set(null);
       this.selectedResultsElementId.set(this.questionSummaries()[0]?.key ?? null);
       this.selectedIndividualResponseId.set(results.responses.find((response) => response.voter)?.id ?? null);
-      this.openAdminResultsEvents(pollId);
+      this.openAdminResultsEvents(pollId, selectionGeneration);
     } catch {
-      this.snackBar.open('Não foi possível carregar os resultados.', 'OK', { duration: 3000 });
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.snackBar.open('Não foi possível carregar os resultados.', 'OK', { duration: 3000 });
+      }
     } finally {
-      this.loadingResults.set(false);
+      if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        this.loadingResults.set(false);
+      }
     }
   }
 
   protected resetResults(): void {
+    this.resultsRequestRevision += 1;
     this.closeResultsEvents();
     this.results.set(null);
     this.loadingResults.set(false);
     this.selectedResultsElementId.set(null);
     this.selectedIndividualResponseId.set(null);
+    this.resultsFinalizationState.set('idle');
+    this.resultsFinalizationError.set(null);
+    this.pendingFinalResultsPollId.set(null);
+  }
+
+  protected retryFinalResults(): void {
+    const pollId = this.pendingFinalResultsPollId();
+    if (!pollId || this.builder.draft().id !== pollId) {
+      return;
+    }
+
+    this.resultsFinalizationState.set('pending');
+    this.resultsFinalizationError.set(null);
+    void this.reconcileFinalResults(pollId, this.currentPollSelectionGeneration());
   }
 
   protected closeResultsEvents(): void {
@@ -90,7 +124,7 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     globalThis.URL.revokeObjectURL(url);
   }
 
-  private openAdminResultsEvents(pollId: string): void {
+  private openAdminResultsEvents(pollId: string, selectionGeneration: number): void {
     this.closeResultsEvents();
     if (!this.isBrowser) {
       return;
@@ -98,29 +132,62 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
 
     const source = this.api.openAdminPollResultsEvents(pollId);
     source.onmessage = (event) => {
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        source.close();
+        return;
+      }
       const delta = this.api.parseResultsDelta(event);
       if (delta) {
         this.applyResultsDelta(delta);
         if (delta.final) {
-          void this.reconcileFinalResults(pollId);
+          this.resultsRequestRevision += 1;
+          this.pendingFinalResultsPollId.set(pollId);
+          this.resultsFinalizationState.set('pending');
+          this.resultsFinalizationError.set(null);
+          void this.reconcileFinalResults(pollId, selectionGeneration);
         } else if (delta.refreshRequired) {
-          this.scheduleResultsRefresh(pollId);
+          this.scheduleResultsRefresh(pollId, selectionGeneration);
         }
+      }
+    };
+    source.onopen = () => {
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        source.close();
+      }
+    };
+    source.onerror = () => {
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        source.close();
       }
     };
     this.resultsEvents = source;
   }
 
-  private scheduleResultsRefresh(pollId: string): void {
+  private scheduleResultsRefresh(pollId: string, selectionGeneration: number): void {
     if (this.resultsRefreshTimer) {
       return;
     }
 
     this.resultsRefreshTimer = setTimeout(() => {
       this.resultsRefreshTimer = undefined;
+      if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+        return;
+      }
+      const requestRevision = this.resultsRequestRevision;
       void firstValueFrom(this.api.getAdminPollResults(pollId))
-        .then((results) => this.results.set(results))
-        .catch(() => this.snackBar.open('A atualização dos resultados está temporariamente indisponível.', 'OK', { duration: 3000 }));
+        .then((results) => {
+          if (
+            this.isPollSelectionCurrent(selectionGeneration, pollId) &&
+            requestRevision === this.resultsRequestRevision
+          ) {
+            this.results.set(results);
+          }
+        })
+        .catch(() => {
+          if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
+            this.snackBar.open('A atualização dos resultados está temporariamente indisponível.', 'OK', { duration: 3000 });
+          }
+        });
     }, 250);
   }
 
@@ -146,12 +213,22 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     }
   }
 
-  private async reconcileFinalResults(pollId: string): Promise<void> {
-    try {
-      const results = await firstValueFrom(this.api.getAdminPollResults(pollId));
-      this.results.set(results);
-    } finally {
-      this.closeResultsEvents();
-    }
+  private async reconcileFinalResults(pollId: string, selectionGeneration: number): Promise<void> {
+    await reconcilePollResults(
+      () => firstValueFrom(this.api.getAdminPollResults(pollId)),
+      {
+        isCurrent: () => this.isPollSelectionCurrent(selectionGeneration, pollId),
+        apply: (results) => {
+          this.results.set(results);
+          this.resultsFinalizationState.set('complete');
+          this.resultsFinalizationError.set(null);
+          this.closeResultsEvents();
+        },
+        fail: () => {
+          this.resultsFinalizationState.set('failed');
+          this.resultsFinalizationError.set('Os resultados finais ainda não estão disponíveis. Tente novamente.');
+        },
+      },
+    );
   }
 }

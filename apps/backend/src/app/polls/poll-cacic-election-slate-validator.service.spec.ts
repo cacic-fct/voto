@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { revokedSubjectHash } from '../lgpd/subject-revocation';
 import { PollCacicElectionSlateValidatorService } from './poll-cacic-election-slate-validator.service';
 
 type TestMember = {
@@ -48,5 +49,25 @@ describe('PollCacicElectionSlateValidatorService', () => {
     };
     const service = new PollCacicElectionSlateValidatorService(accountManager as never);
     await expect(service.normalizeCacicElectionSlateMembers(members() as never)).rejects.toThrow('exactly one Account Manager');
+  });
+
+  it('records a stable internal hash only for verified Account Manager subjects', async () => {
+    const accountManager = {
+      lookupPeopleByIdentifiers: jest.fn().mockImplementation(
+        (requests: readonly { requestId: string; identifierValue: string }[]) => new Map(
+          requests.map((request, index) => [request.requestId, [{
+            userId: `user-${index}`,
+            name: `Member ${index}`,
+            enrollmentNumber: `2612345${index}`,
+            email: request.identifierValue,
+          }]]),
+        ),
+      ),
+    };
+    const service = new PollCacicElectionSlateValidatorService(accountManager as never);
+
+    const normalized = await service.normalizeCacicElectionSlateMembers(members() as never);
+    expect(normalized[0].verifiedSubjectHash).toBe(revokedSubjectHash('user-0'));
+    expect(normalized.every((member) => member.verifiedSubjectHash)).toBe(true);
   });
 });

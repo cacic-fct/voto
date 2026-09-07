@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { randomBytes } from 'node:crypto';
 import { AuthorizationState } from './auth.types';
+import { normalizePostLoginRedirect } from './post-login-redirect';
 
 @Injectable()
 export class AuthorizationStateService {
@@ -10,6 +11,8 @@ export class AuthorizationStateService {
   private readonly stateTtlSeconds = this.parseDurationSeconds(process.env.KEYCLOAK_AUTH_STATE_TTL_SECONDS, 10 * 60);
   private readonly defaultPostLoginRedirectUri = process.env.KEYCLOAK_POST_LOGIN_REDIRECT_URI ?? '/';
   private readonly allowedPostLoginRedirectOrigins = this.readAllowedPostLoginRedirectOrigins();
+  private readonly applicationOrigin =
+    process.env.PUBLIC_ORIGIN?.trim() ?? process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
 
   constructor(private readonly redis: Redis) {}
 
@@ -90,27 +93,14 @@ return value
   }
 
   private normalizePostLoginReturnTo(returnTo?: string): string | undefined {
-    const normalizedReturnTo = returnTo?.trim();
-    if (!normalizedReturnTo || normalizedReturnTo.startsWith('//')) {
+    if (!returnTo?.trim()) {
       return undefined;
     }
 
-    if (normalizedReturnTo.startsWith('/')) {
-      return this.isAllowedAppPath(normalizedReturnTo) ? normalizedReturnTo : undefined;
-    }
-
-    try {
-      const returnToUrl = new URL(normalizedReturnTo);
-      return this.allowedPostLoginRedirectOrigins.has(returnToUrl.origin) && this.isAllowedAppPath(returnToUrl.pathname)
-        ? returnToUrl.toString()
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private isAllowedAppPath(pathname: string): boolean {
-    return pathname !== '/api/auth' && !pathname.startsWith('/api/auth/');
+    return normalizePostLoginRedirect(returnTo, {
+      allowedOrigins: this.allowedPostLoginRedirectOrigins,
+      applicationOrigin: this.applicationOrigin,
+    });
   }
 
   private readAllowedPostLoginRedirectOrigins(): Set<string> {

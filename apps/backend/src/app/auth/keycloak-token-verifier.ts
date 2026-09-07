@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import axios from 'axios';
 import { Buffer } from 'node:buffer';
 import {
@@ -8,6 +8,7 @@ import {
   verify as verifySignature,
 } from 'node:crypto';
 import { TokenClaims } from './auth.types';
+import { keycloakUnavailableException } from './keycloak-auth-errors';
 import { isRecord, readNumberClaim, readStringClaim } from './keycloak-claims.utils';
 
 export type KeycloakTokenVerifierOptions = {
@@ -117,13 +118,16 @@ export class KeycloakTokenVerifier {
 
       if (response.status < 200 || response.status >= 300) {
         this.options.logger.warn(`Keycloak JWKS lookup failed. status=${response.status} ${response.statusText}.`);
-        throw new UnauthorizedException('Unable to load Keycloak signing keys.');
+        throw keycloakUnavailableException('Identity provider signing keys are temporarily unavailable.');
       }
 
+      if (!isRecord(response.data) || !Array.isArray(response.data['keys'])) {
+        throw keycloakUnavailableException('Identity provider returned an invalid signing-key response.');
+      }
       const keys = this.parseJwks(response.data);
       if (keys.size === 0) {
         this.options.logger.warn('Keycloak JWKS response did not include usable RS256 signing keys.');
-        throw new UnauthorizedException('Unable to load Keycloak signing keys.');
+        throw keycloakUnavailableException('Identity provider returned no usable signing keys.');
       }
 
       this.jwksCache = {
@@ -133,14 +137,14 @@ export class KeycloakTokenVerifier {
 
       return keys;
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (error instanceof UnauthorizedException || error instanceof ServiceUnavailableException) {
         throw error;
       }
 
       this.options.logger.warn(
         `Keycloak JWKS lookup failed. ${error instanceof Error ? `message=${error.message}.` : 'unknown error.'}`,
       );
-      throw new UnauthorizedException('Unable to load Keycloak signing keys.');
+      throw keycloakUnavailableException('Identity provider signing keys are temporarily unavailable.');
     }
   }
 

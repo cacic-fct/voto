@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, MessageEvent, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, MessageEvent, NotFoundException, Optional } from '@nestjs/common';
 import {
   PollElement,
   PollResultsAggregate,
@@ -13,7 +13,8 @@ import {
   Prisma,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { concatMap, defer, Observable, Subscriber, switchMap, takeUntil, timer } from 'rxjs';
+import { concatMap, defer, ignoreElements, merge, Observable, Subscriber, switchMap, takeUntil, timer } from 'rxjs';
+import { KeycloakAuthService } from '../auth/keycloak-auth.service';
 import { SseReplayService } from '../realtime/sse-replay.service';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,16 +46,22 @@ import {
 } from './poll-visibility';
 
 const MAX_RESULT_STREAM_LIFETIME_MS = 15 * 60 * 1000;
+const DEFAULT_RESULT_STREAM_REAUTHORIZATION_INTERVAL_MS = 30 * 1000;
 
 @Injectable()
 export class PollResultsService {
   readonly resultSubscribers = new Map<string, Set<(event: PollResultStreamEvent) => void>>();
+  private readonly resultStreamReauthorizationIntervalMs = this.parsePositiveInteger(
+    process.env.POLL_RESULTS_STREAM_REAUTHORIZATION_INTERVAL_MS,
+    DEFAULT_RESULT_STREAM_REAUTHORIZATION_INTERVAL_MS,
+  );
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly eligibility: PollEligibilityService,
     private readonly realtime: PollResultsRealtimeService,
     private readonly replay: SseReplayService,
+    @Optional() private readonly auth?: KeycloakAuthService,
   ) {}
 
   async getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
@@ -64,11 +71,17 @@ export class PollResultsService {
       assertObserverCanReadElectionPoll(poll);
     }
 
-    const responses = this.areAnswersReleased(poll, audience) ? await this.listPollResultResponses(id) : [];
+    const answersReleased = this.areAnswersReleased(poll, audience);
+    const responses = answersReleased
+      ? await this.listPollResultResponses(id, 0, poll.votingStyle === DbPollVotingStyle.ANONYMOUS)
+      : [];
     const responseCount = await this.countPollResponses(id);
     const voters = await this.listPollResultVoters(id, audience);
 
-    return this.toPollResults(poll, responses, audience, { responseCount, voters });
+    return this.toPollResults(poll, responses, audience, {
+      responseCount,
+      voters,
+    });
   }
 
   async exportCacicElectionVoterEnrollments(id: string, user?: AuthenticatedPrincipal): Promise<string> {
@@ -171,12 +184,14 @@ export class PollResultsService {
           if (poll.id !== pollId) throw new ForbiddenException('Poll access changed.');
           return event;
         }));
-        return replay
-          .replay(scope, lastEventId, source)
-          .pipe(takeUntil(timer(MAX_RESULT_STREAM_LIFETIME_MS)));
+        return this.protectResultStream(
+          replay.replay(scope, lastEventId, source),
+          'public',
+          user,
+        );
       }));
     }
-    return new Observable<MessageEvent>((subscriber) => {
+    const stream = new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
 
       void (async () => {
@@ -200,10 +215,15 @@ export class PollResultsService {
       return () => {
         unsubscribe?.();
       };
-    }).pipe(takeUntil(timer(MAX_RESULT_STREAM_LIFETIME_MS)));
+    });
+    return this.protectResultStream(stream, 'public', user);
   }
 
-  async publishPollResultsForResponse(pollId: string, final = false): Promise<void> {
+  async publishPollResultsForResponse(
+    pollId: string,
+    final = false,
+    deduplicationKey?: string,
+  ): Promise<void> {
     if (!this.realtime && !this.resultSubscribers.has(pollId)) {
       return;
     }
@@ -227,13 +247,18 @@ export class PollResultsService {
       public: buildRefreshDelta('public'),
     };
     this.publishPollResults(event);
-    if (this.realtime) {
+    const realtime = this.realtime;
+    if (realtime) {
+      const publish = (scope: string, data: PollResultsDelta): Promise<void> =>
+        deduplicationKey
+          ? realtime.publish(scope, data, deduplicationKey)
+          : realtime.publish(scope, data);
       const publications = [
-        this.realtime.publish(this.realtime.scope('admin', pollId), event.admin),
-        this.realtime.publish(this.realtime.scope('observer', pollId), event.observer),
+        publish(realtime.scope('admin', pollId), event.admin),
+        publish(realtime.scope('observer', pollId), event.observer),
       ];
       if (poll.status !== DbPollStatus.PUBLISHED || poll.votingStyle === DbPollVotingStyle.PUBLIC) {
-        publications.push(this.realtime.publish(this.realtime.scope('public', pollId), event.public));
+        publications.push(publish(realtime.scope('public', pollId), event.public));
       }
       await Promise.all(publications);
     }
@@ -303,10 +328,11 @@ export class PollResultsService {
     return poll;
   }
 
-  async listPollResultResponses(pollId: string, skip = 0): Promise<PollResultResponseRecord[]> {
+  async listPollResultResponses(pollId: string, skip = 0, anonymous = false): Promise<PollResultResponseRecord[]> {
     const responses = await this.prisma.pollResponse.findMany({
       where: { pollId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      // Anonymous response IDs are random UUIDs, independent of arrival time.
+      orderBy: anonymous ? [{ id: 'asc' }] : [{ createdAt: 'asc' }, { id: 'asc' }],
       skip,
       include: {
         answers: {
@@ -405,7 +431,7 @@ export class PollResultsService {
     const answersReleased = this.areAnswersReleased(poll, audience);
     const publicRowLevel = audience === 'public' && this.isPublicRowLevelResults(poll);
     const responses = answersReleased && (audience !== 'public' || publicRowLevel)
-      ? await this.listPollResultResponses(poll.id, normalizedAfter)
+      ? await this.listPollResultResponses(poll.id, normalizedAfter, poll.votingStyle === DbPollVotingStyle.ANONYMOUS)
       : [];
     const aggregates = answersReleased && audience === 'public' && !publicRowLevel
       ? await this.buildPollResultAggregates(poll.id)
@@ -450,7 +476,9 @@ export class PollResultsService {
         ? { aggregates: options.aggregates }
         : {}),
       responses: answersReleased && (audience !== 'public' || publicRowLevel)
-        ? responses.map((response) => this.toPollResultsResponse(response, audience))
+        ? (poll.votingStyle === DbPollVotingStyle.ANONYMOUS
+            ? [...responses].sort((first, second) => first.id.localeCompare(second.id))
+            : responses).map((response) => this.toPollResultsResponse(response, audience))
         : [],
     };
   }
@@ -477,6 +505,7 @@ export class PollResultsService {
   ): boolean {
     return poll.votingStyle === DbPollVotingStyle.PUBLIC;
   }
+
 
   private async buildPollResultAggregates(pollId: string): Promise<PollResultsAggregate[]> {
     const [rawElements, responses] = await Promise.all([
@@ -546,7 +575,14 @@ export class PollResultsService {
 
     return [...versions.values()].map((aggregate) => {
       const buckets = [...aggregate.buckets.entries()]
-        .map(([key, count]) => ({ key, count }))
+        .map(([key, count]) => {
+          const coordinate = this.decodeGridAggregateKey(key);
+          return {
+            key,
+            count,
+            ...(coordinate ? coordinate : {}),
+          };
+        })
         .sort((first, second) => second.count - first.count || first.key.localeCompare(second.key));
       return {
         elementId: aggregate.element.id,
@@ -587,7 +623,7 @@ export class PollResultsService {
         const values = Array.isArray(rowValue) ? rowValue : [rowValue];
         return values.flatMap((columnId) =>
           typeof columnId === 'string' || typeof columnId === 'number'
-            ? [`${rowId}:${this.decodeAggregateOptionKey(storedElementId, String(columnId))}`]
+            ? [this.encodeGridAggregateKey(rowId, this.decodeAggregateOptionKey(storedElementId, String(columnId)))]
             : [],
         );
       });
@@ -598,6 +634,29 @@ export class PollResultsService {
 
   private decodeAggregateOptionKey(elementId: string, key: string): string {
     return externalPollOptionId(elementId, key);
+  }
+
+  private encodeGridAggregateKey(rowId: string, columnId: string): string {
+    // Keep the legacy `key` slot populated while making its coordinate encoding
+    // reversible for clients that have not yet adopted rowId/columnId.
+    return JSON.stringify([rowId, columnId]);
+  }
+
+  private decodeGridAggregateKey(key: string): { rowId: string; columnId: string } | undefined {
+    try {
+      const value: unknown = JSON.parse(key);
+      if (
+        Array.isArray(value) &&
+        value.length === 2 &&
+        typeof value[0] === 'string' &&
+        typeof value[1] === 'string'
+      ) {
+        return { rowId: value[0], columnId: value[1] };
+      }
+    } catch {
+      // Legacy non-grid aggregate keys remain valid and have no coordinates.
+    }
+    return undefined;
   }
 
   private aggregateVersionKey(element: Pick<PollElement, 'id' | 'type' | 'title' | 'description' | 'required' | 'options' | 'settings'>): string {
@@ -765,10 +824,14 @@ export class PollResultsService {
           }
           return event;
         }));
-        return replay.replay(scope, lastEventId, source);
+        return this.protectResultStream(
+          replay.replay(scope, lastEventId, source),
+          audience,
+          user,
+        );
       }));
     }
-    return new Observable<MessageEvent>((subscriber) => {
+    const stream = new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
 
       void (async () => {
@@ -808,6 +871,48 @@ export class PollResultsService {
         unsubscribe?.();
       };
     });
+    return this.protectResultStream(stream, audience, user);
+  }
+
+  private protectResultStream(
+    source: Observable<MessageEvent>,
+    audience: AdminPollAudience | 'public',
+    user?: AuthenticatedPrincipal,
+  ): Observable<MessageEvent> {
+    const lifetime = timer(MAX_RESULT_STREAM_LIFETIME_MS);
+    const sessionId = user?.sessionId;
+    if (!sessionId || !this.auth) {
+      return source.pipe(takeUntil(lifetime));
+    }
+
+    const reauthorization = timer(
+      this.resultStreamReauthorizationIntervalMs,
+      this.resultStreamReauthorizationIntervalMs,
+    ).pipe(
+      concatMap(() => defer(() => this.reauthorizeResultStream(sessionId, audience, user))),
+      ignoreElements(),
+    );
+
+    // The heartbeat emits no user-visible data. An authentication failure
+    // errors this merged stream, which tears down Redis/local subscriptions
+    // even when the poll is idle and no result event arrives.
+    return merge(source, reauthorization).pipe(takeUntil(lifetime));
+  }
+
+  private async reauthorizeResultStream(
+    sessionId: string,
+    audience: AdminPollAudience | 'public',
+    originalUser: AuthenticatedPrincipal,
+  ): Promise<void> {
+    const requiredPermissions = audience === 'public' ? [] : ['poll#read'];
+    const principal = await this.auth?.authenticateSession(sessionId, requiredPermissions);
+    if (!principal || principal.sub !== originalUser.sub) {
+      throw new ForbiddenException('Authentication changed while the result stream was open.');
+    }
+
+    if (audience !== 'public' && resolveAdminPollAudience(principal) !== audience) {
+      throw new ForbiddenException('Result stream permissions changed.');
+    }
   }
 
   private async emitPublicPollResultEvent(
@@ -891,5 +996,10 @@ export class PollResultsService {
 
   private participantReference(pollId: string, userId: string): string {
     return createHash('sha256').update(`${pollId}:${userId}`).digest('base64url').slice(0, 22);
+  }
+
+  private parsePositiveInteger(rawValue: string | undefined, fallback: number): number {
+    const value = Number.parseInt(rawValue ?? '', 10);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 }

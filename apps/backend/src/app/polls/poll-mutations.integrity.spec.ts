@@ -79,9 +79,7 @@ describe('PollMutationsService concurrency and lifecycle boundaries', () => {
       elements: [],
       expectedUpdatedAt: new Date(updatedAt.getTime() - 1).toISOString(),
     }, { sub: 'admin-1' } as never)).rejects.toThrow(ConflictException);
-    expect(prisma.poll.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: 'poll-1', updatedAt: new Date(updatedAt.getTime() - 1) }),
-    }));
+    expect(prisma.poll.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects invalid lifecycle transitions', async () => {
@@ -92,5 +90,83 @@ describe('PollMutationsService concurrency and lifecycle boundaries', () => {
       { sub: 'admin-1' } as never,
       '2026-06-24T10:00:00.000Z',
     )).rejects.toThrow('cannot transition');
+  });
+
+  it('rejects a privacy downgrade after a ballot was collected', async () => {
+    const { service, prisma } = createService();
+    const updatedAt = new Date('2026-06-24T10:00:00.000Z');
+    prisma.poll.findUnique.mockResolvedValue({
+      status: 'CLOSED',
+      mode: 'REGULAR',
+      cacicElectionPhase: null,
+      votingStyle: 'SECRET',
+      voterEligibilitySource: 'AUTHENTICATED_USERS',
+      requireVerifiedUnespRole: false,
+      linkedEventId: null,
+      directLinkEnabled: false,
+      allowResponseEditing: false,
+      allowMultipleResponses: false,
+      updatedAt,
+      _count: { responses: 1 },
+    });
+
+    await expect(service.updatePoll('poll-1', {
+      title: 'Poll',
+      elements: [],
+      expectedUpdatedAt: updatedAt.toISOString(),
+      votingStyle: 'public',
+    }, { sub: 'admin-1' } as never)).rejects.toThrow('voting privacy policy');
+    expect(prisma.poll.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('requires an approved slate and enrollment before entering the election phase', async () => {
+    const { service } = createService();
+    const internals = service as never as {
+      assertElectionTransitionReady(
+        tx: unknown,
+        pollId: string,
+        existing: { mode: string; cacicElectionPhase: string },
+        metadata: { mode: string; cacicElectionPhase: string },
+      ): Promise<void>;
+    };
+    const tx = {
+      cacicElectionSlate: { findFirst: jest.fn().mockResolvedValue(null) },
+      pollEligibilityEnrollment: { findFirst: jest.fn() },
+    };
+
+    await expect(internals.assertElectionTransitionReady(
+      tx,
+      'poll-1',
+      { mode: 'CACIC_ELECTION', cacicElectionPhase: 'SLATE_SUBMISSION' },
+      { mode: 'CACIC_ELECTION', cacicElectionPhase: 'ELECTION' },
+    )).rejects.toThrow('approved and enabled slate');
+    expect(tx.pollEligibilityEnrollment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen a closed submission poll by changing its election phase', async () => {
+    const { service, prisma } = createService();
+    const updatedAt = new Date('2026-06-24T10:00:00.000Z');
+    prisma.poll.findUnique.mockResolvedValue({
+      status: 'CLOSED',
+      mode: 'CACIC_ELECTION',
+      cacicElectionPhase: 'SLATE_SUBMISSION',
+      votingStyle: 'SECRET',
+      voterEligibilitySource: 'AUTHENTICATED_USERS',
+      requireVerifiedUnespRole: false,
+      linkedEventId: null,
+      directLinkEnabled: false,
+      allowResponseEditing: false,
+      allowMultipleResponses: false,
+      updatedAt,
+      _count: { responses: 0 },
+    });
+
+    await expect(service.updatePoll('poll-1', {
+      title: 'Poll',
+      elements: [],
+      expectedUpdatedAt: updatedAt.toISOString(),
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+    }, { sub: 'admin-1' } as never)).rejects.toThrow('election phase');
   });
 });

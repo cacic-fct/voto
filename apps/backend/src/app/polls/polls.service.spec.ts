@@ -45,7 +45,10 @@ import { PollResultsService } from './poll-results.service';
 import { PollsService } from './polls.service';
 
 type PrismaMock = {
+  pollAdminAudit: { create: jest.Mock };
+  pollObjectDeletion: { createMany: jest.Mock };
   $transaction: jest.Mock<Promise<unknown>, [(tx: PrismaMock) => Promise<unknown>, unknown?]>;
+  $executeRaw: jest.Mock;
   poll: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown?]>;
     findUnique: jest.Mock<Promise<unknown>, [unknown]>;
@@ -96,6 +99,9 @@ type PrismaMock = {
   };
   pollAnswer: {
     deleteMany: jest.Mock<Promise<{ count: number }>, [unknown]>;
+  };
+  revokedVotingSubject: {
+    findUnique: jest.Mock;
   };
   cacicElectionSlate: {
     findMany: jest.Mock<Promise<unknown[]>, [unknown]>;
@@ -195,7 +201,10 @@ type PollsInternals = {
 
 function createPrismaMock(): PrismaMock {
   const prisma: PrismaMock = {
+    pollAdminAudit: { create: jest.fn() },
+    pollObjectDeletion: { createMany: jest.fn() },
     $transaction: jest.fn(async (callback) => callback(prisma)),
+    $executeRaw: jest.fn().mockResolvedValue(0),
     poll: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -246,6 +255,9 @@ function createPrismaMock(): PrismaMock {
     },
     pollAnswer: {
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    revokedVotingSubject: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
     cacicElectionSlate: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -1296,7 +1308,7 @@ describe('PollsService', () => {
     });
   });
 
-  it('releases anonymous admin individual answers only after the poll is closed', async () => {
+  it('releases anonymous admin answers only after the poll is closed', async () => {
     prisma.poll.findUnique.mockResolvedValue(
       pollResultsMetadata({ status: DbPollStatus.CLOSED, votingStyle: DbPollVotingStyle.ANONYMOUS }),
     );
@@ -1320,14 +1332,12 @@ describe('PollsService', () => {
           enrollmentNumber: '24123456',
         },
       ],
-      responses: [
-        {
-          id: 'response-1',
-          submittedAt: undefined,
-          voter: undefined,
-          answers: [{ elementId: 'question-1', value: 'answer' }],
-        },
-      ],
+      responses: [{
+        id: 'response-1',
+        submittedAt: undefined,
+        voter: undefined,
+        answers: [{ elementId: 'question-1', value: 'answer' }],
+      }],
     });
   });
 
@@ -1765,8 +1775,9 @@ describe('PollsService', () => {
       linkedEventEndDate: new Date('2026-06-20T12:00:00.000Z'),
       linkedEventLocationDescription: null,
       publishedAt: null,
+      _count: { responses: 0 },
     });
-    prisma.poll.findUnique.mockResolvedValueOnce(existing);
+    prisma.poll.findUnique.mockResolvedValueOnce(existing).mockResolvedValueOnce(existing);
     prisma.poll.findUniqueOrThrow.mockResolvedValue(pollRecord({ status: DbPollStatus.DRAFT }));
     eventManager.listLinkableEvents.mockResolvedValueOnce([]);
 
@@ -1789,13 +1800,19 @@ describe('PollsService', () => {
       }),
     });
 
-    prisma.poll.findUnique.mockResolvedValueOnce(
-      pollRecord({
+    prisma.poll.findUnique
+      .mockResolvedValueOnce(
+        pollRecord({
+          visibleFrom: new Date('2026-06-21T11:00:00.000Z'),
+          votingStartsAt: new Date('2026-06-21T12:00:00.000Z'),
+          votingEndsAt: new Date('2026-06-21T13:00:00.000Z'),
+        }),
+      )
+      .mockResolvedValueOnce(pollRecord({
         visibleFrom: new Date('2026-06-21T11:00:00.000Z'),
         votingStartsAt: new Date('2026-06-21T12:00:00.000Z'),
         votingEndsAt: new Date('2026-06-21T13:00:00.000Z'),
-      }),
-    );
+      }));
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ visibleFrom: null }));
 
     await service.updatePoll('poll-1', savePoll({ visibleFrom: null }), createUser());
@@ -1820,7 +1837,7 @@ describe('PollsService', () => {
     });
     const inputWithoutStatus = savePoll();
     delete inputWithoutStatus.status;
-    prisma.poll.findUnique.mockResolvedValueOnce(existingPublished);
+    prisma.poll.findUnique.mockResolvedValueOnce(existingPublished).mockResolvedValueOnce(existingPublished);
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.PUBLISHED, publishedAt }));
 
     await service.updatePoll('poll-1', inputWithoutStatus, createUser());
@@ -1834,12 +1851,17 @@ describe('PollsService', () => {
     });
 
     const existingClosedAt = new Date('2026-06-20T12:00:00.000Z');
-    prisma.poll.findUnique.mockResolvedValueOnce(
-      pollRecord({
+    prisma.poll.findUnique
+      .mockResolvedValueOnce(
+        pollRecord({
+          status: DbPollStatus.CLOSED,
+          closedAt: existingClosedAt,
+        }),
+      )
+      .mockResolvedValueOnce(pollRecord({
         status: DbPollStatus.CLOSED,
         closedAt: existingClosedAt,
-      }),
-    );
+      }));
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
 
     await service.updatePoll('poll-1', savePoll(), createUser());
@@ -1851,12 +1873,17 @@ describe('PollsService', () => {
       }),
     });
 
-    prisma.poll.findUnique.mockResolvedValueOnce(
-      pollRecord({
+    prisma.poll.findUnique
+      .mockResolvedValueOnce(
+        pollRecord({
+          status: DbPollStatus.CLOSED,
+          closedAt: null,
+        }),
+      )
+      .mockResolvedValueOnce(pollRecord({
         status: DbPollStatus.CLOSED,
         closedAt: null,
-      }),
-    );
+      }));
     prisma.poll.findUniqueOrThrow.mockResolvedValueOnce(pollRecord({ status: DbPollStatus.CLOSED }));
 
     await service.updatePoll('poll-1', savePoll(), createUser());
@@ -1885,6 +1912,7 @@ describe('PollsService', () => {
     prisma.poll.findUnique.mockResolvedValueOnce(null);
     await expect(service.updatePollStatus('missing', 'draft', createUser())).rejects.toBeInstanceOf(NotFoundException);
 
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord());
     await service.deletePoll('poll-1');
     expect(prisma.poll.deleteMany).toHaveBeenCalledWith({ where: { id: 'poll-1' } });
   });
@@ -1896,9 +1924,12 @@ describe('PollsService', () => {
     const serviceWithImages = createServiceUnderTest(pollImages);
     prisma.pollImage.findMany.mockResolvedValueOnce([{ objectKey: 'polls/poll-1/images/image-1.avif' }]);
 
+    prisma.poll.findUnique.mockResolvedValueOnce(pollRecord());
     await serviceWithImages.deletePoll('poll-1');
 
     expect(prisma.poll.deleteMany).toHaveBeenCalledWith({ where: { id: 'poll-1' } });
+    expect(prisma.pollObjectDeletion.createMany).toHaveBeenCalledWith({ data: [{ objectKey: 'polls/poll-1/images/image-1.avif' }], skipDuplicates: true });
+    expect(prisma.pollAdminAudit.create).toHaveBeenCalledWith({ data: expect.objectContaining({ pollId: 'poll-1', action: 'poll.deleted' }) });
     expect(pollImages.deleteObjectKeysBestEffort).toHaveBeenCalledWith(['polls/poll-1/images/image-1.avif']);
   });
 
