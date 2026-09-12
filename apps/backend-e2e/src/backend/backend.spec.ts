@@ -364,7 +364,12 @@ describe('API integration coverage', () => {
       createSlateRequest(),
       expect.objectContaining({ sub: 'user-1' }),
     );
-    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith('poll-1', 'slate-1', { enabled: false });
+    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith(
+      'poll-1',
+      'slate-1',
+      { enabled: false },
+      expect.objectContaining({ sub: 'user-1' }),
+    );
   });
 
   it('publishes the OpenAPI contract for auth, public poll, and admin poll routes', async () => {
