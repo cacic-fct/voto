@@ -1,9 +1,9 @@
 {
   "name": "@cacic-fct/form-contracts",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Framework-agnostic CACiC FCT form contracts, answer value shapes, and normalization helpers.",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
   "sideEffects": false,

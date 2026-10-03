@@ -114,8 +114,9 @@ jobs:
         if: steps.changes.outputs.form_contracts == 'true'
         working-directory: dist/libs/shared/form-contracts
         run: |
-          node - <<'NODE'
-          const fs = require('node:fs');
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
 
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
@@ -126,6 +127,12 @@ jobs:
           if (pkg.private) {
             throw new Error('Package must not be private.');
           }
+
+          assert.equal(pkg.type, 'module');
+          const contracts = await import('@cacic-fct/form-contracts');
+          assert.equal(contracts.isFormElementType('section'), true);
+          assert.equal(contracts.isFormElementType('invalid'), false);
+          assert.equal(contracts.normalizeFormTextValue('  CACiC  '), 'CACiC');
 
           if (pkg.publishConfig?.registry !== 'https://registry.npmjs.org') {
             throw new Error(`Package must publish to npm. Found: ${pkg.publishConfig?.registry}`);

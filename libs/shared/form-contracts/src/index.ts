@@ -1,1 +1,1 @@
-export * from './lib/form-contracts';
+export * from './lib/form-contracts.js';
