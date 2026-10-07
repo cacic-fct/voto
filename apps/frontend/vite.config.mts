@@ -4,10 +4,10 @@ import { defineConfig } from 'vite';
 import angular from '@analogjs/vite-plugin-angular';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
-const hasProjectRootMarkdown = readdirSync(__dirname).some((entry) => entry.endsWith('.md'));
+const hasProjectRootMarkdown = readdirSync(import.meta.dirname).some((entry) => entry.endsWith('.md'));
 
 export default defineConfig(() => ({
-  root: __dirname,
+  root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/apps/frontend',
   resolve: {
     tsconfigPaths: true,
