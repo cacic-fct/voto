@@ -1,6 +1,32 @@
 import { PollResultsRealtimeService } from './poll-results-realtime.service';
 
 describe('PollResultsRealtimeService', () => {
+  it('uses one atomic shared counter to publish every third committed update', async () => {
+    const redis = { eval: jest.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(0).mockResolvedValueOnce(1) };
+    const service = new PollResultsRealtimeService(redis as never, {} as never);
+
+    await expect(service.shouldPublishUpdate('poll-1', false)).resolves.toBe(false);
+    await expect(service.shouldPublishUpdate('poll-1', false)).resolves.toBe(false);
+    await expect(service.shouldPublishUpdate('poll-1', false)).resolves.toBe(true);
+    expect(redis.eval).toHaveBeenCalledWith(expect.any(String), 1, 'poll-results:pending:v1:poll-1', 'update', '3', '604800');
+  });
+
+  it('clears a partial batch and always publishes on closure, including an empty poll', async () => {
+    const redis = { eval: jest.fn().mockResolvedValue(1) };
+    const service = new PollResultsRealtimeService(redis as never, {} as never);
+
+    await expect(service.shouldPublishUpdate('poll-1', true)).resolves.toBe(true);
+    expect(redis.eval).toHaveBeenCalledWith(expect.any(String), 1, 'poll-results:pending:v1:poll-1', 'final', '3', '604800');
+  });
+
+  it('still refreshes results when Redis batching fails', async () => {
+    const redis = { eval: jest.fn().mockRejectedValue(new Error('Redis unavailable')) };
+    const service = new PollResultsRealtimeService(redis as never, {} as never);
+
+    await expect(service.shouldPublishUpdate('poll-1', false)).resolves.toBe(true);
+    await expect(service.shouldPublishUpdate('poll-1', true)).resolves.toBe(true);
+  });
+
   it('retries transient replay recording and pub/sub failures with bounded attempts', async () => {
     const replay = {
       record: jest.fn()

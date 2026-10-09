@@ -228,6 +228,13 @@ export class PollResultsService {
       return;
     }
     const poll = await this.getPollResultsMetadata(pollId);
+    if (
+      poll.votingStyle === DbPollVotingStyle.ANONYMOUS &&
+      this.realtime &&
+      !(await this.realtime.shouldPublishUpdate(pollId, final))
+    ) {
+      return;
+    }
     const responseCount = await this.countPollResponses(pollId);
     const buildRefreshDelta = (audience: AdminPollAudience | 'public'): PollResultsDelta => ({
       pollId,
@@ -429,6 +436,7 @@ export class PollResultsService {
     const responseCount = await this.countPollResponses(poll.id);
     const normalizedAfter = Math.min(Math.max(0, after), responseCount);
     const answersReleased = this.areAnswersReleased(poll, audience);
+    const anonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
     const publicRowLevel = audience === 'public' && this.isPublicRowLevelResults(poll);
     const responses = answersReleased && (audience !== 'public' || publicRowLevel)
       ? await this.listPollResultResponses(poll.id, normalizedAfter, poll.votingStyle === DbPollVotingStyle.ANONYMOUS)
@@ -448,7 +456,7 @@ export class PollResultsService {
       responseCount,
       ...(voters ? { voterCount: voters.length, voters } : {}),
       ...(aggregates ? { aggregates } : {}),
-      responses: responses.map((response) => this.toPollResultsResponse(response, audience)),
+      responses: responses.map((response) => this.toPollResultsResponse(response, audience, anonymous)),
     };
   }
 
@@ -463,13 +471,15 @@ export class PollResultsService {
     },
   ): PollResults {
     const answersReleased = this.areAnswersReleased(poll, audience);
+    const anonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
     const publicRowLevel = audience === 'public' && this.isPublicRowLevelResults(poll);
+    const includeVoters = audience !== 'public' || poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET;
     return {
       pollId: poll.id,
-      anonymous: poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
+      anonymous,
       answersReleased,
       responseCount: options.responseCount,
-      ...((audience === 'admin' || audience === 'observer' || poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET) && options.voters
+      ...(includeVoters && options.voters
         ? { voterCount: options.voters.length, voters: options.voters }
         : {}),
       ...(audience === 'public' && !publicRowLevel && options.aggregates
@@ -478,7 +488,7 @@ export class PollResultsService {
       responses: answersReleased && (audience !== 'public' || publicRowLevel)
         ? (poll.votingStyle === DbPollVotingStyle.ANONYMOUS
             ? [...responses].sort((first, second) => first.id.localeCompare(second.id))
-            : responses).map((response) => this.toPollResultsResponse(response, audience))
+            : responses).map((response) => this.toPollResultsResponse(response, audience, anonymous))
         : [],
     };
   }
@@ -486,12 +496,13 @@ export class PollResultsService {
   toPollResultsResponse(
     response: PollResultResponseRecord,
     audience: AdminPollAudience | 'public',
+    anonymous = false,
   ): PollResultsResponse {
     return {
       id: response.id,
-      submittedAt: audience === 'admin' || audience === 'observer' ? response.submittedAt?.toISOString() : undefined,
+      submittedAt: !anonymous && (audience === 'admin' || audience === 'observer') ? response.submittedAt?.toISOString() : undefined,
       voter:
-        (audience === 'admin' || audience === 'observer') && response.user
+        !anonymous && (audience === 'admin' || audience === 'observer') && response.user
           ? this.toPollResultsVoter(response.user, audience)
           : undefined,
       answers: response.answers.map((answer) => ({

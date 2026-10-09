@@ -64,6 +64,7 @@ describe('PollResultsService public privacy contracts', () => {
     const realtime = {
       scope: jest.fn((_audience: string, pollId: string) => `scope:${pollId}`),
       publish: jest.fn().mockResolvedValue(undefined),
+      shouldPublishUpdate: jest.fn().mockResolvedValue(true),
     };
     return {
       prisma,
@@ -231,6 +232,69 @@ describe('PollResultsService public privacy contracts', () => {
     await expect(service.getPublicPollResults('poll-1', user)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it.each([DbPollStatus.PUBLISHED, DbPollStatus.CLOSED])('preserves anonymous participant audits without linking them to answers while %s', async (status) => {
+    const { service, prisma } = createService();
+    const poll = { ...metadata, status, votingStyle: DbPollVotingStyle.ANONYMOUS };
+    prisma.poll.findUnique.mockResolvedValue(poll);
+
+    const snapshot = await service.getAdminPollResults('poll-1');
+    const delta = await service.getPollResultsDelta(poll, 0, 'admin');
+
+    for (const result of [snapshot, delta]) {
+      expect(result.voters).toEqual([expect.objectContaining({ userId: 'voter-1', email: 'ada@example.com' })]);
+      expect(result.voterCount).toBe(1);
+      expect(JSON.stringify(result.responses)).not.toContain('ada@example.com');
+      expect(JSON.stringify(result.responses)).not.toContain('submittedAt');
+      expect(JSON.stringify(result.responses)).not.toContain('voter');
+      if (status === DbPollStatus.PUBLISHED) {
+        expect(result.answersReleased).toBe(false);
+        expect(result.responses).toEqual([]);
+      }
+    }
+    expect(prisma.pollVoter.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for a complete batch before counting responses or publishing a refresh', async () => {
+    const { service, prisma, realtime } = createService();
+    realtime.shouldPublishUpdate.mockResolvedValue(false);
+    prisma.poll.findUnique.mockResolvedValue({ ...metadata, status: DbPollStatus.PUBLISHED, votingStyle: DbPollVotingStyle.ANONYMOUS });
+
+    await service.publishPollResultsForResponse('poll-1');
+
+    expect(prisma.pollResponse.count).not.toHaveBeenCalled();
+    expect(realtime.publish).not.toHaveBeenCalled();
+  });
+
+  it('flushes remaining updates with a final refresh for every audience on closure', async () => {
+    const { service, prisma, realtime } = createService();
+    prisma.poll.findUnique.mockResolvedValue({ ...metadata, votingStyle: DbPollVotingStyle.ANONYMOUS });
+    realtime.scope.mockImplementation((audience: string) => `${audience}:scope`);
+
+    await service.publishPollResultsForResponse('poll-1', true);
+
+    expect(realtime.shouldPublishUpdate).toHaveBeenCalledWith('poll-1', true);
+    for (const audience of ['admin', 'observer', 'public']) {
+      expect(realtime.publish).toHaveBeenCalledWith(`${audience}:scope`, expect.objectContaining({
+        final: true, refreshRequired: true, responseCount: 1, responses: [],
+      }));
+    }
+  });
+
+  it.each([
+    DbPollVotingStyle.PUBLIC,
+    DbPollVotingStyle.SECRET,
+    DbPollVotingStyle.PARTIALLY_SECRET,
+  ])('publishes each %s update immediately without batching', async (votingStyle) => {
+    const { service, prisma, realtime } = createService();
+    prisma.poll.findUnique.mockResolvedValue({ ...metadata, status: DbPollStatus.PUBLISHED, votingStyle });
+    realtime.shouldPublishUpdate.mockResolvedValue(false);
+
+    await service.publishPollResultsForResponse('poll-1');
+
+    expect(realtime.shouldPublishUpdate).not.toHaveBeenCalled();
+    expect(realtime.publish).toHaveBeenCalled();
+  });
+
   it('publishes a bounded refresh marker instead of rebuilding full snapshots per vote', async () => {
     const { service, realtime } = createService();
     realtime.scope.mockReturnValue('public:scope');
@@ -259,6 +323,7 @@ describe('PollResultsService public privacy contracts', () => {
     const realtime = {
       scope: jest.fn((audience: string) => `${audience}:scope`),
       publish: jest.fn().mockResolvedValue(undefined),
+      shouldPublishUpdate: jest.fn().mockResolvedValue(true),
     };
     (service as never as { realtime: unknown }).realtime = realtime;
 

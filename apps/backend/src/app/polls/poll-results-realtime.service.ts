@@ -5,6 +5,21 @@ import { SseReplayService, type SseRecordOptions } from '../realtime/sse-replay.
 
 const REDIS_CHANNEL = 'poll-results:realtime:v1';
 const MAX_PUBLICATION_ATTEMPTS = 3;
+const RESULT_UPDATE_BATCH_SIZE = 3;
+const PENDING_UPDATE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const BATCH_UPDATE_SCRIPT = `
+if ARGV[1] == 'final' then
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+local pending = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+if pending >= tonumber(ARGV[2]) then
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+`;
 
 interface Envelope { scope: string; event: MessageEvent }
 
@@ -49,6 +64,25 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
         if (channel.observed === false) this.channels.delete(scope);
       };
     });
+  }
+
+  async shouldPublishUpdate(pollId: string, final: boolean): Promise<boolean> {
+    try {
+      // Redis counts committed changes across instances, including edits that
+      // leave the response count unchanged. Closure always flushes the batch.
+      const ready = await this.redis.eval(
+        BATCH_UPDATE_SCRIPT,
+        1,
+        `poll-results:pending:v1:${pollId}`,
+        final ? 'final' : 'update',
+        String(RESULT_UPDATE_BATCH_SIZE),
+        String(PENDING_UPDATE_TTL_SECONDS),
+      );
+      return ready === 1;
+    } catch (error) {
+      this.logger.warn(`Poll result batching unavailable for ${pollId}; publishing refresh.`, error);
+      return true;
+    }
   }
 
   async publish(scope: string, data: object, deduplicationKey?: string): Promise<void> {

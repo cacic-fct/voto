@@ -1416,10 +1416,11 @@ describe('PollsService', () => {
     );
   });
 
-  it('exports enrollment numbers only for closed CACiC election voters', async () => {
+  it.each([DbPollVotingStyle.PUBLIC, DbPollVotingStyle.ANONYMOUS])('exports enrollment numbers only for closed CACiC election voters using %s voting', async (votingStyle) => {
     prisma.poll.findUnique.mockResolvedValueOnce(
       pollResultsMetadata({
         status: DbPollStatus.CLOSED,
+        votingStyle,
         mode: DbPollMode.CACIC_ELECTION,
         cacicElectionPhase: DbCacicElectionPhase.ELECTION,
       }),
