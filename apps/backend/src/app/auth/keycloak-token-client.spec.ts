@@ -139,37 +139,44 @@ describe('KeycloakTokenClient', () => {
     await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('revokes refresh tokens only when a client secret is configured', async () => {
-    await expect(createClient().client.revokeRefreshToken('refresh-1')).resolves.toBe(false);
-    expect(mockedAxios.post).not.toHaveBeenCalled();
+  it('ends Keycloak sessions with the server-held refresh token and client authentication', async () => {
+    const publicClient = createClient().client;
+    mockedAxios.post.mockResolvedValue({});
+
+    await expect(publicClient.logout('refresh-1')).resolves.toBeUndefined();
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://sso.example/realms/cacic/protocol/openid-connect/logout',
+      'refresh_token=refresh-1&client_id=voto+client',
+      expect.objectContaining({ headers: { 'content-type': 'application/x-www-form-urlencoded' } }),
+    );
 
     const { client } = createClient({ clientSecret: 'secret' });
     mockedAxios.post.mockResolvedValue({});
 
-    await expect(client.revokeRefreshToken('refresh-1')).resolves.toBe(true);
-    expect(mockedAxios.post).toHaveBeenCalledWith(
-      'https://sso.example/realms/cacic/protocol/openid-connect/revoke',
-      'token=refresh-1&token_type_hint=refresh_token',
+    await client.logout('refresh-2');
+    expect(mockedAxios.post).toHaveBeenLastCalledWith(
+      'https://sso.example/realms/cacic/protocol/openid-connect/logout',
+      'refresh_token=refresh-2',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.any(String) }) }),
     );
   });
 
-  it('logs and ignores refresh token revocation failures', async () => {
-    const { client, logger } = createClient({ clientSecret: 'secret' });
+  it('propagates Keycloak logout failures instead of reporting success', async () => {
+    const { client, logger } = createClient();
     mockedAxios.post.mockRejectedValue('broken');
 
-    await expect(client.revokeRefreshToken('refresh-1')).resolves.toBe(false);
+    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('error=broken'));
   });
 
-  it('builds logout URLs from explicit and default parameters', () => {
+  it('builds token-free logout URLs from explicit and default parameters', () => {
     expect(
       createClient().client.createLogoutUrl({
-        idTokenHint: 'id-token',
+        postLogoutRedirectUri: 'https://app.example/after',
       }),
     ).toBe(
-      'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto+client&id_token_hint=id-token&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Flogin',
+      'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto+client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fafter',
     );
 
     expect(
@@ -179,6 +186,8 @@ describe('KeycloakTokenClient', () => {
     ).toBe(
       'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto+client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fbye',
     );
+
+    expect(createClient().client.createLogoutUrl({}).includes('id_token_hint')).toBe(false);
   });
 
   it('keeps private basic credential helper defensive and logs singular suppression text', async () => {

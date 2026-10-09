@@ -84,42 +84,31 @@ export class KeycloakTokenClient {
     }
   }
 
-  async revokeRefreshToken(refreshToken: string): Promise<boolean> {
-    if (!this.options.clientSecret) {
-      return false;
-    }
-
+  async logout(refreshToken: string): Promise<void> {
     const payload = new URLSearchParams();
-    payload.set('token', refreshToken);
-    payload.set('token_type_hint', 'refresh_token');
+    payload.set('refresh_token', refreshToken);
     const headers = this.createFormHeaders();
     this.addClientAuthentication(payload, headers);
 
     try {
       await axios.post(
-        `${this.options.realmUrl}/protocol/openid-connect/revoke`,
+        `${this.options.realmUrl}/protocol/openid-connect/logout`,
         payload.toString(),
         { headers, timeout: this.requestTimeoutMs },
       );
-      return true;
     } catch (error) {
-      this.logKeycloakFailure('refresh token revocation', error);
-      return false;
+      this.logKeycloakFailure('session logout', error);
+      this.throwTokenEndpointFailure(error, 'Could not end the Keycloak session.');
     }
   }
 
   createLogoutUrl(input: {
-    idTokenHint?: string;
     postLogoutRedirectUri?: string;
   }): string {
     const logoutUrl = new URL(
       `${this.options.realmUrl}/protocol/openid-connect/logout`,
     );
     logoutUrl.searchParams.set('client_id', this.options.clientId);
-    if (input.idTokenHint) {
-      logoutUrl.searchParams.set('id_token_hint', input.idTokenHint);
-    }
-
     const postLogoutRedirectUri =
       input.postLogoutRedirectUri ?? this.options.defaultPostLogoutRedirectUri;
     if (postLogoutRedirectUri) {

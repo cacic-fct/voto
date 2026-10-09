@@ -201,12 +201,11 @@ describe('AuthService', () => {
     redirectSpy.mockRestore();
   });
 
-  it('redirects to returned logout URLs and clears the session after logout failures', async () => {
+  it('redirects to the returned logout URL after server logout succeeds', async () => {
     const internals = service as unknown as { redirectTo(url: string): void };
     const redirectSpy = vi
       .spyOn(internals, 'redirectTo')
       .mockImplementation(() => undefined);
-    const rootUrl = new URL('/', window.location.origin).toString();
     service.user.set(user);
 
     const redirectedLogout = service.logout();
@@ -219,14 +218,24 @@ describe('AuthService', () => {
     );
     expect(redirectSpy).toHaveBeenCalledWith('#logged-out');
 
+    redirectSpy.mockRestore();
+  });
+
+  it('preserves the current user and does not redirect when server logout fails', async () => {
+    const internals = service as unknown as { redirectTo(url: string): void };
+    const redirectSpy = vi
+      .spyOn(internals, 'redirectTo')
+      .mockImplementation(() => undefined);
     service.user.set(user);
     const failedLogout = service.logout();
     http
       .expectOne('/api/auth/logout')
-      .flush({}, { status: 500, statusText: 'Server Error' });
-    await failedLogout;
-    expect(service.user()).toBeNull();
-    expect(redirectSpy).toHaveBeenLastCalledWith(rootUrl);
+      .flush({ code: 'KEYCLOAK_UNAVAILABLE' }, { status: 503, statusText: 'Service Unavailable' });
+    await expect(failedLogout).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(service.user()).toEqual(user);
+    expect(service.consumePostLogoutRedirect()).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(redirectSpy).not.toHaveBeenCalled();
 
     redirectSpy.mockRestore();
   });

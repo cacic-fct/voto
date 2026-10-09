@@ -47,6 +47,37 @@ describe('backend HTTP security middleware', () => {
     expect(response.json).toHaveBeenCalledWith({ message: 'Untrusted request origin.' });
   });
 
+  it('requires an allowlisted Origin for cookie-authenticated logout requests', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PUBLIC_ORIGIN = 'https://voto.cacic.com.br';
+    process.env.CSRF_ALLOWED_ORIGINS = 'https://app.example';
+
+    const cookie = '__Host-cacic_voto_session=session-1';
+    const missingOrigin = run({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+    });
+    expect(missingOrigin.next).not.toHaveBeenCalled();
+    expect(missingOrigin.response.status).toHaveBeenCalledWith(403);
+
+    const badOrigin = run({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie, origin: 'https://attacker.example' },
+    });
+    expect(badOrigin.next).not.toHaveBeenCalled();
+    expect(badOrigin.response.status).toHaveBeenCalledWith(403);
+
+    const goodOrigin = run({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie, origin: 'https://app.example' },
+    });
+    expect(goodOrigin.next).toHaveBeenCalledTimes(1);
+    expect(goodOrigin.response.status).not.toHaveBeenCalled();
+  });
+
   it('does not include development origins in production allowlists', () => {
     process.env.NODE_ENV = 'production';
     process.env.PUBLIC_ORIGIN = 'https://voto.cacic.com.br';

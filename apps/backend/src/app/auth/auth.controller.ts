@@ -243,7 +243,7 @@ export class AuthController {
   @Public()
   @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({
-    summary: 'Clear the local session and return a Keycloak logout URL',
+    summary: 'End the Keycloak session and return a logout URL',
   })
   @ApiBody({ type: LogoutDto, required: false })
   async logout(
@@ -252,10 +252,17 @@ export class AuthController {
     @Body() body?: LogoutDto,
   ) {
     this.assertSecureRequest(request);
+    const postLogoutRedirectUri = this.resolvePostLogoutRedirectUri(
+      body?.postLogoutRedirectUri,
+    );
     const sessionId = this.readCookie(request, getAuthSessionCookieName());
     const sessionLogoutInput = sessionId
       ? await this.auth.getSessionLogoutInput(sessionId)
       : null;
+    const logoutResult = await this.auth.logout({
+      refreshToken: sessionLogoutInput?.refreshToken,
+      postLogoutRedirectUri,
+    });
 
     if (sessionId) {
       await this.auth.clearSession(sessionId);
@@ -269,13 +276,7 @@ export class AuthController {
     });
     this.clearCacicTrackingCookies(response, request);
 
-    return this.auth.logout({
-      refreshToken: sessionLogoutInput?.refreshToken,
-      idTokenHint: sessionLogoutInput?.idTokenHint,
-      postLogoutRedirectUri: this.resolvePostLogoutRedirectUri(
-        body?.postLogoutRedirectUri,
-      ),
-    });
+    return logoutResult;
   }
 
   @Post('permissions/evaluate')

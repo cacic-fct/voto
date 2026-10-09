@@ -300,7 +300,7 @@ describe('API integration coverage', () => {
     const res = await request(app.getHttpServer()).post('/api/auth/logout').send({});
 
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ logoutUrl: 'https://sso.example/logout', refreshTokenRevoked: false });
+    expect(res.body).toEqual({ logoutUrl: 'https://sso.example/logout' });
     expect(auth.getSessionLogoutInput).not.toHaveBeenCalled();
     expect(auth.clearSession).not.toHaveBeenCalled();
   });
@@ -532,7 +532,6 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   auth.getSessionLogoutInput.mockResolvedValue(null);
   auth.logout.mockResolvedValue({
     logoutUrl: 'https://sso.example/logout',
-    refreshTokenRevoked: false,
   });
   auth.refreshSession.mockResolvedValue({
     expiresAt: Date.now() + 1000,

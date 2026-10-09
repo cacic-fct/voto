@@ -52,13 +52,25 @@ describe('AuthSessionStoreService', () => {
     const session: AuthSession = {
       accessToken: 'access',
       refreshToken: 'refresh',
-      idTokenHint: 'id-token',
       accessTokenExpiresAt: Date.now() + 1000,
       sessionExpiresAt: Date.now() + 2000,
     };
     redis.get.mockResolvedValue(JSON.stringify(session));
 
     await expect(service.get('session-1')).resolves.toEqual(session);
+  });
+
+  it('keeps an expired access token available for logout while the session is active', async () => {
+    const session: AuthSession = {
+      accessToken: 'expired-access',
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() - 1000,
+      sessionExpiresAt: Date.now() + 2000,
+    };
+    redis.get.mockResolvedValue(JSON.stringify(session));
+
+    await expect(service.get('session-1')).resolves.toEqual(session);
+    expect(redis.del).not.toHaveBeenCalled();
   });
 
   it('deletes unreadable, invalid, and expired sessions', async () => {

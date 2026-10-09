@@ -141,25 +141,18 @@ export class AuthService {
     }
 
     const postLogoutRedirectUri = this.getPostLogoutRedirectUri();
+    const { logoutUrl } = await firstValueFrom(
+      this.http.post<{ logoutUrl?: string }>('/api/auth/logout', {
+        postLogoutRedirectUri,
+      }),
+    );
+    this.clearSession();
+    this.markPostLogoutRedirect();
+    void this.clearAccountTrackingCookies();
 
-    try {
-      const { logoutUrl } = await firstValueFrom(
-        this.http.post<{ logoutUrl?: string }>('/api/auth/logout', {
-          postLogoutRedirectUri,
-        }),
-      );
-      this.clearSession();
-      this.markPostLogoutRedirect();
-      void this.clearAccountTrackingCookies();
-
-      if (logoutUrl) {
-        this.redirectTo(logoutUrl);
-        return;
-      }
-    } catch {
-      this.clearSession();
-      this.markPostLogoutRedirect();
-      void this.clearAccountTrackingCookies();
+    if (logoutUrl) {
+      this.redirectTo(logoutUrl);
+      return;
     }
 
     this.redirectTo(postLogoutRedirectUri);

@@ -171,8 +171,7 @@ return 0
       Number.isFinite(session.accessTokenExpiresAt) &&
       Number.isFinite(session.sessionExpiresAt) &&
       (session.sessionAbsoluteDeadline === undefined || Number.isFinite(session.sessionAbsoluteDeadline)) &&
-      (session.refreshToken === undefined || typeof session.refreshToken === 'string') &&
-      (session.idTokenHint === undefined || typeof session.idTokenHint === 'string')
+      (session.refreshToken === undefined || typeof session.refreshToken === 'string')
     );
   }
 

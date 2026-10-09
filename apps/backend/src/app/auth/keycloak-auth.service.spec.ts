@@ -417,7 +417,6 @@ describe('KeycloakAuthService', () => {
       expect.objectContaining({
         accessToken,
         refreshToken: 'refresh',
-        idTokenHint: 'id',
         accessTokenExpiresAt: Date.now() + 120000,
         sessionExpiresAt: Date.now() + 3600000,
       }),
@@ -1072,14 +1071,13 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=secret');
   });
 
-  it('clears sessions, reads logout input, and builds logout URLs', async () => {
+  it('reads the server refresh token even after access-token expiry and performs Keycloak logout', async () => {
     process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
     const service = createService();
     sessions.get.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
       accessToken: 'access',
       refreshToken: 'refresh',
-      idTokenHint: 'id-token',
-      accessTokenExpiresAt: Date.now() + 1000,
+      accessTokenExpiresAt: Date.now() - 1000,
       sessionExpiresAt: Date.now() + 2000,
     });
 
@@ -1087,37 +1085,36 @@ describe('KeycloakAuthService', () => {
     await expect(service.getSessionLogoutInput('missing')).resolves.toBeNull();
     await expect(service.getSessionLogoutInput('session-1')).resolves.toEqual({
       refreshToken: 'refresh',
-      idTokenHint: 'id-token',
     });
     expect(sessions.delete).toHaveBeenCalledWith('session-1');
 
     mockedAxios.post.mockResolvedValue({ data: {} });
-    await expect(
-      service.logout({
-        refreshToken: 'refresh',
-        idTokenHint: 'id-token',
-        postLogoutRedirectUri: 'https://app.example/after',
-      }),
-    ).resolves.toEqual({
-      refreshTokenRevoked: true,
-      logoutUrl:
-        'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client&id_token_hint=id-token&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fafter',
+    const logoutResult = await service.logout({
+      refreshToken: 'refresh',
+      postLogoutRedirectUri: 'https://app.example/after',
     });
+    expect(logoutResult).toEqual({
+      logoutUrl:
+        'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fafter',
+    });
+    expect(JSON.stringify(logoutResult)).not.toContain('refresh');
+    expect(logoutResult.logoutUrl).not.toContain('id_token_hint');
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://sso.example/realms/cacic/protocol/openid-connect/logout',
+      'refresh_token=refresh',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.any(String) }) }),
+    );
 
-    mockedAxios.post.mockRejectedValueOnce(new Error('revoke-failed'));
-    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toEqual({
-      refreshTokenRevoked: false,
-      logoutUrl:
-        'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Flogin',
-    });
+    mockedAxios.post.mockRejectedValueOnce(new Error('logout-failed'));
+    await expect(service.logout({ refreshToken: 'refresh' })).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     delete process.env.KEYCLOAK_CLIENT_SECRET;
     delete process.env.KEYCLOAK_POST_LOGOUT_REDIRECT_URI;
     const serviceWithoutLogoutDefault = createService();
-    await expect(serviceWithoutLogoutDefault.logout({ refreshToken: 'refresh' })).resolves.toEqual({
-      refreshTokenRevoked: false,
+    await expect(serviceWithoutLogoutDefault.logout({})).resolves.toEqual({
       logoutUrl: 'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client',
     });
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
   });
 
   it('delegates authorization-state helpers', async () => {

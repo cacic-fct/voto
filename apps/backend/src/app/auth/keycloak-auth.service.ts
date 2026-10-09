@@ -193,7 +193,6 @@ export class KeycloakAuthService {
     await this.sessions.set(sessionId, {
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
-      idTokenHint: tokenResponse.id_token,
       accessTokenExpiresAt,
       sessionExpiresAt,
       sessionAbsoluteDeadline,
@@ -325,7 +324,7 @@ export class KeycloakAuthService {
     await this.sessions.delete(sessionId);
   }
 
-  async getSessionLogoutInput(sessionId: string): Promise<{ refreshToken?: string; idTokenHint?: string } | null> {
+  async getSessionLogoutInput(sessionId: string): Promise<{ refreshToken?: string } | null> {
     const session = await this.sessions.get(sessionId);
     if (!session) {
       return null;
@@ -333,23 +332,19 @@ export class KeycloakAuthService {
 
     return {
       refreshToken: session.refreshToken,
-      idTokenHint: session.idTokenHint,
     };
   }
 
   async logout(input: {
     refreshToken?: string;
-    idTokenHint?: string;
     postLogoutRedirectUri?: string;
-  }): Promise<{ refreshTokenRevoked: boolean; logoutUrl: string }> {
-    const refreshTokenRevoked = input.refreshToken
-      ? await this.tokenClient.revokeRefreshToken(input.refreshToken)
-      : false;
+  }): Promise<{ logoutUrl: string }> {
+    if (input.refreshToken) {
+      await this.tokenClient.logout(input.refreshToken);
+    }
 
     return {
-      refreshTokenRevoked,
       logoutUrl: this.tokenClient.createLogoutUrl({
-        idTokenHint: input.idTokenHint,
         postLogoutRedirectUri: input.postLogoutRedirectUri,
       }),
     };
@@ -491,7 +486,6 @@ export class KeycloakAuthService {
       const updatedSession: AuthSession = {
         accessToken: tokenResponse.access_token,
         refreshToken: tokenResponse.refresh_token ?? currentSession.refreshToken,
-        idTokenHint: tokenResponse.id_token ?? currentSession.idTokenHint,
         accessTokenExpiresAt,
         sessionExpiresAt,
         sessionAbsoluteDeadline,

@@ -77,7 +77,6 @@ describeKeycloak('Keycloak-backed authentication', () => {
       JSON.stringify({
         accessToken: token.accessToken,
         refreshToken: token.refreshToken,
-        idTokenHint: token.idToken,
         accessTokenExpiresAt: now + token.expiresIn * 1000,
         sessionExpiresAt: now + token.refreshExpiresIn * 1000,
       }),

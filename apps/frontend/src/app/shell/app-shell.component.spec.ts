@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, signal } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, provideRouter } from '@angular/router';
 import { AuthenticatedUser } from '@org/voting-contracts';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
@@ -15,6 +16,7 @@ class DummyRouteComponent {}
 describe('AppShellComponent', () => {
   let fixture: ComponentFixture<AppShellComponent>;
   let auth: Pick<AuthService, 'user' | 'logout'>;
+  let snackBar: MatSnackBar;
   let isAdmin: ReturnType<typeof signal<boolean>>;
 
   const user: AuthenticatedUser = {
@@ -31,7 +33,6 @@ describe('AppShellComponent', () => {
       user: signal(user),
       logout: vi.fn().mockResolvedValue(undefined),
     };
-
     await TestBed.configureTestingModule({
       imports: [AppShellComponent],
       providers: [
@@ -48,6 +49,8 @@ describe('AppShellComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(AppShellComponent);
+    snackBar = fixture.debugElement.injector.get(MatSnackBar);
+    vi.spyOn(snackBar, 'open').mockImplementation(() => undefined as never);
     fixture.detectChanges();
   });
 
@@ -78,6 +81,22 @@ describe('AppShellComponent', () => {
     await component.logout();
 
     expect(auth.logout).toHaveBeenCalled();
+  });
+
+  it('keeps the current user and shows an actionable message when logout fails', async () => {
+    vi.mocked(auth.logout).mockRejectedValueOnce(new Error('Keycloak unavailable'));
+    const component = fixture.componentInstance as unknown as {
+      logout(): Promise<void>;
+    };
+
+    await component.logout();
+
+    expect(auth.user()).toEqual(user);
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível encerrar a sessão. Tente novamente.',
+      'OK',
+      { duration: 5000 },
+    );
   });
 
   it('should react to router navigation events when computing active tabs', async () => {

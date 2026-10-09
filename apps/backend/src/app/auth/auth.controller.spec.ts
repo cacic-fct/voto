@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import {
   AUTH_SESSION_COOKIE_NAME,
@@ -115,13 +115,11 @@ describe('AuthController', () => {
         .fn()
         .mockResolvedValue({
           refreshToken: 'refresh',
-          idTokenHint: 'id-token',
         }),
       clearSession: jest.fn().mockResolvedValue(undefined),
       logout: jest
         .fn()
         .mockResolvedValue({
-          refreshTokenRevoked: true,
           logoutUrl: 'https://sso.example/logout',
         }),
       evaluateSessionPermissions: jest.fn().mockResolvedValue(['poll#read']),
@@ -421,7 +419,7 @@ describe('AuthController', () => {
     expect(auth.refreshSession).not.toHaveBeenCalledWith('%');
   });
 
-  it('logs out current sessions and clears cookies', async () => {
+  it('uses the server session token, then clears the local session and cookies', async () => {
     const response = createResponse();
     const request = createRequest({
       secure: true,
@@ -430,27 +428,48 @@ describe('AuthController', () => {
         cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
       },
     });
+    const body = {
+      refreshToken: 'attacker-token',
+      idTokenHint: 'attacker-id-token',
+      postLogoutRedirectUri: 'https://app.example/login',
+    } as unknown as Parameters<AuthController['logout']>[2];
 
-    await expect(
-      controller.logout(request, response as unknown as Response, {
-        postLogoutRedirectUri: 'https://app.example/login',
-      }),
-    ).resolves.toEqual({
-      refreshTokenRevoked: true,
+    await expect(controller.logout(request, response as unknown as Response, body)).resolves.toEqual({
       logoutUrl: 'https://sso.example/logout',
     });
 
     expect(auth.getSessionLogoutInput).toHaveBeenCalledWith('session-1');
+    expect(auth.logout).toHaveBeenCalledWith({
+      refreshToken: 'refresh',
+      postLogoutRedirectUri: 'https://app.example/login',
+    });
+    expect(auth.logout.mock.invocationCallOrder[0]).toBeLessThan(auth.clearSession.mock.invocationCallOrder[0]);
     expect(auth.clearSession).toHaveBeenCalledWith('session-1');
     expect(response.clearCookie).toHaveBeenCalledWith(
       AUTH_SESSION_COOKIE_NAME,
       expect.objectContaining({ secure: true, path: '/' }),
     );
-    expect(auth.logout).toHaveBeenCalledWith({
-      refreshToken: 'refresh',
-      idTokenHint: 'id-token',
-      postLogoutRedirectUri: 'https://app.example/login',
+  });
+
+  it('preserves the server session and cookies when Keycloak logout fails', async () => {
+    const response = createResponse();
+    const request = createRequest({
+      secure: true,
+      headers: {
+        host: 'localhost:3000',
+        cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
+      },
     });
+    auth.logout.mockRejectedValueOnce(new ServiceUnavailableException('Identity provider unavailable.'));
+
+    await expect(
+      controller.logout(request, response as unknown as Response, {
+        postLogoutRedirectUri: 'https://app.example/login',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(auth.clearSession).not.toHaveBeenCalled();
+    expect(response.clearCookie).not.toHaveBeenCalled();
   });
 
   it('logs out without a local session', async () => {
@@ -462,7 +481,6 @@ describe('AuthController', () => {
     expect(auth.clearSession).not.toHaveBeenCalled();
     expect(auth.logout).toHaveBeenCalledWith({
       refreshToken: undefined,
-      idTokenHint: undefined,
       postLogoutRedirectUri: undefined,
     });
   });

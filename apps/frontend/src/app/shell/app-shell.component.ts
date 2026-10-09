@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
@@ -17,12 +18,13 @@ type NavItem = {
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterOutlet, MatButtonModule, MatIconModule, MatToolbarModule],
+  imports: [RouterLink, RouterOutlet, MatButtonModule, MatIconModule, MatSnackBarModule, MatToolbarModule],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })
 export class AppShellComponent {
   protected readonly auth = inject(AuthService);
+  private readonly snackBar = inject(MatSnackBar);
   private readonly permissions = inject(PermissionsService);
   private readonly router = inject(Router);
 
@@ -51,6 +53,12 @@ export class AppShellComponent {
   }
 
   protected async logout(): Promise<void> {
-    await this.auth.logout();
+    try {
+      await this.auth.logout();
+    } catch {
+      this.snackBar.open('Não foi possível encerrar a sessão. Tente novamente.', 'OK', {
+        duration: 5000,
+      });
+    }
   }
 }

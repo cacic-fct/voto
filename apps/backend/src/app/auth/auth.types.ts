@@ -22,7 +22,6 @@ export type AuthenticatedRequest = Request & {
 export type AuthSession = {
   accessToken: string;
   refreshToken?: string;
-  idTokenHint?: string;
   accessTokenExpiresAt: number;
   sessionExpiresAt: number;
   sessionAbsoluteDeadline?: number;
