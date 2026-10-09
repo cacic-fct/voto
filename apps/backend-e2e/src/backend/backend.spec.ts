@@ -127,7 +127,7 @@ const publicRouteCases = [
   { method: 'get', route: '/api/auth/callback', url: '/api/auth/callback?code=code-1&state=state-1', expectedStatus: 400 },
   { method: 'get', route: '/api/auth/me', url: '/api/auth/me', expectedStatus: 200 },
   { method: 'post', route: '/api/auth/refresh', url: '/api/auth/refresh', expectedStatus: 403 },
-  { method: 'post', route: '/api/auth/logout', url: '/api/auth/logout', expectedStatus: 201 },
+  { method: 'post', route: '/api/auth/logout', url: '/api/auth/logout', expectedStatus: 200 },
 ] satisfies PublicRouteCase[];
 
 const protectedRouteCases = [
@@ -299,8 +299,12 @@ describe('API integration coverage', () => {
   it('logs out anonymous sessions without touching stored sessions', async () => {
     const res = await request(app.getHttpServer()).post('/api/auth/logout').send({});
 
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ logoutUrl: 'https://sso.example/logout' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      globalLogoutComplete: false,
+      logoutUrl: 'https://sso.example/logout',
+    });
     expect(auth.getSessionLogoutInput).not.toHaveBeenCalled();
     expect(auth.clearSession).not.toHaveBeenCalled();
   });
@@ -531,6 +535,7 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   auth.getPostLoginRedirectUri.mockReturnValue('/polls');
   auth.getSessionLogoutInput.mockResolvedValue(null);
   auth.logout.mockResolvedValue({
+    globalLogoutComplete: false,
     logoutUrl: 'https://sso.example/logout',
   });
   auth.refreshSession.mockResolvedValue({

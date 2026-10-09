@@ -52,6 +52,7 @@ export class AuthService {
     'cacic-voto:silent-sso-attempted';
   private readonly postLogoutRedirectStorageKey =
     'cacic-voto:post-logout-redirect';
+  private readonly logoutWarningStorageKey = 'cacic-voto:logout-warning';
   private readonly accountTrackingTimeoutMs = 3000;
 
   private readonly http = inject(HttpClient);
@@ -141,17 +142,42 @@ export class AuthService {
     }
 
     const postLogoutRedirectUri = this.getPostLogoutRedirectUri();
-    const { logoutUrl } = await firstValueFrom(
-      this.http.post<{ logoutUrl?: string }>('/api/auth/logout', {
-        postLogoutRedirectUri,
-      }),
-    );
+    let logoutResult: {
+      success: boolean;
+      globalLogoutComplete: boolean;
+      logoutUrl?: string;
+    };
+    try {
+      logoutResult = await firstValueFrom(
+        this.http.post<{
+          success: boolean;
+          globalLogoutComplete: boolean;
+          logoutUrl?: string;
+        }>('/api/auth/logout', {
+          postLogoutRedirectUri,
+        }),
+      );
+    } catch (error) {
+      const cookieExpiredFailure = this.readCookieExpiredLogoutFailure(error);
+      if (!cookieExpiredFailure) {
+        throw error;
+      }
+
+      this.clearSession();
+      this.markPostLogoutRedirect();
+      this.markLogoutWarning(false, cookieExpiredFailure.globalLogoutComplete);
+      void this.clearAccountTrackingCookies();
+      this.redirectTo(cookieExpiredFailure.logoutUrl ?? postLogoutRedirectUri);
+      return;
+    }
+
     this.clearSession();
     this.markPostLogoutRedirect();
+    this.markLogoutWarning(true, logoutResult.globalLogoutComplete);
     void this.clearAccountTrackingCookies();
 
-    if (logoutUrl) {
-      this.redirectTo(logoutUrl);
+    if (logoutResult.logoutUrl) {
+      this.redirectTo(logoutResult.logoutUrl);
       return;
     }
 
@@ -210,6 +236,27 @@ export class AuthService {
 
     this.removeSessionStorageItem(this.postLogoutRedirectStorageKey);
     return true;
+  }
+
+  consumeLogoutWarning(): string | null {
+    if (!isPlatformBrowser(this.platformId)) {
+      return null;
+    }
+
+    const warning = this.getSessionStorageItem(this.logoutWarningStorageKey);
+    if (!warning) {
+      return null;
+    }
+
+    this.removeSessionStorageItem(this.logoutWarningStorageKey);
+    if (warning === 'local-and-global') {
+      return 'O cookie do navegador foi removido, mas o servidor não confirmou a remoção da sessão local. O logout global também não foi confirmado; conclua a confirmação do Keycloak, se exibida.';
+    }
+    if (warning === 'local') {
+      return 'O cookie do navegador foi removido, mas o servidor não confirmou a remoção da sessão local. Esta sessão pode continuar válida no servidor; entre em contato com o suporte.';
+    }
+
+    return 'A sessão local foi encerrada, mas o servidor não confirmou o logout global. Se o Keycloak exibir uma confirmação, conclua-a.';
   }
 
   private async loadCurrentUser(): Promise<boolean> {
@@ -363,5 +410,44 @@ export class AuthService {
   private markPostLogoutRedirect(): void {
     this.setSessionStorageItem(this.postLogoutRedirectStorageKey, 'true');
     this.setSessionStorageItem(this.silentSsoAttemptStorageKey, 'true');
+  }
+
+  private markLogoutWarning(
+    localSessionCleared: boolean,
+    globalLogoutComplete: boolean,
+  ): void {
+    if (localSessionCleared && globalLogoutComplete) {
+      this.removeSessionStorageItem(this.logoutWarningStorageKey);
+      return;
+    }
+
+    this.setSessionStorageItem(
+      this.logoutWarningStorageKey,
+      localSessionCleared ? 'global' : globalLogoutComplete ? 'local' : 'local-and-global',
+    );
+  }
+
+  private readCookieExpiredLogoutFailure(
+    error: unknown,
+  ): { globalLogoutComplete: boolean; logoutUrl?: string } | null {
+    if (!(error instanceof HttpErrorResponse)) {
+      return null;
+    }
+
+    const body = error.error;
+    if (
+      typeof body !== 'object' ||
+      body === null ||
+      Array.isArray(body) ||
+      (body as Record<string, unknown>)['cookieExpired'] !== true
+    ) {
+      return null;
+    }
+
+    const response = body as Record<string, unknown>;
+    return {
+      globalLogoutComplete: response['globalLogoutComplete'] === true,
+      logoutUrl: typeof response['logoutUrl'] === 'string' ? response['logoutUrl'] : undefined,
+    };
   }
 }

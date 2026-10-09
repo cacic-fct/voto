@@ -19,6 +19,7 @@ function createAuthServiceMock(): AuthService {
   return {
     isAuthenticated: computed(() => loginStoryState().autenticado),
     login: async () => undefined,
+    consumeLogoutWarning: () => null,
     user: computed(() =>
       loginStoryState().autenticado ? createStoryUser(loginStoryState().email, false) : null,
     ),

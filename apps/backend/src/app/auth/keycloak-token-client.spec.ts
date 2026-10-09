@@ -170,6 +170,20 @@ describe('KeycloakTokenClient', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('error=broken'));
   });
 
+  it('classifies HTTP 503 and invalid-grant logout failures', async () => {
+    const { client } = createClient();
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post
+      .mockRejectedValueOnce({ response: { status: 503, data: { error: 'temporarily_unavailable' } } })
+      .mockRejectedValueOnce({ response: { status: 400, data: { error: 'invalid_grant' } } });
+
+    await expect(client.logout('refresh-1')).rejects.toMatchObject({
+      status: 503,
+      response: expect.objectContaining({ code: 'KEYCLOAK_UNAVAILABLE' }),
+    });
+    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it('builds token-free logout URLs from explicit and default parameters', () => {
     expect(
       createClient().client.createLogoutUrl({

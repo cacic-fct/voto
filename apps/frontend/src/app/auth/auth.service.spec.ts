@@ -186,12 +186,13 @@ describe('AuthService', () => {
     expect(request.request.body).toEqual({
       postLogoutRedirectUri: rootUrl,
     });
-    request.flush({});
+    request.flush({ success: true, globalLogoutComplete: true });
     await logout;
 
     expect(service.user()).toBeNull();
     expect(service.consumePostLogoutRedirect()).toBe(true);
     expect(service.consumePostLogoutRedirect()).toBe(false);
+    expect(service.consumeLogoutWarning()).toBeNull();
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/clear',
       expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
@@ -209,7 +210,11 @@ describe('AuthService', () => {
     service.user.set(user);
 
     const redirectedLogout = service.logout();
-    http.expectOne('/api/auth/logout').flush({ logoutUrl: '#logged-out' });
+    http.expectOne('/api/auth/logout').flush({
+      success: true,
+      globalLogoutComplete: false,
+      logoutUrl: '#logged-out',
+    });
     await redirectedLogout;
     expect(service.user()).toBeNull();
     expect(fetch).toHaveBeenCalledWith(
@@ -217,6 +222,36 @@ describe('AuthService', () => {
       expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
     );
     expect(redirectSpy).toHaveBeenCalledWith('#logged-out');
+    expect(service.consumeLogoutWarning()).toContain('não confirmou o logout global');
+    expect(service.consumeLogoutWarning()).toBeNull();
+
+    redirectSpy.mockRestore();
+  });
+
+  it('clears local state and continues the browser logout when the server explicitly expires the cookie', async () => {
+    const internals = service as unknown as { redirectTo(url: string): void };
+    const redirectSpy = vi
+      .spyOn(internals, 'redirectTo')
+      .mockImplementation(() => undefined);
+    service.user.set(user);
+
+    const logout = service.logout();
+    http.expectOne('/api/auth/logout').flush(
+      {
+        success: false,
+        localSessionCleared: false,
+        cookieExpired: true,
+        globalLogoutComplete: false,
+        logoutUrl: 'https://sso.example/logout?client_id=voto-client',
+      },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+    await logout;
+
+    expect(service.user()).toBeNull();
+    expect(service.consumePostLogoutRedirect()).toBe(true);
+    expect(service.consumeLogoutWarning()).toContain('não confirmou a remoção da sessão local');
+    expect(redirectSpy).toHaveBeenCalledWith('https://sso.example/logout?client_id=voto-client');
 
     redirectSpy.mockRestore();
   });
@@ -254,7 +289,10 @@ describe('AuthService', () => {
 
     const logout = service.logout();
     const rootUrl = new URL('/', window.location.origin).toString();
-    http.expectOne('/api/auth/logout').flush({});
+    http.expectOne('/api/auth/logout').flush({
+      success: true,
+      globalLogoutComplete: true,
+    });
     await logout;
 
     expect(service.user()).toBeNull();

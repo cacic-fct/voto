@@ -9,6 +9,9 @@
     <mat-card-content>
       <h1>Entre para continuar</h1>
       <p>Use sua conta CACiC para acessar votações disponíveis e, quando autorizado, a área restrita.</p>
+      @if (logoutWarning) {
+        <p class="logout-warning" role="status">{{ logoutWarning }}</p>
+      }
     </mat-card-content>
 
     <mat-card-actions align="end">

@@ -24,4 +24,5 @@ export function getAuthStateCookiePath(): string {
 }
 
 export const IS_PUBLIC_KEY = 'isPublic';
+export const SKIP_SESSION_AUTHENTICATION_KEY = 'skipSessionAuthentication';
 export const REQUIRED_PERMISSIONS_KEY = 'requiredPermissions';

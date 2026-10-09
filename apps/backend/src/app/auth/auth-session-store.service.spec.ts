@@ -129,6 +129,31 @@ describe('AuthSessionStoreService', () => {
     );
   });
 
+  it('does not let an in-flight refresh restore a session after logout deletes it', async () => {
+    redis.eval.mockResolvedValue(0);
+
+    await service.delete('session-1');
+
+    await expect(
+      service.commitRefreshedSession('session-1', 0, 'refresh-owner', {
+        accessToken: 'new-access',
+        refreshToken: 'new-refresh',
+        accessTokenExpiresAt: Date.now() + 1000,
+        sessionExpiresAt: Date.now() + 2000,
+      }),
+    ).resolves.toBe(false);
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('if not rawSession then return 0 end'),
+      expect.any(Number),
+      expect.any(String),
+      expect.any(String),
+      'refresh-owner',
+      '0',
+      expect.any(String),
+      expect.any(String),
+    );
+  });
+
   it('does not issue a write when the refreshed session is already expired', async () => {
     await expect(
       service.commitRefreshedSession(
@@ -149,6 +174,23 @@ describe('AuthSessionStoreService', () => {
     await service.delete('session-1');
 
     expect(redis.del).toHaveBeenCalledWith('test:session:session-1');
+  });
+
+  it('does not return a session after the cookie-bound Redis key is deleted', async () => {
+    const session: AuthSession = {
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      accessTokenExpiresAt: Date.now() + 1000,
+      sessionExpiresAt: Date.now() + 2000,
+    };
+    const storedSessions = new Map([['test:session:session-1', JSON.stringify(session)]]);
+    redis.get.mockImplementation(async (key) => storedSessions.get(key) ?? null);
+    redis.del.mockImplementation(async (key) => Number(storedSessions.delete(key)));
+
+    await expect(service.get('session-1')).resolves.toEqual(session);
+    await service.delete('session-1');
+    await expect(service.get('session-1')).resolves.toBeUndefined();
+    expect(storedSessions.has('test:session:session-1')).toBe(false);
   });
 
   it('acquires, renews, and releases refresh locks', async () => {

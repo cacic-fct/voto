@@ -338,16 +338,20 @@ export class KeycloakAuthService {
   async logout(input: {
     refreshToken?: string;
     postLogoutRedirectUri?: string;
-  }): Promise<{ logoutUrl: string }> {
-    if (input.refreshToken) {
-      await this.tokenClient.logout(input.refreshToken);
+  }): Promise<{ globalLogoutComplete: boolean; logoutUrl: string }> {
+    const logoutUrl = this.tokenClient.createLogoutUrl({
+      postLogoutRedirectUri: input.postLogoutRedirectUri,
+    });
+    if (!input.refreshToken) {
+      return { globalLogoutComplete: false, logoutUrl };
     }
 
-    return {
-      logoutUrl: this.tokenClient.createLogoutUrl({
-        postLogoutRedirectUri: input.postLogoutRedirectUri,
-      }),
-    };
+    try {
+      await this.tokenClient.logout(input.refreshToken);
+      return { globalLogoutComplete: true, logoutUrl };
+    } catch {
+      return { globalLogoutComplete: false, logoutUrl };
+    }
   }
 
   getPostLoginRedirectUri(state?: AuthorizationState): string {

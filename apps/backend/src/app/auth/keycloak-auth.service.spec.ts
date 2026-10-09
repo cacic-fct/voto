@@ -1094,6 +1094,7 @@ describe('KeycloakAuthService', () => {
       postLogoutRedirectUri: 'https://app.example/after',
     });
     expect(logoutResult).toEqual({
+      globalLogoutComplete: true,
       logoutUrl:
         'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fafter',
     });
@@ -1106,15 +1107,67 @@ describe('KeycloakAuthService', () => {
     );
 
     mockedAxios.post.mockRejectedValueOnce(new Error('logout-failed'));
-    await expect(service.logout({ refreshToken: 'refresh' })).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toEqual({
+      globalLogoutComplete: false,
+      logoutUrl:
+        'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Flogin',
+    });
 
     delete process.env.KEYCLOAK_CLIENT_SECRET;
     delete process.env.KEYCLOAK_POST_LOGOUT_REDIRECT_URI;
     const serviceWithoutLogoutDefault = createService();
     await expect(serviceWithoutLogoutDefault.logout({})).resolves.toEqual({
+      globalLogoutComplete: false,
       logoutUrl: 'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client',
     });
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports incomplete global logout for timeout, HTTP 503, and invalid-grant responses', async () => {
+    const service = createService();
+    mockedAxios.isAxiosError.mockReturnValue(false);
+    mockedAxios.post.mockRejectedValueOnce(new Error('timeout'));
+
+    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+      globalLogoutComplete: false,
+      logoutUrl: expect.stringContaining('client_id=voto-client'),
+    });
+
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post
+      .mockRejectedValueOnce({ response: { status: 503, data: { error: 'temporarily_unavailable' } } })
+      .mockRejectedValueOnce({ response: { status: 400, data: { error: 'invalid_grant' } } });
+
+    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+      globalLogoutComplete: false,
+      logoutUrl: expect.stringContaining('client_id=voto-client'),
+    });
+    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+      globalLogoutComplete: false,
+      logoutUrl: expect.stringContaining('client_id=voto-client'),
+    });
+  });
+
+  it('rejects an old cookie after local deletion even when Keycloak times out', async () => {
+    const service = createService();
+    sessions.get
+      .mockResolvedValueOnce({
+        accessToken: 'expired-access',
+        refreshToken: 'refresh',
+        accessTokenExpiresAt: Date.now() - 1000,
+        sessionExpiresAt: Date.now() + 2000,
+      })
+      .mockResolvedValueOnce(undefined);
+    mockedAxios.post.mockRejectedValueOnce(new Error('timeout'));
+
+    const logoutInput = await service.getSessionLogoutInput('session-1');
+    await service.clearSession('session-1');
+    await expect(service.logout({ refreshToken: logoutInput?.refreshToken })).resolves.toMatchObject({
+      globalLogoutComplete: false,
+    });
+
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(sessions.delete).toHaveBeenCalledWith('session-1');
   });
 
   it('delegates authorization-state helpers', async () => {

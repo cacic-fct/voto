@@ -1,7 +1,12 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { AUTH_SESSION_COOKIE_NAME, IS_PUBLIC_KEY, REQUIRED_PERMISSIONS_KEY } from './auth.constants';
+import {
+  AUTH_SESSION_COOKIE_NAME,
+  IS_PUBLIC_KEY,
+  REQUIRED_PERMISSIONS_KEY,
+  SKIP_SESSION_AUTHENTICATION_KEY,
+} from './auth.constants';
 import { AuthGuard } from './auth.guard';
 import { AuthenticatedPrincipal, AuthenticatedRequest } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
@@ -53,6 +58,21 @@ describe('AuthGuard', () => {
 
     await expect(guard.canActivate(createContext({ headers: {} } as Request))).resolves.toBe(true);
     expect(auth.authenticateSession).not.toHaveBeenCalled();
+  });
+
+  it('skips session authentication for logout even when a session cookie is present', async () => {
+    const request = {
+      headers: {
+        cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
+      },
+    } as AuthenticatedRequest;
+    reflector.getAllAndOverride.mockImplementation((key) => key === SKIP_SESSION_AUTHENTICATION_KEY);
+
+    await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+
+    expect(auth.authenticateSession).not.toHaveBeenCalled();
+    expect(request.sessionId).toBeUndefined();
+    expect(request.user).toBeUndefined();
   });
 
   it('rejects private requests without a session', async () => {
@@ -120,6 +140,19 @@ describe('AuthGuard', () => {
     expect(auth.authenticateSession).not.toHaveBeenCalled();
   });
 
+  it('rejects a previous session cookie after its server-side session was deleted', async () => {
+    const request = {
+      headers: {
+        cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
+      },
+    } as AuthenticatedRequest;
+    reflector.getAllAndOverride.mockReturnValue(undefined);
+    auth.authenticateSession.mockRejectedValue(new UnauthorizedException('Missing authenticated session.'));
+
+    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(auth.authenticateSession).toHaveBeenCalledWith('session-1', []);
+  });
+
   it('allows public requests when session authentication fails and rethrows for private requests', async () => {
     const request = {
       headers: {
@@ -131,7 +164,12 @@ describe('AuthGuard', () => {
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
 
-    reflector.getAllAndOverride.mockImplementation((key) => (key === IS_PUBLIC_KEY ? false : []));
+    reflector.getAllAndOverride.mockImplementation((key) => {
+      if (key === IS_PUBLIC_KEY) {
+        return false;
+      }
+      return key === REQUIRED_PERMISSIONS_KEY ? [] : undefined;
+    });
     await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

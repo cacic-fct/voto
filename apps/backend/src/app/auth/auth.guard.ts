@@ -1,7 +1,12 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { getAuthSessionCookieName, IS_PUBLIC_KEY, REQUIRED_PERMISSIONS_KEY } from './auth.constants';
+import {
+  getAuthSessionCookieName,
+  IS_PUBLIC_KEY,
+  REQUIRED_PERMISSIONS_KEY,
+  SKIP_SESSION_AUTHENTICATION_KEY,
+} from './auth.constants';
 import { AuthenticatedRequest } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
 
@@ -17,9 +22,17 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const targets = [context.getHandler(), context.getClass()];
+    const skipSessionAuthentication = this.reflector.getAllAndOverride<boolean>(
+      SKIP_SESSION_AUTHENTICATION_KEY,
+      targets,
+    );
+    if (skipSessionAuthentication) {
+      return true;
+    }
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
+      ...targets,
     ]);
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const sessionId = this.readCookie(request, getAuthSessionCookieName());
@@ -32,10 +45,10 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing authenticated session.');
     }
 
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(REQUIRED_PERMISSIONS_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]) ?? [];
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
+      REQUIRED_PERMISSIONS_KEY,
+      targets,
+    ) ?? [];
 
     try {
       request.sessionId = sessionId;

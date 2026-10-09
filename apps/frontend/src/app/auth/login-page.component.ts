@@ -15,6 +15,7 @@ import { AuthService } from './auth.service';
 export class LoginPageComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  protected readonly logoutWarning = this.auth.consumeLogoutWarning();
 
   async login(): Promise<void> {
     if (this.auth.isAuthenticated()) {

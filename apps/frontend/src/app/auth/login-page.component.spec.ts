@@ -7,7 +7,7 @@ import { LoginPageComponent } from './login-page.component';
 
 describe('LoginPageComponent', () => {
   let fixture: ComponentFixture<LoginPageComponent>;
-  let auth: Pick<AuthService, 'isAuthenticated' | 'login'>;
+  let auth: Pick<AuthService, 'isAuthenticated' | 'login' | 'consumeLogoutWarning'>;
   let isAuthenticated: WritableSignal<boolean>;
   let router: Pick<Router, 'navigateByUrl'>;
 
@@ -16,6 +16,7 @@ describe('LoginPageComponent', () => {
     auth = {
       isAuthenticated,
       login: vi.fn().mockResolvedValue(undefined),
+      consumeLogoutWarning: vi.fn().mockReturnValue(null),
     };
     router = {
       navigateByUrl: vi.fn().mockResolvedValue(true),
@@ -34,6 +35,19 @@ describe('LoginPageComponent', () => {
 
   it('should create', () => {
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('shows an accessible warning after an incomplete logout', async () => {
+    fixture.destroy();
+    vi.mocked(auth.consumeLogoutWarning).mockReturnValue(
+      'A sessão local foi encerrada, mas o servidor não confirmou o logout global.',
+    );
+    fixture = TestBed.createComponent(LoginPageComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'servidor não confirmou o logout global',
+    );
   });
 
   it('should start login when the user is unauthenticated', async () => {

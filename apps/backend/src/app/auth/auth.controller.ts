@@ -4,8 +4,11 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   Logger,
   Post,
+  ServiceUnavailableException,
   Query,
   Req,
   Res,
@@ -30,6 +33,7 @@ import {
   getAuthSessionCookieName,
 } from './auth.constants';
 import { Public } from './decorators/public.decorator';
+import { SkipSessionAuthentication } from './decorators/skip-session-authentication.decorator';
 import type {
   AuthenticatedPrincipal,
   AuthenticatedRequest,
@@ -84,6 +88,27 @@ class LoginUrlResponseDto {
       'https://sso.cacic.com.br/realms/cacic-sso/protocol/openid-connect/auth?...',
   })
   authorizationUrl!: string;
+}
+
+class LogoutResponseDto {
+  @ApiProperty({
+    description: 'Whether the local session and browser cookie were cleared.',
+    example: true,
+  })
+  success!: boolean;
+
+  @ApiProperty({
+    description: 'Whether Keycloak confirmed global logout using the stored refresh token.',
+    example: true,
+  })
+  globalLogoutComplete!: boolean;
+
+  @ApiProperty({
+    description: 'Token-free Keycloak URL for completing browser global logout when needed.',
+    example:
+      'https://sso.cacic.com.br/realms/cacic-sso/protocol/openid-connect/logout?client_id=cacic-voto&post_logout_redirect_uri=https%3A%2F%2Fvoto.cacic.com.br%2F',
+  })
+  logoutUrl!: string;
 }
 
 @ApiTags('Authentication')
@@ -241,9 +266,17 @@ export class AuthController {
 
   @Post('logout')
   @Public()
+  @SkipSessionAuthentication()
+  @HttpCode(HttpStatus.OK)
   @ApiCookieAuth(getAuthSessionCookieName())
   @ApiOperation({
     summary: 'End the Keycloak session and return a logout URL',
+  })
+  @ApiOkResponse({ type: LogoutResponseDto })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description:
+      'The browser cookie was expired, but the local server session could not be confirmed as deleted.',
   })
   @ApiBody({ type: LogoutDto, required: false })
   async logout(
@@ -256,27 +289,54 @@ export class AuthController {
       body?.postLogoutRedirectUri,
     );
     const sessionId = this.readCookie(request, getAuthSessionCookieName());
-    const sessionLogoutInput = sessionId
-      ? await this.auth.getSessionLogoutInput(sessionId)
-      : null;
+    let refreshToken: string | undefined;
+    if (sessionId) {
+      try {
+        refreshToken = (await this.auth.getSessionLogoutInput(sessionId))?.refreshToken;
+      } catch {
+        this.logger.warn('Could not read the stored refresh token for global logout.');
+      }
+    }
+
+    let localSessionCleared = true;
+    try {
+      if (sessionId) {
+        await this.auth.clearSession(sessionId);
+      }
+    } catch {
+      localSessionCleared = false;
+      this.logger.error('Could not delete the local auth session during logout.');
+    } finally {
+      response.clearCookie(getAuthSessionCookieName(), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: this.isSecureRequest(request),
+        path: '/',
+      });
+      this.clearCacicTrackingCookies(response, request);
+    }
+
     const logoutResult = await this.auth.logout({
-      refreshToken: sessionLogoutInput?.refreshToken,
+      refreshToken,
       postLogoutRedirectUri,
     });
 
-    if (sessionId) {
-      await this.auth.clearSession(sessionId);
+    if (!localSessionCleared) {
+      throw new ServiceUnavailableException({
+        success: false,
+        localSessionCleared: false,
+        cookieExpired: true,
+        globalLogoutComplete: logoutResult.globalLogoutComplete,
+        logoutUrl: logoutResult.logoutUrl,
+        message: 'The browser cookie was cleared, but the local session could not be confirmed as deleted.',
+      });
     }
 
-    response.clearCookie(getAuthSessionCookieName(), {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.isSecureRequest(request),
-      path: '/',
-    });
-    this.clearCacicTrackingCookies(response, request);
-
-    return logoutResult;
+    return {
+      success: true,
+      globalLogoutComplete: logoutResult.globalLogoutComplete,
+      logoutUrl: logoutResult.logoutUrl,
+    };
   }
 
   @Post('permissions/evaluate')
