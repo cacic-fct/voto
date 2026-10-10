@@ -533,6 +533,7 @@ export class KeycloakAuthService {
     this.pruneUserCache(now);
 
     const mergedClaims = await this.tokenVerifier.verifyAccessTokenClaims(accessToken);
+    await this.tokenClient.introspectAccessToken(accessToken);
 
     const roles = extractRoles(mergedClaims);
     const permissions = extractPermissions(mergedClaims);

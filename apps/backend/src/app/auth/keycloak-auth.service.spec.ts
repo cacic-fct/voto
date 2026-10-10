@@ -5,6 +5,7 @@ import { AuthSessionStoreService } from './auth-session-store.service';
 import { AuthorizationStateService } from './authorization-state.service';
 import { AuthSession, AuthorizationState } from './auth.types';
 import { KeycloakAuthService } from './keycloak-auth.service';
+import { KeycloakTokenClient } from './keycloak-token-client';
 import { PrismaService } from '../prisma/prisma.service';
 
 jest.mock('axios');
@@ -131,12 +132,14 @@ describe('KeycloakAuthService', () => {
     authorizationState = createAuthorizationStateMock();
     prisma = createPrismaMock();
     mockedAxios.post.mockReset();
+    jest.spyOn(KeycloakTokenClient.prototype, 'introspectAccessToken').mockResolvedValue(undefined);
     mockedAxios.get.mockReset();
     mockedAxios.get.mockResolvedValue({ data: { keys: [publicJwk] }, status: 200, statusText: 'OK' });
     mockedAxios.isAxiosError.mockReset();
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
@@ -998,7 +1001,7 @@ describe('KeycloakAuthService', () => {
     await expect(service.authenticateSession('session-3')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('uses verified JWT claims without calling introspection or userinfo endpoints', async () => {
+  it('verifies JWT claims and checks active state before caching the principal', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
       sub: 'user-1',
@@ -1015,15 +1018,46 @@ describe('KeycloakAuthService', () => {
     await expect(service.authenticateSession('session-1')).resolves.toMatchObject({
       preferredUsername: 'jwt-user',
     });
-    expect(mockedAxios.post).not.toHaveBeenCalledWith(
-      expect.stringContaining('/protocol/openid-connect/token/introspect'),
-      expect.any(String),
-      expect.any(Object),
-    );
+    expect(KeycloakTokenClient.prototype.introspectAccessToken).toHaveBeenCalledWith(accessToken);
     expect(mockedAxios.get).toHaveBeenCalledWith(
       expect.stringContaining('/protocol/openid-connect/certs'),
       expect.any(Object),
     );
+  });
+
+  it('rejects revoked tokens and introspection outages without caching a principal', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({ sub: 'user-1' });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+    const introspect = jest.mocked(KeycloakTokenClient.prototype.introspectAccessToken);
+    introspect.mockRejectedValueOnce(new UnauthorizedException('Token is not active.'));
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    introspect.mockRejectedValueOnce(new ServiceUnavailableException());
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    expect(introspect).toHaveBeenCalledTimes(3);
+  });
+
+  it('rechecks Keycloak revocation when the principal cache expires', async () => {
+    const service = createService();
+    const accessToken = tokenWithClaims({ sub: 'user-1' });
+    sessions.get.mockResolvedValue({
+      accessToken,
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+    await service.authenticateSession('session-1');
+    await service.authenticateSession('session-1');
+    const introspect = jest.mocked(KeycloakTokenClient.prototype.introspectAccessToken);
+    expect(introspect).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(60_001);
+    introspect.mockRejectedValueOnce(new UnauthorizedException('Token is not active.'));
+    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(introspect).toHaveBeenCalledTimes(2);
   });
 
   it('handles permission evaluation denial and transient failures as no grants', async () => {

@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { TokenResponse } from './auth.types';
 import { keycloakUnavailableException } from './keycloak-auth-errors';
 import { summarizeKeycloakFailure } from './keycloak-error-logging';
+import { isRecord } from './keycloak-claims.utils';
 
 export type KeycloakTokenEndpointAuthMethod =
   | 'client_secret_basic'
@@ -30,6 +31,29 @@ export class KeycloakTokenClient {
   >();
 
   constructor(private readonly options: KeycloakTokenClientOptions) {}
+
+  async introspectAccessToken(accessToken: string): Promise<void> {
+    const payload = new URLSearchParams({ token: accessToken, token_type_hint: 'access_token' });
+    const headers = this.createFormHeaders();
+    this.addClientAuthentication(payload, headers);
+
+    let introspection: unknown;
+    try {
+      const { data } = await axios.post<unknown>(
+        `${this.options.realmUrl}/protocol/openid-connect/token/introspect`,
+        payload.toString(),
+        { headers, timeout: this.requestTimeoutMs },
+      );
+      introspection = data;
+    } catch (error) {
+      this.logKeycloakFailure('token introspection', error);
+      throw keycloakUnavailableException();
+    }
+
+    if (!isRecord(introspection) || introspection['active'] !== true) {
+      throw new UnauthorizedException('Token is not active.');
+    }
+  }
 
   async exchangeCodeForTokens(
     code: string,

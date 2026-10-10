@@ -43,6 +43,38 @@ describe('KeycloakTokenClient', () => {
     jest.useRealTimers();
   });
 
+  it.each(['client_secret_basic', 'client_secret_post'] as const)(
+    'requires active introspection using %s authentication', async (tokenEndpointAuthMethod) => {
+      const { client } = createClient({ clientSecret: 'secret', tokenEndpointAuthMethod });
+      mockedAxios.post.mockResolvedValue({ data: { active: true } });
+      await expect(client.introspectAccessToken('access')).resolves.toBeUndefined();
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://sso.example/realms/cacic/protocol/openid-connect/token/introspect',
+        expect.stringContaining('token=access&token_type_hint=access_token'),
+        expect.objectContaining({ timeout: 10_000 }),
+      );
+      const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<string, string>;
+      const payload = new URLSearchParams(mockedAxios.post.mock.calls[0][1] as string);
+      if (tokenEndpointAuthMethod === 'client_secret_basic') {
+        expect(headers.Authorization).toBe(`Basic ${Buffer.from('voto+client:secret').toString('base64')}`);
+      } else {
+        expect(payload.get('client_secret')).toBe('secret');
+      }
+    },
+  );
+
+  it.each([{ active: false }, {}, { active: 'true' }, null])('rejects inactive or malformed introspection: %p', async (data) => {
+    const { client } = createClient({ clientSecret: 'secret' });
+    mockedAxios.post.mockResolvedValue({ data });
+    await expect(client.introspectAccessToken('access')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('fails closed on introspection outages', async () => {
+    const { client } = createClient({ clientSecret: 'secret' });
+    mockedAxios.post.mockRejectedValue(new Error('provider unavailable'));
+    await expect(client.introspectAccessToken('access')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
   it('exchanges authorization codes with public-client authentication', async () => {
     const { client } = createClient();
     mockedAxios.post.mockResolvedValue({ data: { access_token: 'access' } });

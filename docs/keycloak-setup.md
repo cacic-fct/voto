@@ -22,6 +22,14 @@ Create a confidential OpenID Connect client:
 
 Copy the generated client secret into `KEYCLOAK_CLIENT_SECRET`.
 
+Add an Audience mapper to the client's dedicated scope with Included Client
+Audience `cacic-voto`, Add to access token enabled, Add to token introspection
+enabled, and Add to ID token disabled. Incoming M2M tokens must also include
+`cacic-voto` in their audience. The backend verifies the JWT signature and time
+claims, then requires Keycloak introspection to return `active: true` before
+caching the principal. Provider failures reject authentication; local voting
+subject revocation checks still apply.
+
 ## Admin access
 
 Users can access `Area restrita` when either of these is true:

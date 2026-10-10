@@ -54,6 +54,18 @@
       ],
       "protocolMappers": [
         {
+          "name": "voto-introspection",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "cacic-voto",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
           "name": "identity_document",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-attribute-mapper",
