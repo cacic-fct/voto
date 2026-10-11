@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "e2e:backend:keycloak": "bunx nx run backend-e2e:e2e-keycloak",
-    "format:staged": "lint-staged",
+    "format:staged": "node node_modules/lint-staged/bin/lint-staged.js",
     "prepare": "node .husky/install.mjs"
   },
   "private": true,
@@ -135,6 +135,6 @@
     "webpack-dev-server": "^6.0.0"
   },
   "lint-staged": {
-    "*": "prettier --write --ignore-unknown"
+    "*": "node node_modules/prettier/bin/prettier.cjs --write --ignore-unknown"
   }
 }
