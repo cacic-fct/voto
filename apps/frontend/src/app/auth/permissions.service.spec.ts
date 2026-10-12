@@ -11,7 +11,10 @@ describe('PermissionsService', () => {
   let authPermissions: ReturnType<typeof signal<string[]>>;
   let roles: ReturnType<typeof signal<string[]>>;
   let isAuthenticated: ReturnType<typeof signal<boolean>>;
-  let auth: Pick<AuthService, 'permissions' | 'roles' | 'isAuthenticated' | 'evaluatePermissions'>;
+  let auth: Pick<
+    AuthService,
+    'permissions' | 'roles' | 'isAuthenticated' | 'evaluatePermissions'
+  >;
 
   beforeEach(() => {
     authPermissions = signal([]);
@@ -34,11 +37,17 @@ describe('PermissionsService', () => {
   it('combines direct and evaluated permissions in sorted order', async () => {
     authPermissions.set(['polls:write', 'polls:read']);
     isAuthenticated.set(true);
-    vi.mocked(auth.evaluatePermissions).mockReturnValue(of({ permissions: ['admin:polls', 'polls:read'] }));
+    vi.mocked(auth.evaluatePermissions).mockReturnValue(
+      of({ permissions: ['admin:polls', 'polls:read'] }),
+    );
 
     await permissions.evaluateAdminPermissions();
 
-    expect(permissions.rawPermissions()).toEqual(['admin:polls', 'polls:read', 'polls:write']);
+    expect(permissions.rawPermissions()).toEqual([
+      'admin:polls',
+      'polls:read',
+      'polls:write',
+    ]);
   });
 
   it('does not evaluate permissions for guests', async () => {
@@ -61,7 +70,9 @@ describe('PermissionsService', () => {
     await Promise.all([first, second]);
 
     expect(auth.evaluatePermissions).toHaveBeenCalledTimes(1);
-    expect(auth.evaluatePermissions).toHaveBeenCalledWith(VOTING_ADMIN_PERMISSIONS);
+    expect(auth.evaluatePermissions).toHaveBeenCalledWith(
+      VOTING_ADMIN_PERMISSIONS,
+    );
     expect(permissions.rawPermissions()).toEqual(['admin:polls']);
   });
 

@@ -1,4 +1,8 @@
-import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { Buffer } from 'node:buffer';
 import {
@@ -9,7 +13,11 @@ import {
 } from 'node:crypto';
 import { TokenClaims } from './auth.types';
 import { keycloakUnavailableException } from './keycloak-auth-errors';
-import { isRecord, readNumberClaim, readStringClaim } from './keycloak-claims.utils';
+import {
+  isRecord,
+  readNumberClaim,
+  readStringClaim,
+} from './keycloak-claims.utils';
 
 export type KeycloakTokenVerifierOptions = {
   realmUrl: string;
@@ -49,7 +57,12 @@ export class KeycloakTokenVerifier {
     }
 
     const claims = this.decodeJwtJsonSegment(encodedPayload, 'payload');
-    await this.assertJwtSignature(kid, encodedHeader, encodedPayload, encodedSignature);
+    await this.assertJwtSignature(
+      kid,
+      encodedHeader,
+      encodedPayload,
+      encodedSignature,
+    );
     this.assertJwtIssuer(claims);
     this.assertJwtTimeClaims(claims);
 
@@ -65,7 +78,10 @@ export class KeycloakTokenVerifier {
     encodedPayload: string,
     encodedSignature: string,
   ): Promise<void> {
-    const signingInput = Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8');
+    const signingInput = Buffer.from(
+      `${encodedHeader}.${encodedPayload}`,
+      'utf8',
+    );
     const signature = this.decodeBase64UrlSegment(encodedSignature);
     const signingKey = await this.getSigningKey(kid);
 
@@ -74,14 +90,24 @@ export class KeycloakTokenVerifier {
     }
 
     const refreshedSigningKey = await this.getSigningKey(kid, true);
-    if (verifySignature('RSA-SHA256', signingInput, refreshedSigningKey, signature)) {
+    if (
+      verifySignature(
+        'RSA-SHA256',
+        signingInput,
+        refreshedSigningKey,
+        signature,
+      )
+    ) {
       return;
     }
 
     throw new UnauthorizedException('Invalid token signature.');
   }
 
-  private async getSigningKey(kid: string, forceRefresh = false): Promise<KeyObject> {
+  private async getSigningKey(
+    kid: string,
+    forceRefresh = false,
+  ): Promise<KeyObject> {
     const keys = await this.getJwksKeys(forceRefresh);
     const key = keys.get(kid);
     if (key) {
@@ -99,7 +125,9 @@ export class KeycloakTokenVerifier {
     throw new UnauthorizedException('Unable to verify token signature.');
   }
 
-  private async getJwksKeys(forceRefresh = false): Promise<Map<string, KeyObject>> {
+  private async getJwksKeys(
+    forceRefresh = false,
+  ): Promise<Map<string, KeyObject>> {
     const now = Date.now();
     if (!forceRefresh && this.jwksCache && this.jwksCache.expiresAt > now) {
       return this.jwksCache.keys;
@@ -117,17 +145,27 @@ export class KeycloakTokenVerifier {
       });
 
       if (response.status < 200 || response.status >= 300) {
-        this.options.logger.warn(`Keycloak JWKS lookup failed. status=${response.status} ${response.statusText}.`);
-        throw keycloakUnavailableException('Identity provider signing keys are temporarily unavailable.');
+        this.options.logger.warn(
+          `Keycloak JWKS lookup failed. status=${response.status} ${response.statusText}.`,
+        );
+        throw keycloakUnavailableException(
+          'Identity provider signing keys are temporarily unavailable.',
+        );
       }
 
       if (!isRecord(response.data) || !Array.isArray(response.data['keys'])) {
-        throw keycloakUnavailableException('Identity provider returned an invalid signing-key response.');
+        throw keycloakUnavailableException(
+          'Identity provider returned an invalid signing-key response.',
+        );
       }
       const keys = this.parseJwks(response.data);
       if (keys.size === 0) {
-        this.options.logger.warn('Keycloak JWKS response did not include usable RS256 signing keys.');
-        throw keycloakUnavailableException('Identity provider returned no usable signing keys.');
+        this.options.logger.warn(
+          'Keycloak JWKS response did not include usable RS256 signing keys.',
+        );
+        throw keycloakUnavailableException(
+          'Identity provider returned no usable signing keys.',
+        );
       }
 
       this.jwksCache = {
@@ -137,14 +175,19 @@ export class KeycloakTokenVerifier {
 
       return keys;
     } catch (error) {
-      if (error instanceof UnauthorizedException || error instanceof ServiceUnavailableException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof ServiceUnavailableException
+      ) {
         throw error;
       }
 
       this.options.logger.warn(
         `Keycloak JWKS lookup failed. ${error instanceof Error ? `message=${error.message}.` : 'unknown error.'}`,
       );
-      throw keycloakUnavailableException('Identity provider signing keys are temporarily unavailable.');
+      throw keycloakUnavailableException(
+        'Identity provider signing keys are temporarily unavailable.',
+      );
     }
   }
 
@@ -163,7 +206,12 @@ export class KeycloakTokenVerifier {
       const kty = readStringClaim(rawKey, 'kty');
       const use = readStringClaim(rawKey, 'use');
       const alg = readStringClaim(rawKey, 'alg');
-      if (!kid || kty !== 'RSA' || (use && use !== 'sig') || (alg && alg !== 'RS256')) {
+      if (
+        !kid ||
+        kty !== 'RSA' ||
+        (use && use !== 'sig') ||
+        (alg && alg !== 'RS256')
+      ) {
         continue;
       }
 
@@ -178,7 +226,9 @@ export class KeycloakTokenVerifier {
       } catch (error) {
         this.options.logger.warn(
           `Ignoring unusable Keycloak JWKS key. kid=${kid}; ${
-            error instanceof Error ? `message=${error.message}.` : 'unknown error.'
+            error instanceof Error
+              ? `message=${error.message}.`
+              : 'unknown error.'
           }`,
         );
       }
@@ -193,9 +243,14 @@ export class KeycloakTokenVerifier {
       : DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
-  private decodeJwtJsonSegment(segment: string, description: string): Record<string, unknown> {
+  private decodeJwtJsonSegment(
+    segment: string,
+    description: string,
+  ): Record<string, unknown> {
     try {
-      const parsed: unknown = JSON.parse(this.decodeBase64UrlSegment(segment).toString('utf8'));
+      const parsed: unknown = JSON.parse(
+        this.decodeBase64UrlSegment(segment).toString('utf8'),
+      );
       if (isRecord(parsed)) {
         return parsed;
       }

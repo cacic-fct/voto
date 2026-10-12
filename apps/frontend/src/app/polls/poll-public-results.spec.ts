@@ -11,7 +11,10 @@ const choiceElement: PollElement = {
   type: 'multipleChoice',
   title: 'Escolhas',
   required: true,
-  options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+  options: [
+    { id: 'a', label: 'A' },
+    { id: 'b', label: 'B' },
+  ],
 };
 
 const textElement: PollElement = {
@@ -62,12 +65,17 @@ describe('poll public result helpers', () => {
       },
     ];
 
-    expect(buildPublicQuestionSummaries([choiceElement, textElement], responses)).toEqual([
+    expect(
+      buildPublicQuestionSummaries([choiceElement, textElement], responses),
+    ).toEqual([
       {
         key: expect.any(String),
         element: choiceElement,
         answeredCount: 2,
-        buckets: [{ label: 'A', count: 2 }, { label: 'B', count: 1 }],
+        buckets: [
+          { label: 'A', count: 2 },
+          { label: 'B', count: 1 },
+        ],
         textAnswers: [],
       },
       {
@@ -83,10 +91,30 @@ describe('poll public result helpers', () => {
   });
 
   it('gates public result visibility by election phase, live flag, and poll status', () => {
-    expect(shouldShowPublicResults(createPoll({ resultsPublic: false, resultsLive: true }))).toBe(false);
-    expect(shouldShowPublicResults(createPoll({ status: 'published', resultsLive: false }))).toBe(false);
-    expect(shouldShowPublicResults(createPoll({ status: 'published', votingStyle: 'public', resultsLive: true }))).toBe(true);
-    expect(shouldShowPublicResults(createPoll({ status: 'closed', resultsLive: false }))).toBe(true);
+    expect(
+      shouldShowPublicResults(
+        createPoll({ resultsPublic: false, resultsLive: true }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowPublicResults(
+        createPoll({ status: 'published', resultsLive: false }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowPublicResults(
+        createPoll({
+          status: 'published',
+          votingStyle: 'public',
+          resultsLive: true,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowPublicResults(
+        createPoll({ status: 'closed', resultsLive: false }),
+      ),
+    ).toBe(true);
     expect(
       shouldShowPublicResults(
         createPoll({
@@ -124,24 +152,31 @@ describe('poll public result helpers', () => {
     const first = { ...choiceElement, title: 'Prioridade original' };
     const second = { ...choiceElement, title: 'Prioridade revisada' };
 
-    const summaries = buildPublicQuestionSummaries([], [], [
-      {
-        elementId: 'choice',
-        versionKey: 'version-1',
-        elementSnapshot: first,
-        answeredCount: 1,
-        buckets: [{ key: 'a', count: 1 }],
-      },
-      {
-        elementId: 'choice',
-        versionKey: 'version-2',
-        elementSnapshot: second,
-        answeredCount: 1,
-        buckets: [{ key: 'b', count: 1 }],
-      },
-    ]);
+    const summaries = buildPublicQuestionSummaries(
+      [],
+      [],
+      [
+        {
+          elementId: 'choice',
+          versionKey: 'version-1',
+          elementSnapshot: first,
+          answeredCount: 1,
+          buckets: [{ key: 'a', count: 1 }],
+        },
+        {
+          elementId: 'choice',
+          versionKey: 'version-2',
+          elementSnapshot: second,
+          answeredCount: 1,
+          buckets: [{ key: 'b', count: 1 }],
+        },
+      ],
+    );
 
-    expect(summaries.map((summary) => summary.key)).toEqual(['version-1', 'version-2']);
+    expect(summaries.map((summary) => summary.key)).toEqual([
+      'version-1',
+      'version-2',
+    ]);
     expect(summaries.map((summary) => summary.element.title)).toEqual([
       'Prioridade original',
       'Prioridade revisada',
@@ -157,21 +192,33 @@ describe('poll public result helpers', () => {
       options: [],
       settings: {
         grid: {
-          rows: [{ id: 'a:b', label: 'Linha A:B' }, { id: 'a', label: 'Linha A' }],
-          columns: [{ id: 'c', label: 'Coluna C' }, { id: 'b:c', label: 'Coluna B:C' }],
+          rows: [
+            { id: 'a:b', label: 'Linha A:B' },
+            { id: 'a', label: 'Linha A' },
+          ],
+          columns: [
+            { id: 'c', label: 'Coluna C' },
+            { id: 'b:c', label: 'Coluna B:C' },
+          ],
         },
       },
     };
 
-    const summaries = buildPublicQuestionSummaries([], [], [{
-      elementId: gridElement.id,
-      elementSnapshot: gridElement,
-      answeredCount: 2,
-      buckets: [
-        { key: '["a:b","c"]', rowId: 'a:b', columnId: 'c', count: 1 },
-        { key: '["a","b:c"]', rowId: 'a', columnId: 'b:c', count: 1 },
+    const summaries = buildPublicQuestionSummaries(
+      [],
+      [],
+      [
+        {
+          elementId: gridElement.id,
+          elementSnapshot: gridElement,
+          answeredCount: 2,
+          buckets: [
+            { key: '["a:b","c"]', rowId: 'a:b', columnId: 'c', count: 1 },
+            { key: '["a","b:c"]', rowId: 'a', columnId: 'b:c', count: 1 },
+          ],
+        },
       ],
-    }]);
+    );
 
     expect(summaries[0]?.buckets).toEqual([
       { label: 'Linha A: Coluna B:C', count: 1 },

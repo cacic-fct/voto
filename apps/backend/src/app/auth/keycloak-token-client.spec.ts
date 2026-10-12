@@ -1,7 +1,14 @@
-import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { Buffer } from 'node:buffer';
-import { KeycloakTokenClient, KeycloakTokenClientOptions } from './keycloak-token-client';
+import {
+  KeycloakTokenClient,
+  KeycloakTokenClientOptions,
+} from './keycloak-token-client';
 
 jest.mock('axios');
 
@@ -44,42 +51,64 @@ describe('KeycloakTokenClient', () => {
   });
 
   it.each(['client_secret_basic', 'client_secret_post'] as const)(
-    'requires active introspection using %s authentication', async (tokenEndpointAuthMethod) => {
-      const { client } = createClient({ clientSecret: 'secret', tokenEndpointAuthMethod });
+    'requires active introspection using %s authentication',
+    async (tokenEndpointAuthMethod) => {
+      const { client } = createClient({
+        clientSecret: 'secret',
+        tokenEndpointAuthMethod,
+      });
       mockedAxios.post.mockResolvedValue({ data: { active: true } });
-      await expect(client.introspectAccessToken('access')).resolves.toBeUndefined();
+      await expect(
+        client.introspectAccessToken('access'),
+      ).resolves.toBeUndefined();
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'https://sso.example/realms/cacic/protocol/openid-connect/token/introspect',
         expect.stringContaining('token=access&token_type_hint=access_token'),
         expect.objectContaining({ timeout: 10_000 }),
       );
-      const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<string, string>;
-      const payload = new URLSearchParams(mockedAxios.post.mock.calls[0][1] as string);
+      const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<
+        string,
+        string
+      >;
+      const payload = new URLSearchParams(
+        mockedAxios.post.mock.calls[0][1] as string,
+      );
       if (tokenEndpointAuthMethod === 'client_secret_basic') {
-        expect(headers.Authorization).toBe(`Basic ${Buffer.from('voto+client:secret').toString('base64')}`);
+        expect(headers.Authorization).toBe(
+          `Basic ${Buffer.from('voto+client:secret').toString('base64')}`,
+        );
       } else {
         expect(payload.get('client_secret')).toBe('secret');
       }
     },
   );
 
-  it.each([{ active: false }, {}, { active: 'true' }, null])('rejects inactive or malformed introspection: %p', async (data) => {
-    const { client } = createClient({ clientSecret: 'secret' });
-    mockedAxios.post.mockResolvedValue({ data });
-    await expect(client.introspectAccessToken('access')).rejects.toBeInstanceOf(UnauthorizedException);
-  });
+  it.each([{ active: false }, {}, { active: 'true' }, null])(
+    'rejects inactive or malformed introspection: %p',
+    async (data) => {
+      const { client } = createClient({ clientSecret: 'secret' });
+      mockedAxios.post.mockResolvedValue({ data });
+      await expect(
+        client.introspectAccessToken('access'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    },
+  );
 
   it('fails closed on introspection outages', async () => {
     const { client } = createClient({ clientSecret: 'secret' });
     mockedAxios.post.mockRejectedValue(new Error('provider unavailable'));
-    await expect(client.introspectAccessToken('access')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.introspectAccessToken('access')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('exchanges authorization codes with public-client authentication', async () => {
     const { client } = createClient();
     mockedAxios.post.mockResolvedValue({ data: { access_token: 'access' } });
 
-    await expect(client.exchangeCodeForTokens('code-1', 'https://app.example/callback')).resolves.toEqual({
+    await expect(
+      client.exchangeCodeForTokens('code-1', 'https://app.example/callback'),
+    ).resolves.toEqual({
       access_token: 'access',
     });
 
@@ -87,23 +116,38 @@ describe('KeycloakTokenClient', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://sso.example/realms/cacic/protocol/openid-connect/token',
       expect.any(String),
-      expect.objectContaining({ headers: { 'content-type': 'application/x-www-form-urlencoded' }, timeout: 10_000 }),
+      expect.objectContaining({
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        timeout: 10_000,
+      }),
     );
     expect(payload).toContain('grant_type=authorization_code');
     expect(payload).toContain('code=code-1');
-    expect(payload).toContain('redirect_uri=https%3A%2F%2Fapp.example%2Fcallback');
+    expect(payload).toContain(
+      'redirect_uri=https%3A%2F%2Fapp.example%2Fcallback',
+    );
     expect(payload).toContain('client_id=voto+client');
   });
 
   it('refreshes tokens with basic client-secret authentication', async () => {
     const { client } = createClient({ clientSecret: 's:e/c r+e=t' });
-    mockedAxios.post.mockResolvedValue({ data: { access_token: 'new-access' } });
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: 'new-access' },
+    });
 
-    await expect(client.refreshAccessToken('refresh-1')).resolves.toEqual({ access_token: 'new-access' });
+    await expect(client.refreshAccessToken('refresh-1')).resolves.toEqual({
+      access_token: 'new-access',
+    });
 
     const payload = mockedAxios.post.mock.calls[0][1] as string;
-    const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<string, string>;
-    const expectedCredentials = Buffer.from('voto+client:s%3Ae%2Fc+r%2Be%3Dt', 'utf8').toString('base64');
+    const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<
+      string,
+      string
+    >;
+    const expectedCredentials = Buffer.from(
+      'voto+client:s%3Ae%2Fc+r%2Be%3Dt',
+      'utf8',
+    ).toString('base64');
     expect(payload).toBe('grant_type=refresh_token&refresh_token=refresh-1');
     expect(headers.Authorization).toBe(`Basic ${expectedCredentials}`);
   });
@@ -118,7 +162,10 @@ describe('KeycloakTokenClient', () => {
     await client.exchangeCodeForTokens('code-1', 'bad redirect');
 
     const payload = mockedAxios.post.mock.calls[0][1] as string;
-    const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<string, string>;
+    const headers = mockedAxios.post.mock.calls[0][2]?.headers as Record<
+      string,
+      string
+    >;
     expect(payload).toContain('client_id=voto+client');
     expect(payload).toContain('client_secret=secret');
     expect(headers.Authorization).toBeUndefined();
@@ -130,16 +177,26 @@ describe('KeycloakTokenClient', () => {
       failureLogSuppressionMs: 60_000,
     });
     mockedAxios.isAxiosError.mockReturnValue(true);
-    mockedAxios.post.mockRejectedValue({ response: { data: { error: 'invalid_grant' } } });
+    mockedAxios.post.mockRejectedValue({
+      response: { data: { error: 'invalid_grant' } },
+    });
 
-    await expect(client.exchangeCodeForTokens('bad-code', 'not a url')).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(client.exchangeCodeForTokens('bad-code', 'not a url')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      client.exchangeCodeForTokens('bad-code', 'not a url'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      client.exchangeCodeForTokens('bad-code', 'not a url'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     jest.advanceTimersByTime(60_001);
-    await expect(client.exchangeCodeForTokens('bad-code', 'not a url')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      client.exchangeCodeForTokens('bad-code', 'not a url'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     expect(logger.warn).toHaveBeenCalledTimes(2);
     expect(logger.warn.mock.calls[0][0]).toContain('redirectUri=[invalid-url]');
-    expect(logger.warn.mock.calls[1][0]).toContain('Suppressed 1 similar Keycloak failure log');
+    expect(logger.warn.mock.calls[1][0]).toContain(
+      'Suppressed 1 similar Keycloak failure log',
+    );
   });
 
   it('classifies transport and dependency failures as retriable unavailability', async () => {
@@ -147,28 +204,43 @@ describe('KeycloakTokenClient', () => {
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValue(new Error('network down'));
 
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('message=network down'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('message=network down'),
+    );
   });
 
-  it.each([429, 500, 502, 503])('classifies HTTP %s token endpoint failures as unavailable', async (status) => {
-    const { client } = createClient();
-    mockedAxios.isAxiosError.mockReturnValue(true);
-    mockedAxios.post.mockRejectedValue({ response: { status, data: { error: 'temporarily_unavailable' } } });
+  it.each([429, 500, 502, 503])(
+    'classifies HTTP %s token endpoint failures as unavailable',
+    async (status) => {
+      const { client } = createClient();
+      mockedAxios.isAxiosError.mockReturnValue(true);
+      mockedAxios.post.mockRejectedValue({
+        response: { status, data: { error: 'temporarily_unavailable' } },
+      });
 
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toMatchObject({
-      status: 503,
-      response: expect.objectContaining({ code: 'KEYCLOAK_UNAVAILABLE' }),
-    });
-  });
+      await expect(
+        client.refreshAccessToken('refresh-1'),
+      ).rejects.toMatchObject({
+        status: 503,
+        response: expect.objectContaining({ code: 'KEYCLOAK_UNAVAILABLE' }),
+      });
+    },
+  );
 
   it('keeps invalid grants as authentication failures', async () => {
     const { client } = createClient();
     mockedAxios.isAxiosError.mockReturnValue(true);
-    mockedAxios.post.mockRejectedValue({ response: { status: 400, data: { error: 'invalid_grant' } } });
+    mockedAxios.post.mockRejectedValue({
+      response: { status: 400, data: { error: 'invalid_grant' } },
+    });
 
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('ends Keycloak sessions with the server-held refresh token and client authentication', async () => {
@@ -179,7 +251,9 @@ describe('KeycloakTokenClient', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://sso.example/realms/cacic/protocol/openid-connect/logout',
       'refresh_token=refresh-1&client_id=voto+client',
-      expect.objectContaining({ headers: { 'content-type': 'application/x-www-form-urlencoded' } }),
+      expect.objectContaining({
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      }),
     );
 
     const { client } = createClient({ clientSecret: 'secret' });
@@ -189,7 +263,9 @@ describe('KeycloakTokenClient', () => {
     expect(mockedAxios.post).toHaveBeenLastCalledWith(
       'https://sso.example/realms/cacic/protocol/openid-connect/logout',
       'refresh_token=refresh-2',
-      expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.any(String) }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: expect.any(String) }),
+      }),
     );
   });
 
@@ -197,23 +273,33 @@ describe('KeycloakTokenClient', () => {
     const { client, logger } = createClient();
     mockedAxios.post.mockRejectedValue('broken');
 
-    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('error=broken'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('error=broken'),
+    );
   });
 
   it('classifies HTTP 503 and invalid-grant logout failures', async () => {
     const { client } = createClient();
     mockedAxios.isAxiosError.mockReturnValue(true);
     mockedAxios.post
-      .mockRejectedValueOnce({ response: { status: 503, data: { error: 'temporarily_unavailable' } } })
-      .mockRejectedValueOnce({ response: { status: 400, data: { error: 'invalid_grant' } } });
+      .mockRejectedValueOnce({
+        response: { status: 503, data: { error: 'temporarily_unavailable' } },
+      })
+      .mockRejectedValueOnce({
+        response: { status: 400, data: { error: 'invalid_grant' } },
+      });
 
     await expect(client.logout('refresh-1')).rejects.toMatchObject({
       status: 503,
       response: expect.objectContaining({ code: 'KEYCLOAK_UNAVAILABLE' }),
     });
-    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(client.logout('refresh-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('builds token-free logout URLs from explicit and default parameters', () => {
@@ -226,14 +312,18 @@ describe('KeycloakTokenClient', () => {
     );
 
     expect(
-      createClient({ defaultPostLogoutRedirectUri: undefined }).client.createLogoutUrl({
+      createClient({
+        defaultPostLogoutRedirectUri: undefined,
+      }).client.createLogoutUrl({
         postLogoutRedirectUri: 'https://app.example/bye',
       }),
     ).toBe(
       'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto+client&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fbye',
     );
 
-    expect(createClient().client.createLogoutUrl({}).includes('id_token_hint')).toBe(false);
+    expect(
+      createClient().client.createLogoutUrl({}).includes('id_token_hint'),
+    ).toBe(false);
   });
 
   it('keeps private basic credential helper defensive and logs singular suppression text', async () => {
@@ -248,11 +338,19 @@ describe('KeycloakTokenClient', () => {
 
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValue(new Error('offline'));
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
     jest.advanceTimersByTime(1_001);
-    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(client.refreshAccessToken('refresh-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
 
-    expect(logger.warn.mock.calls.at(-1)?.[0]).toContain('Suppressed 1 similar Keycloak failure log');
+    expect(logger.warn.mock.calls.at(-1)?.[0]).toContain(
+      'Suppressed 1 similar Keycloak failure log',
+    );
   });
 });

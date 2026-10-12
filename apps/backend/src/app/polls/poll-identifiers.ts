@@ -1,7 +1,12 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
-const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const UUID_V7_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const POLL_IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const ELEMENT_NAMESPACE_PREFIX = '_cacic_element_';
 const OPTION_NAMESPACE_PREFIX = '_cacic_option_';
@@ -42,7 +47,8 @@ export function createUuidV7(): string {
 }
 
 export function normalizeDirectLinkToken(rawValue: unknown): string {
-  const token = typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
+  const token =
+    typeof rawValue === 'string' ? rawValue.trim().toLowerCase() : '';
   if (!UUID_V7_PATTERN.test(token)) {
     throw new NotFoundException('Poll not found.');
   }
@@ -51,24 +57,38 @@ export function normalizeDirectLinkToken(rawValue: unknown): string {
 }
 
 /** Client supplied element, option, grid, and scheduling identifiers are opaque keys. */
-export function normalizePollIdentifier(rawValue: unknown, label = 'Identifier'): string {
+export function normalizePollIdentifier(
+  rawValue: unknown,
+  label = 'Identifier',
+): string {
   const identifier = typeof rawValue === 'string' ? rawValue.trim() : '';
   if (!POLL_IDENTIFIER_PATTERN.test(identifier)) {
-    throw new BadRequestException(`${label} must be a nonblank canonical identifier.`);
+    throw new BadRequestException(
+      `${label} must be a nonblank canonical identifier.`,
+    );
   }
 
   return identifier;
 }
 
-export function namespacedPollElementId(pollId: string, externalId: string): string {
+export function namespacedPollElementId(
+  pollId: string,
+  externalId: string,
+): string {
   return `${ELEMENT_NAMESPACE_PREFIX}${encodeIdentifier(pollId)}.${encodeIdentifier(externalId)}`;
 }
 
-export function namespacedPollOptionId(elementId: string, externalId: string): string {
+export function namespacedPollOptionId(
+  elementId: string,
+  externalId: string,
+): string {
   return `${OPTION_NAMESPACE_PREFIX}${encodeIdentifier(elementId)}.${encodeIdentifier(externalId)}`;
 }
 
-export function externalPollElementId(pollId: string, storedId: string): string {
+export function externalPollElementId(
+  pollId: string,
+  storedId: string,
+): string {
   if (!storedId.startsWith(ELEMENT_NAMESPACE_PREFIX)) return storedId;
   const encoded = storedId.slice(ELEMENT_NAMESPACE_PREFIX.length);
   const separator = encoded.indexOf('.');
@@ -79,7 +99,10 @@ export function externalPollElementId(pollId: string, storedId: string): string 
   return decodeIdentifier(encodedExternalId ?? '') ?? storedId;
 }
 
-export function externalPollOptionId(elementId: string, storedId: string): string {
+export function externalPollOptionId(
+  elementId: string,
+  storedId: string,
+): string {
   if (!storedId.startsWith(OPTION_NAMESPACE_PREFIX)) return storedId;
   const encoded = storedId.slice(OPTION_NAMESPACE_PREFIX.length);
   const separator = encoded.indexOf('.');
@@ -96,6 +119,8 @@ export function assertDeterministicIdentifierAvailable(
   identifier: string,
 ): void {
   if (existing && existing.parentId !== expectedParentId) {
-    throw new ConflictException(`The ${identifier} is already associated with another poll definition.`);
+    throw new ConflictException(
+      `The ${identifier} is already associated with another poll definition.`,
+    );
   }
 }

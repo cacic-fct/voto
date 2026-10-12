@@ -9,11 +9,14 @@ type TokenResponse = {
   refreshToken?: string;
 };
 
-const describeKeycloak = process.env.KEYCLOAK_BACKED_E2E === 'true' ? describe : describe.skip;
-const keycloakRealmUrl = process.env.KEYCLOAK_REALM_URL ?? 'http://localhost:18080/realms/cacic-sso';
+const describeKeycloak =
+  process.env.KEYCLOAK_BACKED_E2E === 'true' ? describe : describe.skip;
+const keycloakRealmUrl =
+  process.env.KEYCLOAK_REALM_URL ?? 'http://localhost:18080/realms/cacic-sso';
 const backendHost = process.env.HOST ?? 'localhost';
 const backendPort = process.env.PORT ?? '3000';
-const sessionPrefix = process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ?? 'cacic-voto:auth:session:';
+const sessionPrefix =
+  process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ?? 'cacic-voto:auth:session:';
 
 describeKeycloak('Keycloak-backed authentication', () => {
   const sessionIds: string[] = [];
@@ -34,7 +37,11 @@ describeKeycloak('Keycloak-backed authentication', () => {
 
   afterAll(async () => {
     if (redis) {
-      await Promise.all(sessionIds.map((sessionId) => redis.del(`${sessionPrefix}${sessionId}`)));
+      await Promise.all(
+        sessionIds.map((sessionId) =>
+          redis.del(`${sessionPrefix}${sessionId}`),
+        ),
+      );
       await redis.quit();
     }
   });
@@ -61,7 +68,9 @@ describeKeycloak('Keycloak-backed authentication', () => {
       `${new URL(keycloakRealmUrl).origin}/realms/cacic-sso/protocol/openid-connect/auth`,
     );
     expect(location.searchParams.get('client_id')).toBe('cacic-voto');
-    expect(location.searchParams.get('redirect_uri')).toBe(`http://${backendHost}:${backendPort}/api/auth/callback`);
+    expect(location.searchParams.get('redirect_uri')).toBe(
+      `http://${backendHost}:${backendPort}/api/auth/callback`,
+    );
     expect(location.searchParams.get('prompt')).toBe('none');
     expect(location.searchParams.has('kc_idp_hint')).toBe(false);
   });
@@ -119,7 +128,9 @@ describeKeycloak('Keycloak-backed authentication', () => {
       },
     );
     expect(permissionsResponse.status).toBe(201);
-    expect(permissionsResponse.data).toEqual({ permissions: ['poll#read', 'poll#edit'] });
+    expect(permissionsResponse.data).toEqual({
+      permissions: ['poll#read', 'poll#edit'],
+    });
 
     const adminPollsResponse = await axios.get('/api/admin/polls', {
       headers: {
@@ -132,11 +143,16 @@ describeKeycloak('Keycloak-backed authentication', () => {
   });
 
   it('issues an imported service-account token for CACiC Voto M2M calls', async () => {
-    const token = await requestClientCredentialsToken('cacic-voto-m2m', 'cacic-voto-m2m-dev-secret');
+    const token = await requestClientCredentialsToken(
+      'cacic-voto-m2m',
+      'cacic-voto-m2m-dev-secret',
+    );
     const payload = decodeJwtPayload(token);
 
     expect(payload['azp']).toBe('cacic-voto-m2m');
-    expect(payload['preferred_username']).toBe('service-account-cacic-voto-m2m');
+    expect(payload['preferred_username']).toBe(
+      'service-account-cacic-voto-m2m',
+    );
   });
 });
 
@@ -169,7 +185,10 @@ async function waitForKeycloak(): Promise<void> {
   );
 }
 
-async function requestPasswordToken(username: string, password: string): Promise<TokenResponse> {
+async function requestPasswordToken(
+  username: string,
+  password: string,
+): Promise<TokenResponse> {
   const body = new URLSearchParams({
     grant_type: 'password',
     client_id: 'cacic-voto',
@@ -179,27 +198,38 @@ async function requestPasswordToken(username: string, password: string): Promise
     scope: 'openid profile email',
   });
 
-  const response = await axios.post(`${keycloakRealmUrl}/protocol/openid-connect/token`, body.toString(), {
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
+  const response = await axios.post(
+    `${keycloakRealmUrl}/protocol/openid-connect/token`,
+    body.toString(),
+    {
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
     },
-  });
+  );
 
   return normalizeTokenResponse(response.data, 'password login');
 }
 
-async function requestClientCredentialsToken(clientId: string, clientSecret: string): Promise<string> {
+async function requestClientCredentialsToken(
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: clientId,
     client_secret: clientSecret,
   });
 
-  const response = await axios.post(`${keycloakRealmUrl}/protocol/openid-connect/token`, body.toString(), {
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
+  const response = await axios.post(
+    `${keycloakRealmUrl}/protocol/openid-connect/token`,
+    body.toString(),
+    {
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
     },
-  });
+  );
 
   const token = readString(response.data, 'access_token');
   if (!token) {
@@ -230,7 +260,9 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
     throw new Error('Expected a JWT with a payload segment.');
   }
 
-  const parsed: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  const parsed: unknown = JSON.parse(
+    Buffer.from(payload, 'base64url').toString('utf8'),
+  );
   if (!isRecord(parsed)) {
     throw new Error('Expected JWT payload to be an object.');
   }

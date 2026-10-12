@@ -7,8 +7,7 @@ import { summarizeKeycloakFailure } from './keycloak-error-logging';
 import { isRecord } from './keycloak-claims.utils';
 
 export type KeycloakTokenEndpointAuthMethod =
-  | 'client_secret_basic'
-  | 'client_secret_post';
+  'client_secret_basic' | 'client_secret_post';
 
 export type KeycloakTokenClientOptions = {
   realmUrl: string;
@@ -33,7 +32,10 @@ export class KeycloakTokenClient {
   constructor(private readonly options: KeycloakTokenClientOptions) {}
 
   async introspectAccessToken(accessToken: string): Promise<void> {
-    const payload = new URLSearchParams({ token: accessToken, token_type_hint: 'access_token' });
+    const payload = new URLSearchParams({
+      token: accessToken,
+      token_type_hint: 'access_token',
+    });
     const headers = this.createFormHeaders();
     this.addClientAuthentication(payload, headers);
 
@@ -122,13 +124,14 @@ export class KeycloakTokenClient {
       );
     } catch (error) {
       this.logKeycloakFailure('session logout', error);
-      this.throwTokenEndpointFailure(error, 'Could not end the Keycloak session.');
+      this.throwTokenEndpointFailure(
+        error,
+        'Could not end the Keycloak session.',
+      );
     }
   }
 
-  createLogoutUrl(input: {
-    postLogoutRedirectUri?: string;
-  }): string {
+  createLogoutUrl(input: { postLogoutRedirectUri?: string }): string {
     const logoutUrl = new URL(
       `${this.options.realmUrl}/protocol/openid-connect/logout`,
     );
@@ -196,13 +199,14 @@ export class KeycloakTokenClient {
     )}; clientSecretConfigured=${
       this.options.clientSecret ? 'true' : 'false'
     }; tokenEndpointAuthMethod=${
-      this.options.clientSecret
-        ? this.options.tokenEndpointAuthMethod
-        : 'none'
+      this.options.clientSecret ? this.options.tokenEndpointAuthMethod : 'none'
     }.`;
   }
 
-  private throwTokenEndpointFailure(error: unknown, authenticationMessage: string): never {
+  private throwTokenEndpointFailure(
+    error: unknown,
+    authenticationMessage: string,
+  ): never {
     if (this.isAuthenticationFailure(error)) {
       throw new UnauthorizedException(authenticationMessage);
     }
@@ -223,7 +227,12 @@ export class KeycloakTokenClient {
     const providerError = this.readProviderError(error.response?.data);
     return (
       (status === undefined || status === 400) &&
-      new Set(['invalid_grant', 'invalid_client', 'invalid_request', 'unauthorized_client']).has(providerError ?? '')
+      new Set([
+        'invalid_grant',
+        'invalid_client',
+        'invalid_request',
+        'unauthorized_client',
+      ]).has(providerError ?? '')
     );
   }
 

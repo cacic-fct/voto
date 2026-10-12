@@ -23,9 +23,10 @@ export type CacicElectionSlateRecord = Prisma.CacicElectionSlateGetPayload<{
   };
 }>;
 
-export type CacicElectionSlateMemberInput = SubmitCacicElectionSlateMemberRequest & {
-  id?: string;
-};
+export type CacicElectionSlateMemberInput =
+  SubmitCacicElectionSlateMemberRequest & {
+    id?: string;
+  };
 
 export type NormalizedCacicElectionSlateMember = {
   id?: string;

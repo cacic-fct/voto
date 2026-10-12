@@ -21,11 +21,19 @@ export class SilentSsoService {
 
     const window = this.document.defaultView;
     if (!window || !this.document.body) {
-      return Promise.reject(new Error('Silent SSO requires a browser document.'));
+      return Promise.reject(
+        new Error('Silent SSO requires a browser document.'),
+      );
     }
 
-    const completionUrl = new URL('silent-check-sso.html', this.getBaseUrl(window));
-    const authorizationUrl = new URL('/api/auth/login/redirect', window.location.origin);
+    const completionUrl = new URL(
+      'silent-check-sso.html',
+      this.getBaseUrl(window),
+    );
+    const authorizationUrl = new URL(
+      '/api/auth/login/redirect',
+      window.location.origin,
+    );
     authorizationUrl.searchParams.set('returnTo', completionUrl.pathname);
     authorizationUrl.searchParams.set('prompt', 'none');
 
@@ -45,7 +53,10 @@ export class SilentSsoService {
         reject(error);
       };
       const handleMessage = (event: MessageEvent<unknown>) => {
-        if (event.origin !== window.location.origin || event.source !== iframe.contentWindow) {
+        if (
+          event.origin !== window.location.origin ||
+          event.source !== iframe.contentWindow
+        ) {
           return;
         }
 
@@ -61,20 +72,31 @@ export class SilentSsoService {
           return;
         }
 
-        if (resultUrl.origin !== window.location.origin || resultUrl.pathname !== completionUrl.pathname) {
+        if (
+          resultUrl.origin !== window.location.origin ||
+          resultUrl.pathname !== completionUrl.pathname
+        ) {
           fail(new Error('Silent SSO returned an unexpected completion URL.'));
           return;
         }
 
         cleanup();
-        resolve(resultUrl.searchParams.get('sso') === 'none' ? 'unauthenticated' : 'authenticated');
+        resolve(
+          resultUrl.searchParams.get('sso') === 'none'
+            ? 'unauthenticated'
+            : 'authenticated',
+        );
       };
       const timeoutId = window.setTimeout(
         () => fail(new Error('Silent SSO check timed out.')),
         this.timeoutMs,
       );
 
-      iframe.addEventListener('error', () => fail(new Error('Silent SSO iframe failed to load.')), { once: true });
+      iframe.addEventListener(
+        'error',
+        () => fail(new Error('Silent SSO iframe failed to load.')),
+        { once: true },
+      );
       window.addEventListener('message', handleMessage);
       iframe.src = authorizationUrl.toString();
       this.document.body.append(iframe);
@@ -82,7 +104,8 @@ export class SilentSsoService {
   }
 
   private getBaseUrl(window: Window): URL {
-    const baseHref = this.document.querySelector('base')?.getAttribute('href') ?? '/';
+    const baseHref =
+      this.document.querySelector('base')?.getAttribute('href') ?? '/';
     return new URL(baseHref, window.location.origin);
   }
 
@@ -92,6 +115,9 @@ export class SilentSsoService {
     }
 
     const message = value as Record<string, unknown>;
-    return message['type'] === 'cacic-silent-sso-complete' && typeof message['href'] === 'string';
+    return (
+      message['type'] === 'cacic-silent-sso-complete' &&
+      typeof message['href'] === 'string'
+    );
   }
 }

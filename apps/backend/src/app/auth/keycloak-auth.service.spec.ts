@@ -1,6 +1,14 @@
-import { ForbiddenException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import axios from 'axios';
-import { generateKeyPairSync, type JsonWebKey, sign as signToken } from 'node:crypto';
+import {
+  generateKeyPairSync,
+  type JsonWebKey,
+  sign as signToken,
+} from 'node:crypto';
 import { AuthSessionStoreService } from './auth-session-store.service';
 import { AuthorizationStateService } from './authorization-state.service';
 import { AuthSession, AuthorizationState } from './auth.types';
@@ -36,12 +44,21 @@ type SessionStoreMock = jest.Mocked<
 >;
 
 type AuthorizationStateMock = jest.Mocked<
-  Pick<AuthorizationStateService, 'create' | 'consume' | 'getAuthorizationRedirectUri' | 'getPostLoginRedirectUri'>
+  Pick<
+    AuthorizationStateService,
+    | 'create'
+    | 'consume'
+    | 'getAuthorizationRedirectUri'
+    | 'getPostLoginRedirectUri'
+  >
 >;
 
 type PrismaMock = {
-  $executeRaw: jest.Mock<Promise<number>, [unknown] >;
-  $transaction: jest.Mock<Promise<unknown>, [(tx: PrismaMock) => Promise<unknown>]>;
+  $executeRaw: jest.Mock<Promise<number>, [unknown]>;
+  $transaction: jest.Mock<
+    Promise<unknown>,
+    [(tx: PrismaMock) => Promise<unknown>]
+  >;
   user: {
     upsert: jest.Mock<Promise<unknown>, [unknown]>;
   };
@@ -58,11 +75,19 @@ function tokenWithClaims(claims: Record<string, unknown>): string {
     exp: Math.floor(Date.now() / 1000) + 120,
     ...claims,
   };
-  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: TEST_KEY_ID }), 'utf8').toString(
-    'base64url',
+  const encodedHeader = Buffer.from(
+    JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: TEST_KEY_ID }),
+    'utf8',
+  ).toString('base64url');
+  const encodedPayload = Buffer.from(
+    JSON.stringify(jwtClaims),
+    'utf8',
+  ).toString('base64url');
+  const signature = signToken(
+    'RSA-SHA256',
+    Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'),
+    signingKeys.privateKey,
   );
-  const encodedPayload = Buffer.from(JSON.stringify(jwtClaims), 'utf8').toString('base64url');
-  const signature = signToken('RSA-SHA256', Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'), signingKeys.privateKey);
   return `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
 }
 
@@ -77,10 +102,12 @@ function createSessionStoreMock(): SessionStoreMock {
     renewRefreshLock: jest.fn().mockResolvedValue(true),
     waitForRefreshLockRelease: jest.fn().mockResolvedValue(undefined),
   };
-  store.commitRefreshedSession.mockImplementation(async (sessionId, _generation, _owner, session) => {
-    await store.set(sessionId, session);
-    return true;
-  });
+  store.commitRefreshedSession.mockImplementation(
+    async (sessionId, _generation, _owner, session) => {
+      await store.set(sessionId, session);
+      return true;
+    },
+  );
   return store;
 }
 
@@ -88,8 +115,12 @@ function createAuthorizationStateMock(): AuthorizationStateMock {
   return {
     create: jest.fn().mockResolvedValue('state-1'),
     consume: jest.fn().mockResolvedValue({ returnTo: '/polls' }),
-    getAuthorizationRedirectUri: jest.fn((state?: AuthorizationState) => state?.redirectUri),
-    getPostLoginRedirectUri: jest.fn((state?: AuthorizationState) => state?.returnTo ?? '/'),
+    getAuthorizationRedirectUri: jest.fn(
+      (state?: AuthorizationState) => state?.redirectUri,
+    ),
+    getPostLoginRedirectUri: jest.fn(
+      (state?: AuthorizationState) => state?.returnTo ?? '/',
+    ),
   };
 }
 
@@ -132,9 +163,15 @@ describe('KeycloakAuthService', () => {
     authorizationState = createAuthorizationStateMock();
     prisma = createPrismaMock();
     mockedAxios.post.mockReset();
-    jest.spyOn(KeycloakTokenClient.prototype, 'introspectAccessToken').mockResolvedValue(undefined);
+    jest
+      .spyOn(KeycloakTokenClient.prototype, 'introspectAccessToken')
+      .mockResolvedValue(undefined);
     mockedAxios.get.mockReset();
-    mockedAxios.get.mockResolvedValue({ data: { keys: [publicJwk] }, status: 200, statusText: 'OK' });
+    mockedAxios.get.mockResolvedValue({
+      data: { keys: [publicJwk] },
+      status: 200,
+      statusText: 'OK',
+    });
     mockedAxios.isAxiosError.mockReset();
   });
 
@@ -158,7 +195,11 @@ describe('KeycloakAuthService', () => {
   function mockUserInfo(claims: Record<string, unknown>): void {
     mockedAxios.get.mockImplementation(async (url: string) =>
       url.endsWith('/protocol/openid-connect/certs')
-        ? ({ data: { keys: [publicJwk] }, status: 200, statusText: 'OK' } as never)
+        ? ({
+            data: { keys: [publicJwk] },
+            status: 200,
+            statusText: 'OK',
+          } as never)
         : ({ data: claims } as never),
     );
   }
@@ -180,7 +221,9 @@ describe('KeycloakAuthService', () => {
       prompt: undefined,
     });
 
-    await service.buildAuthorizationUrl({ redirectUri: 'https://override.example/api/auth/callback' });
+    await service.buildAuthorizationUrl({
+      redirectUri: 'https://override.example/api/auth/callback',
+    });
     expect(authorizationState.create).toHaveBeenLastCalledWith({
       redirectUri: 'https://override.example/api/auth/callback',
       returnTo: undefined,
@@ -217,15 +260,23 @@ describe('KeycloakAuthService', () => {
     delete process.env.KEYCLOAK_REDIRECT_URI;
     const service = createService();
 
-    await expect(service.buildAuthorizationUrl()).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.buildAuthorizationUrl()).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('rejects unsupported or oversized OIDC authorization inputs before storing state', async () => {
     const service = createService();
 
-    await expect(service.buildAuthorizationUrl({ prompt: 'arbitrary-value' })).rejects.toThrow('unsupported');
-    await expect(service.buildAuthorizationUrl({ scope: 'openid unknown' })).rejects.toThrow('unsupported');
-    await expect(service.buildAuthorizationUrl({ scope: 'x'.repeat(129) })).rejects.toThrow('too long');
+    await expect(
+      service.buildAuthorizationUrl({ prompt: 'arbitrary-value' }),
+    ).rejects.toThrow('unsupported');
+    await expect(
+      service.buildAuthorizationUrl({ scope: 'openid unknown' }),
+    ).rejects.toThrow('unsupported');
+    await expect(
+      service.buildAuthorizationUrl({ scope: 'x'.repeat(129) }),
+    ).rejects.toThrow('too long');
     expect(authorizationState.create).not.toHaveBeenCalled();
   });
 
@@ -233,17 +284,27 @@ describe('KeycloakAuthService', () => {
     process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
     const service = createService();
     mockedAxios.post.mockResolvedValue({ data: { access_token: 'access' } });
-    authorizationState.getAuthorizationRedirectUri.mockReturnValueOnce('https://state.example/callback');
+    authorizationState.getAuthorizationRedirectUri.mockReturnValueOnce(
+      'https://state.example/callback',
+    );
 
     await expect(
-      service.exchangeCodeForTokens('code-1', { redirectUri: 'https://state.example/callback' }, 'https://fallback'),
+      service.exchangeCodeForTokens(
+        'code-1',
+        { redirectUri: 'https://state.example/callback' },
+        'https://fallback',
+      ),
     ).resolves.toEqual({ access_token: 'access' });
 
     const payload = mockedAxios.post.mock.calls[0][1] as string;
-    expect(mockedAxios.post.mock.calls[0][0]).toBe('https://sso.example/realms/cacic/protocol/openid-connect/token');
+    expect(mockedAxios.post.mock.calls[0][0]).toBe(
+      'https://sso.example/realms/cacic/protocol/openid-connect/token',
+    );
     expect(payload).toContain('grant_type=authorization_code');
     expect(payload).not.toContain('client_secret=secret');
-    expect(payload).toContain('redirect_uri=https%3A%2F%2Fstate.example%2Fcallback');
+    expect(payload).toContain(
+      'redirect_uri=https%3A%2F%2Fstate.example%2Fcallback',
+    );
     expect(mockedAxios.post.mock.calls[0][2]).toEqual(
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -256,28 +317,46 @@ describe('KeycloakAuthService', () => {
   it('wraps token exchange and refresh failures', async () => {
     const service = createService();
     mockedAxios.isAxiosError.mockReturnValue(true);
-    mockedAxios.post.mockRejectedValueOnce({ response: { data: { error: 'invalid_grant' } } });
-    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(UnauthorizedException);
+    mockedAxios.post.mockRejectedValueOnce({
+      response: { data: { error: 'invalid_grant' } },
+    });
+    await expect(
+      service.exchangeCodeForTokens('bad-code'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     mockedAxios.post.mockRejectedValueOnce({});
-    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.exchangeCodeForTokens('bad-code'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.exchangeCodeForTokens('bad-code')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.exchangeCodeForTokens('bad-code'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.refreshAccessToken('refresh')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.refreshAccessToken('refresh')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('refreshes access tokens', async () => {
     process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
     const service = createService();
-    mockedAxios.post.mockResolvedValue({ data: { access_token: 'new-access' } });
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: 'new-access' },
+    });
 
-    await expect(service.refreshAccessToken('refresh')).resolves.toEqual({ access_token: 'new-access' });
-    expect(mockedAxios.post.mock.calls[0][1]).toContain('grant_type=refresh_token');
-    expect(mockedAxios.post.mock.calls[0][1]).not.toContain('client_secret=secret');
+    await expect(service.refreshAccessToken('refresh')).resolves.toEqual({
+      access_token: 'new-access',
+    });
+    expect(mockedAxios.post.mock.calls[0][1]).toContain(
+      'grant_type=refresh_token',
+    );
+    expect(mockedAxios.post.mock.calls[0][1]).not.toContain(
+      'client_secret=secret',
+    );
     expect(mockedAxios.post.mock.calls[0][2]).toEqual(
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -297,16 +376,26 @@ describe('KeycloakAuthService', () => {
     });
 
     await expect(
-      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+      service.authenticateMachineToMachineToken(
+        accessToken,
+        ['lgpd:read'],
+        ['cacic-account-manager-m2m'],
+      ),
     ).resolves.toMatchObject({ sub: 'service-account-id' });
     await expect(
-      service.authenticateMachineToMachineToken(accessToken, ['users:read'], ['cacic-account-manager-m2m']),
-    ).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+      service.authenticateMachineToMachineToken(
+        accessToken,
+        ['users:read'],
+        ['cacic-account-manager-m2m'],
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
     await expect(
-      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['another-service-m2m']),
+      service.authenticateMachineToMachineToken(
+        accessToken,
+        ['lgpd:read'],
+        ['another-service-m2m'],
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     const userAccessToken = tokenWithClaims({
@@ -316,19 +405,27 @@ describe('KeycloakAuthService', () => {
       sub: 'requester-id',
     });
     await expect(
-      service.authenticateMachineToMachineToken(userAccessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
-    ).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+      service.authenticateMachineToMachineToken(
+        userAccessToken,
+        ['lgpd:read'],
+        ['cacic-account-manager-m2m'],
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
     const namespacedServiceToken = tokenWithClaims({
       azp: 'cacic-account-manager-m2m',
       preferred_username: 'service-account-cacic-account-manager-m2m',
-      resource_access: { 'cacic-account-manager-m2m': { roles: ['lgpd:read'] } },
+      resource_access: {
+        'cacic-account-manager-m2m': { roles: ['lgpd:read'] },
+      },
       sub: 'namespaced-service-account-id',
     });
     await expect(
-      service.authenticateMachineToMachineToken(namespacedServiceToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+      service.authenticateMachineToMachineToken(
+        namespacedServiceToken,
+        ['lgpd:read'],
+        ['cacic-account-manager-m2m'],
+      ),
     ).resolves.toMatchObject({ sub: 'namespaced-service-account-id' });
 
     const unrelatedClientRoleToken = tokenWithClaims({
@@ -338,7 +435,11 @@ describe('KeycloakAuthService', () => {
       sub: 'unrelated-client-role-id',
     });
     await expect(
-      service.authenticateMachineToMachineToken(unrelatedClientRoleToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+      service.authenticateMachineToMachineToken(
+        unrelatedClientRoleToken,
+        ['lgpd:read'],
+        ['cacic-account-manager-m2m'],
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -353,10 +454,16 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'revoked-user' });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'revoked-user' });
-    prisma.revokedVotingSubject.findUnique.mockResolvedValue({ subjectHash: 'revoked' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'revoked-user' });
+    prisma.revokedVotingSubject.findUnique.mockResolvedValue({
+      subjectHash: 'revoked',
+    });
 
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.revokedVotingSubject.findUnique).toHaveBeenCalled();
   });
 
@@ -368,10 +475,16 @@ describe('KeycloakAuthService', () => {
       realm_access: { roles: ['lgpd:read'] },
       sub: 'revoked-service-account',
     });
-    prisma.revokedVotingSubject.findUnique.mockResolvedValue({ subjectHash: 'revoked' });
+    prisma.revokedVotingSubject.findUnique.mockResolvedValue({
+      subjectHash: 'revoked',
+    });
 
     await expect(
-      service.authenticateMachineToMachineToken(accessToken, ['lgpd:read'], ['cacic-account-manager-m2m']),
+      service.authenticateMachineToMachineToken(
+        accessToken,
+        ['lgpd:read'],
+        ['cacic-account-manager-m2m'],
+      ),
     ).resolves.toMatchObject({ sub: 'revoked-service-account' });
     expect(prisma.revokedVotingSubject.findUnique).not.toHaveBeenCalled();
   });
@@ -391,7 +504,9 @@ describe('KeycloakAuthService', () => {
     mockUserInfo({ sub: 'other-client-admin' });
     mockedAxios.post.mockResolvedValue({ data: [] });
 
-    await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
@@ -409,7 +524,13 @@ describe('KeycloakAuthService', () => {
       permissions: [{ rsname: 'poll', scopes: ['read'] }],
     });
 
-    await expect(service.createSession({ access_token: accessToken, refresh_token: 'refresh', id_token: 'id' })).resolves.toEqual({
+    await expect(
+      service.createSession({
+        access_token: accessToken,
+        refresh_token: 'refresh',
+        id_token: 'id',
+      }),
+    ).resolves.toEqual({
       sessionId: expect.any(String),
       expiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 3600000,
@@ -434,42 +555,75 @@ describe('KeycloakAuthService', () => {
           name: 'Ada Lovelace',
           roles: ['voter', 'voting:poll-admin'],
           permissions: ['poll#read'],
-          claims: expect.objectContaining({ sub: 'user-1', email: 'ada@example.com' }),
+          claims: expect.objectContaining({
+            sub: 'user-1',
+            email: 'ada@example.com',
+          }),
         }),
       }),
     );
-    const persistedClaims = (prisma.user.upsert.mock.calls[0][0] as { create: { claims: Record<string, unknown> } }).create.claims;
+    const persistedClaims = (
+      prisma.user.upsert.mock.calls[0][0] as {
+        create: { claims: Record<string, unknown> };
+      }
+    ).create.claims;
     expect(persistedClaims.resource_access).toBeUndefined();
     expect(persistedClaims.permissions).toBeUndefined();
   });
 
   it('rejects session creation when token response lacks an access token', async () => {
-    await expect(createService().createSession({ refresh_token: 'refresh' })).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      createService().createSession({ refresh_token: 'refresh' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('authenticates sessions, refreshes near-expiry access tokens, and evaluates missing permissions', async () => {
     const service = createService();
     const oldSession: AuthSession = {
-      accessToken: tokenWithClaims({ sub: 'old-user', exp: Math.floor(Date.now() / 1000) + 10 }),
+      accessToken: tokenWithClaims({
+        sub: 'old-user',
+        exp: Math.floor(Date.now() / 1000) + 10,
+      }),
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 10000,
       sessionExpiresAt: Date.now() + 600000,
     };
-    const refreshedToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
-    sessions.get.mockResolvedValueOnce(oldSession).mockResolvedValueOnce(oldSession);
+    const refreshedToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
+    sessions.get
+      .mockResolvedValueOnce(oldSession)
+      .mockResolvedValueOnce(oldSession);
     mockedAxios.post
-      .mockResolvedValueOnce({ data: { access_token: refreshedToken, refresh_token: 'refresh-2', expires_in: 120 } })
+      .mockResolvedValueOnce({
+        data: {
+          access_token: refreshedToken,
+          refresh_token: 'refresh-2',
+          expires_in: 120,
+        },
+      })
       .mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['edit'] }] });
-    mockUserInfo({ sub: 'user-1', preferred_username: 'ada', email: 'ada@example.com' });
+    mockUserInfo({
+      sub: 'user-1',
+      preferred_username: 'ada',
+      email: 'ada@example.com',
+    });
 
-    const principal = await service.authenticateSession('session-1', ['poll#edit']);
+    const principal = await service.authenticateSession('session-1', [
+      'poll#edit',
+    ]);
 
     expect(principal.sub).toBe('user-1');
     expect(principal.permissions).toEqual(['poll#edit']);
-    expect(sessions.acquireRefreshLock).toHaveBeenCalledWith('session-1', expect.any(String));
-    expect(sessions.releaseRefreshLock).toHaveBeenCalledWith('session-1', expect.any(String));
+    expect(sessions.acquireRefreshLock).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(String),
+    );
+    expect(sessions.releaseRefreshLock).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(String),
+    );
     expect(sessions.set).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
@@ -482,15 +636,25 @@ describe('KeycloakAuthService', () => {
   it('refreshes an existing session directly', async () => {
     const service = createService();
     const oldSession: AuthSession = {
-      accessToken: tokenWithClaims({ sub: 'old-user', exp: Math.floor(Date.now() / 1000) + 10 }),
+      accessToken: tokenWithClaims({
+        sub: 'old-user',
+        exp: Math.floor(Date.now() / 1000) + 10,
+      }),
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 10000,
       sessionExpiresAt: Date.now() + 600000,
     };
-    const refreshedToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const refreshedToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get.mockResolvedValue(oldSession);
     mockedAxios.post.mockResolvedValue({
-      data: { access_token: refreshedToken, expires_in: 120, refresh_expires_in: 600 },
+      data: {
+        access_token: refreshedToken,
+        expires_in: 120,
+        refresh_expires_in: 600,
+      },
     });
     mockUserInfo({ sub: 'user-1' });
 
@@ -510,19 +674,28 @@ describe('KeycloakAuthService', () => {
   it('throws for missing sessions, missing refresh tokens, and denied permissions', async () => {
     const service = createService();
     sessions.get.mockResolvedValueOnce(undefined);
-    await expect(service.authenticateSession('missing')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.authenticateSession('missing')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
 
     sessions.get.mockResolvedValueOnce(undefined);
-    await expect(service.refreshSession('missing')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refreshSession('missing')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
 
     sessions.get.mockResolvedValueOnce({
       accessToken: 'access',
       accessTokenExpiresAt: Date.now() - 1,
       sessionExpiresAt: Date.now() + 1000,
     });
-    await expect(service.refreshSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refreshSession('session-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
 
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get.mockResolvedValueOnce({
       accessToken,
       refreshToken: 'refresh',
@@ -531,7 +704,9 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'user-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
-    await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('uses cached principals and skips permission evaluation for super-admins', async () => {
@@ -549,8 +724,12 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'admin-1' });
 
-    await expect(service.authenticateSession('session-1', ['poll#delete'])).resolves.toMatchObject({ sub: 'admin-1' });
-    await expect(service.authenticateSession('session-1', ['poll#create'])).resolves.toMatchObject({ sub: 'admin-1' });
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).resolves.toMatchObject({ sub: 'admin-1' });
+    await expect(
+      service.authenticateSession('session-1', ['poll#create']),
+    ).resolves.toMatchObject({ sub: 'admin-1' });
 
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
@@ -571,7 +750,9 @@ describe('KeycloakAuthService', () => {
     mockUserInfo({ sub: 'reader-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
 
-    await expect(service.authenticateSession('session-1', ['poll#delete'])).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(mockedAxios.post).toHaveBeenCalled();
   });
 
@@ -588,11 +769,18 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
     mockUserInfo({ sub: 'user-1' });
-    mockedAxios.post.mockResolvedValue({ data: [{ rsname: 'poll', scopes: ['read'] }] });
+    mockedAxios.post.mockResolvedValue({
+      data: [{ rsname: 'poll', scopes: ['read'] }],
+    });
 
-    await expect(service.evaluateSessionPermissions('session-1', [' poll#read ', '', 'poll#read', 'poll#edit'])).resolves.toEqual([
-      'poll#read',
-    ]);
+    await expect(
+      service.evaluateSessionPermissions('session-1', [
+        ' poll#read ',
+        '',
+        'poll#read',
+        'poll#edit',
+      ]),
+    ).resolves.toEqual(['poll#read']);
     expect(prisma.user.upsert).toHaveBeenCalled();
   });
 
@@ -611,7 +799,9 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual(['poll#read']);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#read']),
+    ).resolves.toEqual(['poll#read']);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -629,7 +819,9 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.evaluateSessionPermissions('session-1', [])).resolves.toEqual([]);
+    await expect(
+      service.evaluateSessionPermissions('session-1', []),
+    ).resolves.toEqual([]);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -643,10 +835,15 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'bounded-permission-user' });
 
-    await expect(service.evaluateSessionPermissions('session-1', Array.from({ length: 51 }, () => 'poll#read'))).rejects.toThrow(
-      'oversized',
-    );
-    await expect(service.evaluateSessionPermissions('session-1', ['x'.repeat(129)])).rejects.toThrow('oversized');
+    await expect(
+      service.evaluateSessionPermissions(
+        'session-1',
+        Array.from({ length: 51 }, () => 'poll#read'),
+      ),
+    ).rejects.toThrow('oversized');
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['x'.repeat(129)]),
+    ).rejects.toThrow('oversized');
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -658,9 +855,9 @@ describe('KeycloakAuthService', () => {
       realm_access: { roles: ['super-admin'] },
     });
     sessions.get.mockResolvedValueOnce(undefined);
-    await expect(service.evaluateSessionPermissions('missing', ['poll#read'])).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      service.evaluateSessionPermissions('missing', ['poll#read']),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     sessions.get.mockResolvedValueOnce({
       accessToken,
@@ -670,10 +867,12 @@ describe('KeycloakAuthService', () => {
     });
     mockUserInfo({ sub: 'admin-1' });
 
-    await expect(service.evaluateSessionPermissions('session-1', [' poll#read ', 'poll#edit'])).resolves.toEqual([
-      'poll#read',
-      'poll#edit',
-    ]);
+    await expect(
+      service.evaluateSessionPermissions('session-1', [
+        ' poll#read ',
+        'poll#edit',
+      ]),
+    ).resolves.toEqual(['poll#read', 'poll#edit']);
   });
 
   it('does not return privileged permissions just because poll read is granted', async () => {
@@ -692,15 +891,21 @@ describe('KeycloakAuthService', () => {
     mockUserInfo({ sub: 'reader-1' });
     mockedAxios.post.mockResolvedValue({ data: [] });
 
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#read', 'poll#edit'])).resolves.toEqual([
-      'poll#read',
-    ]);
+    await expect(
+      service.evaluateSessionPermissions('session-1', [
+        'poll#read',
+        'poll#edit',
+      ]),
+    ).resolves.toEqual(['poll#read']);
     expect(mockedAxios.post).toHaveBeenCalled();
   });
 
   it('refreshes sessions after waiting for another refresh lock holder', async () => {
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get
       .mockResolvedValueOnce({
         accessToken: 'old-access',
@@ -717,31 +922,46 @@ describe('KeycloakAuthService', () => {
     sessions.acquireRefreshLock.mockResolvedValue(false);
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'user-1' });
 
-    expect(sessions.waitForRefreshLockRelease).toHaveBeenCalledWith('session-1');
+    expect(sessions.waitForRefreshLockRelease).toHaveBeenCalledWith(
+      'session-1',
+    );
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
   it('does not recreate a session deleted while refresh is in flight', async () => {
     const service = createService();
     const oldSession: AuthSession = {
-      accessToken: tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 10 }),
+      accessToken: tokenWithClaims({
+        sub: 'user-1',
+        exp: Math.floor(Date.now() / 1000) + 10,
+      }),
       refreshToken: 'refresh-1',
       accessTokenExpiresAt: Date.now() - 1,
       sessionExpiresAt: Date.now() + 600000,
     };
-    const refreshedToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
-    sessions.get.mockResolvedValueOnce(oldSession).mockResolvedValueOnce(oldSession);
+    const refreshedToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
+    sessions.get
+      .mockResolvedValueOnce(oldSession)
+      .mockResolvedValueOnce(oldSession);
     sessions.acquireRefreshLock.mockResolvedValue(true);
     sessions.commitRefreshedSession.mockResolvedValue(false);
     mockUserInfo({ sub: 'user-1' });
 
-    let resolveToken: ((value: { access_token: string; expires_in: number }) => void) | undefined;
+    let resolveToken:
+      | ((value: { access_token: string; expires_in: number }) => void)
+      | undefined;
     jest.spyOn(service, 'refreshAccessToken').mockImplementation(
-      () => new Promise((resolve) => {
-        resolveToken = resolve;
-      }),
+      () =>
+        new Promise((resolve) => {
+          resolveToken = resolve;
+        }),
     );
 
     const refresh = service.authenticateSession('session-1');
@@ -756,13 +976,22 @@ describe('KeycloakAuthService', () => {
     await expect(refresh).rejects.toBeInstanceOf(UnauthorizedException);
     expect(sessions.commitRefreshedSession).toHaveBeenCalled();
     expect(sessions.set).not.toHaveBeenCalled();
-    expect(sessions.releaseRefreshLock).toHaveBeenCalledWith('session-1', expect.any(String));
+    expect(sessions.releaseRefreshLock).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(String),
+    );
   });
 
   it('rereads the session after acquiring the lock and never reuses a rotated token', async () => {
     const service = createService();
-    const staleAccessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 10 });
-    const currentAccessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const staleAccessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 10,
+    });
+    const currentAccessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get
       .mockResolvedValueOnce({
         accessToken: staleAccessToken,
@@ -780,7 +1009,9 @@ describe('KeycloakAuthService', () => {
     sessions.acquireRefreshLock.mockResolvedValue(true);
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({
       sub: 'user-1',
       token: currentAccessToken,
     });
@@ -804,13 +1035,18 @@ describe('KeycloakAuthService', () => {
       });
     sessions.acquireRefreshLock.mockResolvedValue(false);
 
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
   it('retries refresh after lock timeout and tolerates a second lock holder', async () => {
     const service = createService();
-    const refreshedToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const refreshedToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get
       .mockResolvedValueOnce({
         accessToken: 'old-access',
@@ -830,11 +1066,17 @@ describe('KeycloakAuthService', () => {
         accessTokenExpiresAt: Date.now() - 1,
         sessionExpiresAt: Date.now() + 600000,
       });
-    sessions.acquireRefreshLock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    mockedAxios.post.mockResolvedValue({ data: { access_token: refreshedToken, expires_in: 120 } });
+    sessions.acquireRefreshLock
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    mockedAxios.post.mockResolvedValue({
+      data: { access_token: refreshedToken, expires_in: 120 },
+    });
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'user-1' });
 
     sessions.get.mockReset();
     sessions.acquireRefreshLock.mockReset();
@@ -858,7 +1100,9 @@ describe('KeycloakAuthService', () => {
         sessionExpiresAt: Date.now() + 600000,
       });
     sessions.acquireRefreshLock.mockResolvedValue(false);
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('throws when refresh lock wait ends with a missing session or an invalid refresh result', async () => {
@@ -873,7 +1117,9 @@ describe('KeycloakAuthService', () => {
       .mockResolvedValueOnce(undefined);
     sessions.acquireRefreshLock.mockResolvedValue(false);
 
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     sessions = createSessionStoreMock();
     const serviceWithInvalidRefresh = createService();
@@ -887,9 +1133,9 @@ describe('KeycloakAuthService', () => {
       .mockResolvedValueOnce(undefined);
     mockedAxios.post.mockResolvedValue({ data: {} });
 
-    await expect(serviceWithInvalidRefresh.authenticateSession('session-1')).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      serviceWithInvalidRefresh.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('throws when a second refresh-lock wait still finds no session', async () => {
@@ -910,13 +1156,18 @@ describe('KeycloakAuthService', () => {
       .mockResolvedValueOnce(undefined);
     sessions.acquireRefreshLock.mockResolvedValue(false);
 
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(sessions.waitForRefreshLockRelease).toHaveBeenCalledTimes(2);
   });
 
   it('uses cached JWKS keys and rejects tokens signed by unknown keys', async () => {
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get.mockResolvedValue({
       accessToken,
       refreshToken: 'refresh',
@@ -924,13 +1175,18 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'user-1' });
 
     const otherKeyPair = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    const encodedHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'unknown-key' }), 'utf8').toString(
-      'base64url',
-    );
+    const encodedHeader = Buffer.from(
+      JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'unknown-key' }),
+      'utf8',
+    ).toString('base64url');
     const encodedPayload = Buffer.from(
       JSON.stringify({
         iss: TEST_ISSUER,
@@ -947,18 +1203,22 @@ describe('KeycloakAuthService', () => {
       otherKeyPair.privateKey,
     );
     const unknownKeyToken = `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
-    sessions.get.mockResolvedValueOnce({
-      accessToken: unknownKeyToken,
-      refreshToken: 'refresh',
-      accessTokenExpiresAt: Date.now() + 120000,
-      sessionExpiresAt: Date.now() + 600000,
-    }).mockResolvedValueOnce({
-      accessToken: unknownKeyToken,
-      refreshToken: 'refresh',
-      accessTokenExpiresAt: Date.now() + 120000,
-      sessionExpiresAt: Date.now() + 600000,
-    });
-    await expect(service.authenticateSession('session-2')).rejects.toBeInstanceOf(UnauthorizedException);
+    sessions.get
+      .mockResolvedValueOnce({
+        accessToken: unknownKeyToken,
+        refreshToken: 'refresh',
+        accessTokenExpiresAt: Date.now() + 120000,
+        sessionExpiresAt: Date.now() + 600000,
+      })
+      .mockResolvedValueOnce({
+        accessToken: unknownKeyToken,
+        refreshToken: 'refresh',
+        accessTokenExpiresAt: Date.now() + 120000,
+        sessionExpiresAt: Date.now() + 600000,
+      });
+    await expect(
+      service.authenticateSession('session-2'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects malformed, unsupported, and invalid issuer tokens', async () => {
@@ -969,11 +1229,14 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
-    const unsignedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT', kid: TEST_KEY_ID }), 'utf8').toString(
-      'base64url',
-    );
+    const unsignedHeader = Buffer.from(
+      JSON.stringify({ alg: 'none', typ: 'JWT', kid: TEST_KEY_ID }),
+      'utf8',
+    ).toString('base64url');
     const unsupportedAlgToken = `${unsignedHeader}.${Buffer.from(
       JSON.stringify({
         iss: TEST_ISSUER,
@@ -990,15 +1253,22 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    await expect(service.authenticateSession('session-2')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-2'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
 
     sessions.get.mockResolvedValueOnce({
-      accessToken: tokenWithClaims({ iss: 'https://other.example/realms/cacic', sub: 'wrong-issuer' }),
+      accessToken: tokenWithClaims({
+        iss: 'https://other.example/realms/cacic',
+        sub: 'wrong-issuer',
+      }),
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    await expect(service.authenticateSession('session-3')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-3'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('verifies JWT claims and checks active state before caching the principal', async () => {
@@ -1015,10 +1285,14 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
 
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({
       preferredUsername: 'jwt-user',
     });
-    expect(KeycloakTokenClient.prototype.introspectAccessToken).toHaveBeenCalledWith(accessToken);
+    expect(
+      KeycloakTokenClient.prototype.introspectAccessToken,
+    ).toHaveBeenCalledWith(accessToken);
     expect(mockedAxios.get).toHaveBeenCalledWith(
       expect.stringContaining('/protocol/openid-connect/certs'),
       expect.any(Object),
@@ -1033,12 +1307,22 @@ describe('KeycloakAuthService', () => {
       accessTokenExpiresAt: Date.now() + 120_000,
       sessionExpiresAt: Date.now() + 600_000,
     });
-    const introspect = jest.mocked(KeycloakTokenClient.prototype.introspectAccessToken);
-    introspect.mockRejectedValueOnce(new UnauthorizedException('Token is not active.'));
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    const introspect = jest.mocked(
+      KeycloakTokenClient.prototype.introspectAccessToken,
+    );
+    introspect.mockRejectedValueOnce(
+      new UnauthorizedException('Token is not active.'),
+    );
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     introspect.mockRejectedValueOnce(new ServiceUnavailableException());
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
-    await expect(service.authenticateSession('session-1')).resolves.toMatchObject({ sub: 'user-1' });
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({ sub: 'user-1' });
     expect(introspect).toHaveBeenCalledTimes(3);
   });
 
@@ -1052,17 +1336,26 @@ describe('KeycloakAuthService', () => {
     });
     await service.authenticateSession('session-1');
     await service.authenticateSession('session-1');
-    const introspect = jest.mocked(KeycloakTokenClient.prototype.introspectAccessToken);
+    const introspect = jest.mocked(
+      KeycloakTokenClient.prototype.introspectAccessToken,
+    );
     expect(introspect).toHaveBeenCalledTimes(1);
     jest.advanceTimersByTime(60_001);
-    introspect.mockRejectedValueOnce(new UnauthorizedException('Token is not active.'));
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    introspect.mockRejectedValueOnce(
+      new UnauthorizedException('Token is not active.'),
+    );
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(introspect).toHaveBeenCalledTimes(2);
   });
 
   it('handles permission evaluation denial and transient failures as no grants', async () => {
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get.mockResolvedValue({
       accessToken,
       refreshToken: 'refresh',
@@ -1073,35 +1366,50 @@ describe('KeycloakAuthService', () => {
     mockedAxios.isAxiosError.mockReturnValueOnce(true);
     mockedAxios.post.mockRejectedValueOnce({ response: { status: 403 } });
 
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual([]);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#read']),
+    ).resolves.toEqual([]);
 
     mockedAxios.isAxiosError.mockReturnValueOnce(true);
     mockedAxios.post.mockRejectedValueOnce({});
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#comment'])).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#comment']),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValueOnce(true);
     mockedAxios.post.mockRejectedValueOnce({ response: { status: 429 } });
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#kiosk'])).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#kiosk']),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     mockedAxios.isAxiosError.mockReturnValueOnce(false);
     mockedAxios.post.mockRejectedValueOnce(new Error('network'));
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#edit'])).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#edit']),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('includes client secrets when evaluating permissions', async () => {
     process.env.KEYCLOAK_CLIENT_SECRET = 'secret';
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     sessions.get.mockResolvedValue({
       accessToken,
       refreshToken: 'refresh',
       accessTokenExpiresAt: Date.now() + 120000,
       sessionExpiresAt: Date.now() + 600000,
     });
-    mockedAxios.post.mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['read'] }] });
+    mockedAxios.post.mockResolvedValueOnce({
+      data: [{ rsname: 'poll', scopes: ['read'] }],
+    });
     mockUserInfo({ sub: 'user-1' });
 
-    await expect(service.evaluateSessionPermissions('session-1', ['poll#read'])).resolves.toEqual(['poll#read']);
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#read']),
+    ).resolves.toEqual(['poll#read']);
     expect(mockedAxios.post.mock.calls[0][1]).toContain('client_secret=secret');
   });
 
@@ -1137,7 +1445,9 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://sso.example/realms/cacic/protocol/openid-connect/logout',
       'refresh_token=refresh',
-      expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.any(String) }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: expect.any(String) }),
+      }),
     );
 
     mockedAxios.post.mockRejectedValueOnce(new Error('logout-failed'));
@@ -1152,7 +1462,8 @@ describe('KeycloakAuthService', () => {
     const serviceWithoutLogoutDefault = createService();
     await expect(serviceWithoutLogoutDefault.logout({})).resolves.toEqual({
       globalLogoutComplete: false,
-      logoutUrl: 'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client',
+      logoutUrl:
+        'https://sso.example/realms/cacic/protocol/openid-connect/logout?client_id=voto-client',
     });
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
   });
@@ -1162,21 +1473,31 @@ describe('KeycloakAuthService', () => {
     mockedAxios.isAxiosError.mockReturnValue(false);
     mockedAxios.post.mockRejectedValueOnce(new Error('timeout'));
 
-    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+    await expect(
+      service.logout({ refreshToken: 'refresh' }),
+    ).resolves.toMatchObject({
       globalLogoutComplete: false,
       logoutUrl: expect.stringContaining('client_id=voto-client'),
     });
 
     mockedAxios.isAxiosError.mockReturnValue(true);
     mockedAxios.post
-      .mockRejectedValueOnce({ response: { status: 503, data: { error: 'temporarily_unavailable' } } })
-      .mockRejectedValueOnce({ response: { status: 400, data: { error: 'invalid_grant' } } });
+      .mockRejectedValueOnce({
+        response: { status: 503, data: { error: 'temporarily_unavailable' } },
+      })
+      .mockRejectedValueOnce({
+        response: { status: 400, data: { error: 'invalid_grant' } },
+      });
 
-    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+    await expect(
+      service.logout({ refreshToken: 'refresh' }),
+    ).resolves.toMatchObject({
       globalLogoutComplete: false,
       logoutUrl: expect.stringContaining('client_id=voto-client'),
     });
-    await expect(service.logout({ refreshToken: 'refresh' })).resolves.toMatchObject({
+    await expect(
+      service.logout({ refreshToken: 'refresh' }),
+    ).resolves.toMatchObject({
       globalLogoutComplete: false,
       logoutUrl: expect.stringContaining('client_id=voto-client'),
     });
@@ -1196,28 +1517,43 @@ describe('KeycloakAuthService', () => {
 
     const logoutInput = await service.getSessionLogoutInput('session-1');
     await service.clearSession('session-1');
-    await expect(service.logout({ refreshToken: logoutInput?.refreshToken })).resolves.toMatchObject({
+    await expect(
+      service.logout({ refreshToken: logoutInput?.refreshToken }),
+    ).resolves.toMatchObject({
       globalLogoutComplete: false,
     });
 
-    await expect(service.authenticateSession('session-1')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      service.authenticateSession('session-1'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(sessions.delete).toHaveBeenCalledWith('session-1');
   });
 
   it('delegates authorization-state helpers', async () => {
     const service = createService();
 
-    await expect(service.consumeAuthorizationState('state-1')).resolves.toEqual({ returnTo: '/polls' });
-    expect(service.getPostLoginRedirectUri({ returnTo: '/dashboard' })).toBe('/dashboard');
+    await expect(service.consumeAuthorizationState('state-1')).resolves.toEqual(
+      { returnTo: '/polls' },
+    );
+    expect(service.getPostLoginRedirectUri({ returnTo: '/dashboard' })).toBe(
+      '/dashboard',
+    );
   });
 
   it('uses fallback expiration and cache TTL parsing when token expirations are absent', async () => {
     process.env.KEYCLOAK_INTROSPECTION_CACHE_TTL_MS = 'invalid';
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', name: ' Explicit Name ' });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      name: ' Explicit Name ',
+    });
     mockUserInfo({ sub: 'user-1', name: ' Explicit Name ' });
 
-    await service.createSession({ access_token: accessToken, expires_in: 5, refresh_expires_in: 10 });
+    await service.createSession({
+      access_token: accessToken,
+      expires_in: 5,
+      refresh_expires_in: 10,
+    });
 
     expect(sessions.set).toHaveBeenCalledWith(
       expect.any(String),
@@ -1236,11 +1572,19 @@ describe('KeycloakAuthService', () => {
   it('uses default cache TTL and refresh-token JWT expiration fallbacks', async () => {
     delete process.env.KEYCLOAK_INTROSPECTION_CACHE_TTL_MS;
     const service = createService();
-    const accessToken = tokenWithClaims({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 120 });
-    const refreshToken = tokenWithClaims({ exp: Math.floor(Date.now() / 1000) + 240 });
+    const accessToken = tokenWithClaims({
+      sub: 'user-1',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
+    const refreshToken = tokenWithClaims({
+      exp: Math.floor(Date.now() / 1000) + 240,
+    });
     mockUserInfo({ sub: 'user-1' });
 
-    await service.createSession({ access_token: accessToken, refresh_token: refreshToken });
+    await service.createSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
 
     expect(sessions.set).toHaveBeenCalledWith(
       expect.any(String),
@@ -1298,9 +1642,12 @@ describe('KeycloakAuthService', () => {
       sessionAbsoluteDeadline: originalDeadline,
     };
     sessions.get.mockResolvedValue(session);
-    mockedAxios.post.mockImplementation(async () => ({
-      data: { access_token: tokenWithClaims({ sub: 'bounded-user' }) },
-    }) as never);
+    mockedAxios.post.mockImplementation(
+      async () =>
+        ({
+          data: { access_token: tokenWithClaims({ sub: 'bounded-user' }) },
+        }) as never,
+    );
     mockUserInfo({ sub: 'bounded-user' });
 
     await service.refreshSession('session-1');
@@ -1309,8 +1656,16 @@ describe('KeycloakAuthService', () => {
 
     const savedSessions = sessions.set.mock.calls.map(([, saved]) => saved);
     expect(savedSessions).toHaveLength(2);
-    expect(savedSessions.every((saved) => saved.sessionAbsoluteDeadline === originalDeadline)).toBe(true);
-    expect(savedSessions.every((saved) => saved.sessionExpiresAt <= originalDeadline)).toBe(true);
+    expect(
+      savedSessions.every(
+        (saved) => saved.sessionAbsoluteDeadline === originalDeadline,
+      ),
+    ).toBe(true);
+    expect(
+      savedSessions.every(
+        (saved) => saved.sessionExpiresAt <= originalDeadline,
+      ),
+    ).toBe(true);
   });
 
   it('refuses to persist a refresh result after losing the Redis lock lease', async () => {
@@ -1324,13 +1679,17 @@ describe('KeycloakAuthService', () => {
     sessions.get.mockResolvedValue(session);
     sessions.renewRefreshLock.mockResolvedValue(false);
 
-    await expect(service.refreshSession('session-1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.refreshSession('session-1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
     expect(sessions.set).not.toHaveBeenCalled();
   });
 
   it('does not sync principals without a subject', async () => {
     const service = createService();
-    const accessToken = tokenWithClaims({ exp: Math.floor(Date.now() / 1000) + 120 });
+    const accessToken = tokenWithClaims({
+      exp: Math.floor(Date.now() / 1000) + 120,
+    });
     mockUserInfo({ preferred_username: 'anonymous' });
 
     await service.createSession({ access_token: accessToken });

@@ -1,8 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import {
+  MAT_DIALOG_DATA,
+  MatDialogModule,
+  MatDialogRef,
+} from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -54,12 +63,19 @@ export type EligibilityCsvColumnDialogData = {
           </mat-list>
         </section>
       } @else {
-        <p class="empty-note">Nenhum valor de matrícula encontrado na coluna selecionada.</p>
+        <p class="empty-note">
+          Nenhum valor de matrícula encontrado na coluna selecionada.
+        </p>
       }
     </div>
     <div mat-dialog-actions align="end" class="dialog-actions">
       <button mat-button mat-dialog-close>Cancelar</button>
-      <button mat-flat-button type="button" [disabled]="form.invalid" (click)="confirm()">
+      <button
+        mat-flat-button
+        type="button"
+        [disabled]="form.invalid"
+        (click)="confirm()"
+      >
         <mat-icon>upload_file</mat-icon>
         Importar
       </button>
@@ -127,7 +143,9 @@ export type EligibilityCsvColumnDialogData = {
   `,
 })
 export class EligibilityCsvColumnDialogComponent {
-  private readonly dialogRef = inject(MatDialogRef<EligibilityCsvColumnDialogComponent, string | null>);
+  private readonly dialogRef = inject(
+    MatDialogRef<EligibilityCsvColumnDialogComponent, string | null>,
+  );
   private readonly formBuilder = inject(FormBuilder);
   readonly data = inject<EligibilityCsvColumnDialogData>(MAT_DIALOG_DATA);
 
@@ -136,7 +154,9 @@ export class EligibilityCsvColumnDialogComponent {
   });
 
   private readonly selectedHeader = toSignal(
-    this.form.controls.selectedHeader.valueChanges.pipe(startWith(this.form.controls.selectedHeader.value)),
+    this.form.controls.selectedHeader.valueChanges.pipe(
+      startWith(this.form.controls.selectedHeader.value),
+    ),
     { initialValue: this.form.controls.selectedHeader.value },
   );
 

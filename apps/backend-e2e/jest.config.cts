@@ -7,9 +7,12 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     '^@org/backend/app/(.*)$': '<rootDir>/apps/backend/src/app/$1',
-    '^@org/backend/http-app$': '<rootDir>/apps/backend/src/app/bootstrap/backend-http-app.ts',
-    '^@org/voting-contracts$': '<rootDir>/libs/shared/voting-contracts/src/index.ts',
-    '^@cacic-fct/form-contracts$': '<rootDir>/libs/shared/form-contracts/src/index.ts',
+    '^@org/backend/http-app$':
+      '<rootDir>/apps/backend/src/app/bootstrap/backend-http-app.ts',
+    '^@org/voting-contracts$':
+      '<rootDir>/libs/shared/voting-contracts/src/index.ts',
+    '^@cacic-fct/form-contracts$':
+      '<rootDir>/libs/shared/form-contracts/src/index.ts',
   },
   transform: {
     '^.+\\.[tj]s$': [

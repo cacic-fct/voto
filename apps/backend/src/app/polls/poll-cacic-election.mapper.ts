@@ -13,7 +13,10 @@ import {
   CacicElectionSlateSubmissionSource as DbCacicElectionSlateSubmissionSource,
   Prisma,
 } from '@prisma/client';
-import { CacicElectionSlateListOptions, CacicElectionSlateRecord } from './poll-cacic-election.types';
+import {
+  CacicElectionSlateListOptions,
+  CacicElectionSlateRecord,
+} from './poll-cacic-election.types';
 
 export function cacicElectionSlateInclude(): Prisma.CacicElectionSlateInclude {
   return {
@@ -45,14 +48,19 @@ export function toContractCacicElectionSlate(
   slate: CacicElectionSlateRecord,
   options: CacicElectionSlateListOptions & { redactIdentities?: boolean },
 ): AdminCacicElectionSlate | CacicElectionSlate {
-  const submittedBy = slate.submittedBy && !options.redactIdentities
-    ? {
-        userId: slate.submittedBy.id,
-        ...(slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
-        ...(slate.submittedBy.preferredUsername ? { preferredUsername: slate.submittedBy.preferredUsername } : {}),
-        ...(slate.submittedBy.email ? { email: slate.submittedBy.email } : {}),
-      }
-    : undefined;
+  const submittedBy =
+    slate.submittedBy && !options.redactIdentities
+      ? {
+          userId: slate.submittedBy.id,
+          ...(slate.submittedBy.name ? { name: slate.submittedBy.name } : {}),
+          ...(slate.submittedBy.preferredUsername
+            ? { preferredUsername: slate.submittedBy.preferredUsername }
+            : {}),
+          ...(slate.submittedBy.email
+            ? { email: slate.submittedBy.email }
+            : {}),
+        }
+      : undefined;
   const members = slate.members.map((member) => {
     const baseMember: CacicElectionSlateMember = {
       id: member.id,
@@ -71,9 +79,15 @@ export function toContractCacicElectionSlate(
 
     return {
       ...baseMember,
-      ...(!options.redactIdentities && member.enrollmentNumber ? { enrollmentNumber: member.enrollmentNumber } : {}),
-      identifierType: toContractCacicElectionSlateMemberIdentifierType(member.identifierType),
-      identifierValue: options.redactIdentities ? 'oculto' : member.identifierValue,
+      ...(!options.redactIdentities && member.enrollmentNumber
+        ? { enrollmentNumber: member.enrollmentNumber }
+        : {}),
+      identifierType: toContractCacicElectionSlateMemberIdentifierType(
+        member.identifierType,
+      ),
+      identifierValue: options.redactIdentities
+        ? 'oculto'
+        : member.identifierValue,
     };
   });
 
@@ -83,8 +97,12 @@ export function toContractCacicElectionSlate(
     name: slate.name,
     status: toContractCacicElectionSlateStatus(slate.status),
     enabled: slate.enabled,
-    ...(slate.rejectionReason ? { rejectionReason: slate.rejectionReason } : {}),
-    submissionSource: toContractCacicElectionSlateSubmissionSource(slate.submissionSource),
+    ...(slate.rejectionReason
+      ? { rejectionReason: slate.rejectionReason }
+      : {}),
+    submissionSource: toContractCacicElectionSlateSubmissionSource(
+      slate.submissionSource,
+    ),
     ...(submittedBy ? { submittedBy } : {}),
     submittedAt: slate.submittedAt.toISOString(),
     reviewedAt: slate.reviewedAt?.toISOString(),
@@ -92,7 +110,9 @@ export function toContractCacicElectionSlate(
   } as AdminCacicElectionSlate | CacicElectionSlate;
 }
 
-export function toDbCacicElectionSlateStatus(status: CacicElectionSlateStatus): DbCacicElectionSlateStatus {
+export function toDbCacicElectionSlateStatus(
+  status: CacicElectionSlateStatus,
+): DbCacicElectionSlateStatus {
   switch (status) {
     case 'pending':
       return DbCacicElectionSlateStatus.PENDING;
@@ -103,7 +123,9 @@ export function toDbCacicElectionSlateStatus(status: CacicElectionSlateStatus): 
   }
 }
 
-function toContractCacicElectionSlateStatus(status: DbCacicElectionSlateStatus): CacicElectionSlateStatus {
+function toContractCacicElectionSlateStatus(
+  status: DbCacicElectionSlateStatus,
+): CacicElectionSlateStatus {
   switch (status) {
     case DbCacicElectionSlateStatus.PENDING:
       return 'pending';
@@ -125,7 +147,9 @@ function toContractCacicElectionSlateSubmissionSource(
   }
 }
 
-export function toDbCacicElectionSlateMemberRole(role: CacicElectionSlateMemberRole): DbCacicElectionSlateMemberRole {
+export function toDbCacicElectionSlateMemberRole(
+  role: CacicElectionSlateMemberRole,
+): DbCacicElectionSlateMemberRole {
   switch (role) {
     case 'president':
       return DbCacicElectionSlateMemberRole.PRESIDENT;
@@ -144,7 +168,9 @@ export function toDbCacicElectionSlateMemberRole(role: CacicElectionSlateMemberR
   }
 }
 
-function toContractCacicElectionSlateMemberRole(role: DbCacicElectionSlateMemberRole): CacicElectionSlateMemberRole {
+function toContractCacicElectionSlateMemberRole(
+  role: DbCacicElectionSlateMemberRole,
+): CacicElectionSlateMemberRole {
   switch (role) {
     case DbCacicElectionSlateMemberRole.PRESIDENT:
       return 'president';

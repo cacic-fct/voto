@@ -23,7 +23,10 @@ const choiceElement: PollElement = {
   title: 'Escolha',
   description: 'Descrição',
   required: true,
-  options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+  options: [
+    { id: 'a', label: 'A' },
+    { id: 'b', label: 'B' },
+  ],
 };
 
 const gridElement: PollElement = {
@@ -34,7 +37,10 @@ const gridElement: PollElement = {
   options: [],
   settings: {
     grid: {
-      rows: [{ id: 'row', label: 'Linha' }, { id: 'empty', label: 'Vazia' }],
+      rows: [
+        { id: 'row', label: 'Linha' },
+        { id: 'empty', label: 'Vazia' },
+      ],
       columns: [{ id: 'col', label: 'Coluna' }],
     },
   },
@@ -57,7 +63,14 @@ const schedulingElement: PollElement = {
       bufferAfterMinutes: 0,
       inviteeMode: 'optional',
       maxInvitees: 2,
-      availability: [{ id: 'window', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+      availability: [
+        {
+          id: 'window',
+          date: '2026-06-24',
+          startTime: '09:00',
+          endTime: '10:00',
+        },
+      ],
     },
   },
 };
@@ -68,33 +81,55 @@ describe('poll result formatting helpers', () => {
     const responses: PollResultsResponse[] = [
       {
         id: 'response-1',
-        answers: [{ elementId: 'choice', value: 'a', element: historicElement }],
+        answers: [
+          { elementId: 'choice', value: 'a', element: historicElement },
+        ],
       },
       {
         id: 'response-2',
-        answers: [{ elementId: 'choice', value: 'b' }, { elementId: 'unknown', value: 'x' }],
+        answers: [
+          { elementId: 'choice', value: 'b' },
+          { elementId: 'unknown', value: 'x' },
+        ],
       },
     ];
 
     expect(isAnswerElement({ ...choiceElement, type: 'section' })).toBe(false);
-    expect(isAnswerElement({ ...choiceElement, type: 'statement' })).toBe(false);
+    expect(isAnswerElement({ ...choiceElement, type: 'statement' })).toBe(
+      false,
+    );
     expect(isAnswerElement(choiceElement)).toBe(true);
-    expect(collectResultElementVersions([choiceElement], responses).map((version) => version.element.title)).toEqual([
-      'Escolha',
-      'Escolha antiga',
-    ]);
     expect(
-      collectAnswerEntriesForElementVersion(resultElementVersionKey(choiceElement), [choiceElement], responses).map(
-        (entry) => entry.value,
+      collectResultElementVersions([choiceElement], responses).map(
+        (version) => version.element.title,
       ),
+    ).toEqual(['Escolha', 'Escolha antiga']);
+    expect(
+      collectAnswerEntriesForElementVersion(
+        resultElementVersionKey(choiceElement),
+        [choiceElement],
+        responses,
+      ).map((entry) => entry.value),
     ).toEqual(['b']);
-    expect(collectAnswerEntriesForElementVersion(resultElementVersionKey(historicElement), [choiceElement], responses)[0]).toMatchObject({
+    expect(
+      collectAnswerEntriesForElementVersion(
+        resultElementVersionKey(historicElement),
+        [choiceElement],
+        responses,
+      )[0],
+    ).toMatchObject({
       response: responses[0],
       answer: responses[0].answers[0],
       element: historicElement,
       value: 'a',
     });
-    expect(collectAnswerEntriesForElementVersion('missing', [choiceElement], responses)).toEqual([]);
+    expect(
+      collectAnswerEntriesForElementVersion(
+        'missing',
+        [choiceElement],
+        responses,
+      ),
+    ).toEqual([]);
   });
 
   it('formats scalar, option, grid, scheduling, and empty answer values', () => {
@@ -104,17 +139,31 @@ describe('poll result formatting helpers', () => {
     expect(answerValueLabel(choiceElement, 'custom')).toBe('custom');
     expect(answerValueLabel(choiceElement, ['a', 'custom'])).toBe('A, custom');
     expect(answerValueLabel(choiceElement, ['a', 1])).toBe('A, 1');
-    expect(answerValueLabel(gridElement, { row: 'col', empty: 1 })).toBe('Linha: Coluna');
-    expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00', invitees: [{ name: 'Ana', email: 'ana@example.com' }] })).toContain(
-      'Convidados: Ana (ana@example.com)',
+    expect(answerValueLabel(gridElement, { row: 'col', empty: 1 })).toBe(
+      'Linha: Coluna',
     );
-    expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00', invitees: [{ name: 'Ana' }] })).toContain(
-      'Convidados: Ana',
+    expect(
+      answerValueLabel(schedulingElement, {
+        slotId: 'window:09:00',
+        invitees: [{ name: 'Ana', email: 'ana@example.com' }],
+      }),
+    ).toContain('Convidados: Ana (ana@example.com)');
+    expect(
+      answerValueLabel(schedulingElement, {
+        slotId: 'window:09:00',
+        invitees: [{ name: 'Ana' }],
+      }),
+    ).toContain('Convidados: Ana');
+    expect(
+      answerValueLabel(
+        schedulingElement,
+        { slotId: 'window:09:00', invitees: [{ name: 'Ana' }] },
+        { includeSchedulingInvitees: false },
+      ),
+    ).not.toContain('Convidados');
+    expect(answerValueLabel(schedulingElement, { slotId: 'missing' })).toBe(
+      'missing',
     );
-    expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00', invitees: [{ name: 'Ana' }] }, { includeSchedulingInvitees: false })).not.toContain(
-      'Convidados',
-    );
-    expect(answerValueLabel(schedulingElement, { slotId: 'missing' })).toBe('missing');
     expect(answerValueLabel(schedulingElement, {})).toBe('Sem resposta');
     expect(answerValueLabel(choiceElement, {})).toBe('Sem resposta');
   });
@@ -122,10 +171,19 @@ describe('poll result formatting helpers', () => {
   it('returns bucket labels for supported answer shapes', () => {
     expect(answerValueLabels(choiceElement, 3)).toEqual(['3']);
     expect(answerValueLabels(choiceElement, 'a')).toEqual(['A']);
-    expect(answerValueLabels(choiceElement, ['a', 'custom'])).toEqual(['A', 'custom']);
-    expect(answerValueLabels(gridElement, { row: ['col'], other: 'missing' })).toEqual(['Linha: Coluna']);
-    expect(answerValueLabels(gridElement, { row: 'col' })).toEqual(['Linha: Coluna']);
-    expect(answerValueLabels(schedulingElement, { slotId: 'window:09:00' })[0]).toContain('09:00 - 09:30');
+    expect(answerValueLabels(choiceElement, ['a', 'custom'])).toEqual([
+      'A',
+      'custom',
+    ]);
+    expect(
+      answerValueLabels(gridElement, { row: ['col'], other: 'missing' }),
+    ).toEqual(['Linha: Coluna']);
+    expect(answerValueLabels(gridElement, { row: 'col' })).toEqual([
+      'Linha: Coluna',
+    ]);
+    expect(
+      answerValueLabels(schedulingElement, { slotId: 'window:09:00' })[0],
+    ).toContain('09:00 - 09:30');
     expect(answerValueLabels(schedulingElement, { slotId: '' })).toEqual([]);
     expect(answerValueLabels(choiceElement, null)).toEqual([]);
   });
@@ -139,11 +197,22 @@ describe('poll result formatting helpers', () => {
     expect(isEmptyAnswerValue('ok')).toBe(false);
     expect(readSchedulingAnswer(null)).toEqual({ slotId: '', invitees: [] });
     expect(readSchedulingAnswerOrNull({ slotId: '' })).toBeNull();
-    expect(readSchedulingAnswerOrNull({ slotId: 'slot', invitees: [{ name: ' Ana ', email: 'ana@example.com' }, { name: ' ' }, []] })).toEqual({
+    expect(
+      readSchedulingAnswerOrNull({
+        slotId: 'slot',
+        invitees: [
+          { name: ' Ana ', email: 'ana@example.com' },
+          { name: ' ' },
+          [],
+        ],
+      }),
+    ).toEqual({
       slotId: 'slot',
       invitees: [{ name: ' Ana ', email: 'ana@example.com' }],
     });
-    expect(schedulingSlots({ ...schedulingElement, settings: undefined })).toEqual([]);
+    expect(
+      schedulingSlots({ ...schedulingElement, settings: undefined }),
+    ).toEqual([]);
     expect(schedulingSlots(schedulingElement)).toHaveLength(2);
     expect(formatDateLabel('bad-date')).toBe('bad-date');
     expect(formatDateLabel('2026-06-24')).toContain('24/06/2026');

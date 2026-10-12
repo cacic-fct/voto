@@ -1,7 +1,23 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  input,
+  signal,
+} from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
-import { CacicElectionPhase, PollMode, PollStatus, PollVoterEligibilitySource, PollVotingStyle } from '@org/voting-contracts';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
+import {
+  CacicElectionPhase,
+  PollMode,
+  PollStatus,
+  PollVoterEligibilitySource,
+  PollVotingStyle,
+} from '@org/voting-contracts';
 import {
   ApiStoryState,
   apiStateOptions,

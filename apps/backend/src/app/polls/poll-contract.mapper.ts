@@ -11,9 +11,7 @@ import {
   PollVoterEligibilitySource,
   PollVotingStyle,
 } from '@org/voting-contracts';
-import {
-  BadRequestException,
-} from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import {
   CacicElectionPhase as DbCacicElectionPhase,
   PollElementType as DbPollElementType,
@@ -24,27 +22,50 @@ import {
   PollVotingStyle as DbPollVotingStyle,
   Prisma,
 } from '@prisma/client';
-import { ElementRecord, ImageRecord, PollContractOptions, PollRecord } from './poll-records';
+import {
+  ElementRecord,
+  ImageRecord,
+  PollContractOptions,
+  PollRecord,
+} from './poll-records';
 import { isRecord } from './poll-user-claims';
-import { externalPollElementId, externalPollOptionId } from './poll-identifiers';
+import {
+  externalPollElementId,
+  externalPollOptionId,
+} from './poll-identifiers';
 
-export function readElementSettings(element: ElementRecord): PollElementSettings {
-  return isRecord(element.settings) ? (element.settings as PollElementSettings) : {};
+export function readElementSettings(
+  element: ElementRecord,
+): PollElementSettings {
+  return isRecord(element.settings)
+    ? (element.settings as PollElementSettings)
+    : {};
 }
 
-export function toContractPoll(poll: PollRecord, options: PollContractOptions = {}): Poll {
+export function toContractPoll(
+  poll: PollRecord,
+  options: PollContractOptions = {},
+): Poll {
   const pollImages = poll.images ?? [];
   const descriptionImages = toContractImages(
-    pollImages.filter((image) => image.placement === DbPollImagePlacement.POLL_DESCRIPTION),
+    pollImages.filter(
+      (image) => image.placement === DbPollImagePlacement.POLL_DESCRIPTION,
+    ),
     options,
   );
   const imagesByElementId = new Map<string, ImageRecord[]>();
   for (const image of pollImages) {
-    if (image.placement !== DbPollImagePlacement.ELEMENT_DESCRIPTION || !image.elementId) {
+    if (
+      image.placement !== DbPollImagePlacement.ELEMENT_DESCRIPTION ||
+      !image.elementId
+    ) {
       continue;
     }
 
-    imagesByElementId.set(image.elementId, [...(imagesByElementId.get(image.elementId) ?? []), image]);
+    imagesByElementId.set(image.elementId, [
+      ...(imagesByElementId.get(image.elementId) ?? []),
+      image,
+    ]);
   }
 
   return {
@@ -54,12 +75,18 @@ export function toContractPoll(poll: PollRecord, options: PollContractOptions = 
     ...(descriptionImages.length > 0 ? { descriptionImages } : {}),
     status: toContractStatus(poll.status),
     mode: poll.mode ? toContractPollMode(poll.mode) : 'regular',
-    cacicElectionPhase: toContractCacicElectionPhase(poll.cacicElectionPhase ?? null),
+    cacicElectionPhase: toContractCacicElectionPhase(
+      poll.cacicElectionPhase ?? null,
+    ),
     votingStyle: toContractVotingStyle(poll.votingStyle),
-    voterEligibilitySource: toContractVoterEligibilitySource(poll.voterEligibilitySource),
+    voterEligibilitySource: toContractVoterEligibilitySource(
+      poll.voterEligibilitySource,
+    ),
     requireVerifiedUnespRole: poll.requireVerifiedUnespRole,
     directLinkEnabled: poll.directLinkEnabled,
-    ...(options.includeDirectLinkToken && poll.directLinkToken ? { directLinkToken: poll.directLinkToken } : {}),
+    ...(options.includeDirectLinkToken && poll.directLinkToken
+      ? { directLinkToken: poll.directLinkToken }
+      : {}),
     resultsPublic: poll.resultsPublic,
     resultsLive: poll.resultsLive,
     allowResponseEditing: poll.allowResponseEditing,
@@ -72,7 +99,12 @@ export function toContractPoll(poll: PollRecord, options: PollContractOptions = 
     votingStartsAt: poll.votingStartsAt?.toISOString(),
     votingEndsAt: poll.votingEndsAt?.toISOString(),
     elements: poll.elements.map((element) =>
-      toContractElement(element, imagesByElementId.get(element.id) ?? [], options, poll.id),
+      toContractElement(
+        element,
+        imagesByElementId.get(element.id) ?? [],
+        options,
+        poll.id,
+      ),
     ),
   };
 }
@@ -102,11 +134,22 @@ export function toContractElement(
   };
 }
 
-export function toElementSnapshotJson(element: ElementRecord, pollId?: string): Prisma.InputJsonValue {
-  return toContractElement(element, [], {}, pollId) as unknown as Prisma.InputJsonValue;
+export function toElementSnapshotJson(
+  element: ElementRecord,
+  pollId?: string,
+): Prisma.InputJsonValue {
+  return toContractElement(
+    element,
+    [],
+    {},
+    pollId,
+  ) as unknown as Prisma.InputJsonValue;
 }
 
-export function toContractImages(images: ImageRecord[], options: PollContractOptions = {}): PollImage[] {
+export function toContractImages(
+  images: ImageRecord[],
+  options: PollContractOptions = {},
+): PollImage[] {
   return [...images]
     .sort((left, right) => left.position - right.position)
     .map((image) => ({
@@ -123,7 +166,9 @@ export function toContractImages(images: ImageRecord[], options: PollContractOpt
     }));
 }
 
-export function toContractElementSettings(element: ElementRecord): PollElementSettings | undefined {
+export function toContractElementSettings(
+  element: ElementRecord,
+): PollElementSettings | undefined {
   const settings = readElementSettings(element);
   const type = toContractElementType(element.type);
 
@@ -153,7 +198,12 @@ export function toContractLinkedEvent(poll: {
   linkedEventEndDate: Date | null;
   linkedEventLocationDescription: string | null;
 }): PollLinkedEvent | undefined {
-  if (!poll.linkedEventId || !poll.linkedEventName || !poll.linkedEventStartDate || !poll.linkedEventEndDate) {
+  if (
+    !poll.linkedEventId ||
+    !poll.linkedEventName ||
+    !poll.linkedEventStartDate ||
+    !poll.linkedEventEndDate
+  ) {
     return undefined;
   }
 
@@ -206,7 +256,9 @@ export function toContractPollMode(mode: DbPollMode): PollMode {
   }
 }
 
-export function toDbCacicElectionPhase(phase: CacicElectionPhase): DbCacicElectionPhase {
+export function toDbCacicElectionPhase(
+  phase: CacicElectionPhase,
+): DbCacicElectionPhase {
   switch (phase) {
     case 'slateSubmission':
       return DbCacicElectionPhase.SLATE_SUBMISSION;
@@ -215,7 +267,9 @@ export function toDbCacicElectionPhase(phase: CacicElectionPhase): DbCacicElecti
   }
 }
 
-export function toContractCacicElectionPhase(phase: DbCacicElectionPhase | null): CacicElectionPhase | undefined {
+export function toContractCacicElectionPhase(
+  phase: DbCacicElectionPhase | null,
+): CacicElectionPhase | undefined {
   switch (phase) {
     case DbCacicElectionPhase.SLATE_SUBMISSION:
       return 'slateSubmission';
@@ -239,7 +293,9 @@ export function toDbVotingStyle(style: PollVotingStyle): DbPollVotingStyle {
   }
 }
 
-export function toContractVotingStyle(style: DbPollVotingStyle): PollVotingStyle {
+export function toContractVotingStyle(
+  style: DbPollVotingStyle,
+): PollVotingStyle {
   switch (style) {
     case DbPollVotingStyle.PUBLIC:
       return 'public';
@@ -252,7 +308,9 @@ export function toContractVotingStyle(style: DbPollVotingStyle): PollVotingStyle
   }
 }
 
-export function toDbVoterEligibilitySource(source: PollVoterEligibilitySource): DbPollVoterEligibilitySource {
+export function toDbVoterEligibilitySource(
+  source: PollVoterEligibilitySource,
+): DbPollVoterEligibilitySource {
   switch (source) {
     case 'authenticatedUsers':
       return DbPollVoterEligibilitySource.AUTHENTICATED_USERS;
@@ -271,7 +329,9 @@ export function toDbVoterEligibilitySource(source: PollVoterEligibilitySource): 
   }
 }
 
-export function toContractVoterEligibilitySource(source: DbPollVoterEligibilitySource): PollVoterEligibilitySource {
+export function toContractVoterEligibilitySource(
+  source: DbPollVoterEligibilitySource,
+): PollVoterEligibilitySource {
   switch (source) {
     case DbPollVoterEligibilitySource.AUTHENTICATED_USERS:
       return 'authenticatedUsers';
@@ -290,23 +350,33 @@ export function toContractVoterEligibilitySource(source: DbPollVoterEligibilityS
   }
 }
 
-export function isEventAttendanceEligibilitySource(source: DbPollVoterEligibilitySource): boolean {
+export function isEventAttendanceEligibilitySource(
+  source: DbPollVoterEligibilitySource,
+): boolean {
   return (
     source === DbPollVoterEligibilitySource.EVENT_ATTENDANCE ||
     source === DbPollVoterEligibilitySource.EVENT_ATTENDANCE_UNESP_USERS ||
-    source === DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS
+    source ===
+      DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS
   );
 }
 
-export function isComputerScienceEligibilitySource(source: DbPollVoterEligibilitySource): boolean {
+export function isComputerScienceEligibilitySource(
+  source: DbPollVoterEligibilitySource,
+): boolean {
   return (
     source === DbPollVoterEligibilitySource.COMPUTER_SCIENCE_STUDENTS ||
-    source === DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS
+    source ===
+      DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS
   );
 }
 
 export function isOptionChoiceElement(type: PollElementType): boolean {
-  return type === 'singleChoice' || type === 'multipleChoice' || type === 'selectionDropdown';
+  return (
+    type === 'singleChoice' ||
+    type === 'multipleChoice' ||
+    type === 'selectionDropdown'
+  );
 }
 
 export function isGridElement(type: PollElementType): boolean {
@@ -346,7 +416,9 @@ export function toDbElementType(type: PollElementType): DbPollElementType {
   }
 }
 
-export function toContractElementType(type: DbPollElementType): PollElementType {
+export function toContractElementType(
+  type: DbPollElementType,
+): PollElementType {
   switch (type) {
     case DbPollElementType.SECTION:
       return 'section';

@@ -8,12 +8,13 @@ export type KeycloakFailureSummary = {
 
 const MAX_LOG_VALUE_LENGTH = 300;
 
-const SAFE_KEYCLOAK_RESPONSE_FIELDS: readonly { label: string; key: string }[] = [
-  { label: 'error', key: 'error' },
-  { label: 'description', key: 'error_description' },
-  { label: 'message', key: 'errorMessage' },
-  { label: 'message', key: 'message' },
-];
+const SAFE_KEYCLOAK_RESPONSE_FIELDS: readonly { label: string; key: string }[] =
+  [
+    { label: 'error', key: 'error' },
+    { label: 'description', key: 'error_description' },
+    { label: 'message', key: 'errorMessage' },
+    { label: 'message', key: 'message' },
+  ];
 
 const SENSITIVE_RESPONSE_KEYS = new Set([
   'access_token',
@@ -26,7 +27,9 @@ const SENSITIVE_RESPONSE_KEYS = new Set([
   'token',
 ]);
 
-export function summarizeKeycloakFailure(error: unknown): KeycloakFailureSummary {
+export function summarizeKeycloakFailure(
+  error: unknown,
+): KeycloakFailureSummary {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const statusText = normalizeLogValue(error.response?.statusText);
@@ -73,7 +76,9 @@ export function summarizeKeycloakFailure(error: unknown): KeycloakFailureSummary
   };
 }
 
-function summarizeKeycloakResponseData(data: unknown): KeycloakFailureSummary | null {
+function summarizeKeycloakResponseData(
+  data: unknown,
+): KeycloakFailureSummary | null {
   if (data === undefined || data === null) {
     return null;
   }
@@ -90,7 +95,11 @@ function summarizeKeycloakResponseData(data: unknown): KeycloakFailureSummary | 
   const segments: string[] = [];
   for (const field of SAFE_KEYCLOAK_RESPONSE_FIELDS) {
     const value = data[field.key];
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       const formattedValue = sanitizeLogValue(String(value));
       if (formattedValue) {
         segments.push(`${field.label}=${formattedValue}`);

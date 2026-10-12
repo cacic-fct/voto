@@ -1,10 +1,18 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectChange, MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
 import { PollResults, PollResultsResponse } from '@org/voting-contracts';
-import { AdminResultsChartComponent, AdminResultsChartConfig } from './admin-results-chart.component';
+import {
+  AdminResultsChartComponent,
+  AdminResultsChartConfig,
+} from './admin-results-chart.component';
 import {
   QuestionResultSummary,
   ResultsVoterRow,

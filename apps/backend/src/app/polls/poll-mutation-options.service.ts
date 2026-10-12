@@ -41,18 +41,28 @@ import {
 export class PollMutationOptionsService {
   constructor(private readonly eventManager: EventManagerIntegrationService) {}
 
-  async resolvePollMetadata(input: SavePollDto, existing?: PollMetadataData): Promise<PollMetadataData> {
-    const mode = toDbPollMode(input.mode ?? (existing ? toContractPollMode(existing.mode) : 'regular'));
+  async resolvePollMetadata(
+    input: SavePollDto,
+    existing?: PollMetadataData,
+  ): Promise<PollMetadataData> {
+    const mode = toDbPollMode(
+      input.mode ?? (existing ? toContractPollMode(existing.mode) : 'regular'),
+    );
     const cacicElectionPhase =
       mode === DbPollMode.CACIC_ELECTION
         ? toDbCacicElectionPhase(
             input.cacicElectionPhase ??
-              (existing ? toContractCacicElectionPhase(existing.cacicElectionPhase) : undefined) ??
+              (existing
+                ? toContractCacicElectionPhase(existing.cacicElectionPhase)
+                : undefined) ??
               'slateSubmission',
           )
         : null;
 
-    if (mode === DbPollMode.CACIC_ELECTION && cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
+    if (
+      mode === DbPollMode.CACIC_ELECTION &&
+      cacicElectionPhase === DbCacicElectionPhase.ELECTION
+    ) {
       return {
         mode,
         cacicElectionPhase,
@@ -67,21 +77,33 @@ export class PollMutationOptionsService {
       };
     }
 
-    const votingStyle = toDbVotingStyle(input.votingStyle ?? (existing ? toContractVotingStyle(existing.votingStyle) : 'secret'));
+    const votingStyle = toDbVotingStyle(
+      input.votingStyle ??
+        (existing ? toContractVotingStyle(existing.votingStyle) : 'secret'),
+    );
     const voterEligibilitySource = toDbVoterEligibilitySource(
       input.voterEligibilitySource ??
-        (existing ? toContractVoterEligibilitySource(existing.voterEligibilitySource) : 'authenticatedUsers'),
+        (existing
+          ? toContractVoterEligibilitySource(existing.voterEligibilitySource)
+          : 'authenticatedUsers'),
     );
     const requireVerifiedUnespRole =
-      (input.requireVerifiedUnespRole ?? existing?.requireVerifiedUnespRole ?? false) === true &&
+      (input.requireVerifiedUnespRole ??
+        existing?.requireVerifiedUnespRole ??
+        false) === true &&
       isComputerScienceEligibilitySource(voterEligibilitySource);
-    const linkedEventId = cleanOptionalText(
-      input.linkedEventId === undefined ? existing?.linkedEventId ?? undefined : input.linkedEventId,
-    ) ?? null;
+    const linkedEventId =
+      cleanOptionalText(
+        input.linkedEventId === undefined
+          ? (existing?.linkedEventId ?? undefined)
+          : input.linkedEventId,
+      ) ?? null;
 
     if (!linkedEventId) {
       if (isEventAttendanceEligibilitySource(voterEligibilitySource)) {
-        throw new BadRequestException('A linked event is required when voting eligibility comes from attendance.');
+        throw new BadRequestException(
+          'A linked event is required when voting eligibility comes from attendance.',
+        );
       }
 
       return {
@@ -98,7 +120,9 @@ export class PollMutationOptionsService {
       };
     }
 
-    const event = (await this.eventManager.listLinkableEvents()).find((item) => item.id === linkedEventId);
+    const event = (await this.eventManager.listLinkableEvents()).find(
+      (item) => item.id === linkedEventId,
+    );
     if (!event) {
       if (
         existing?.linkedEventId === linkedEventId &&
@@ -116,10 +140,13 @@ export class PollMutationOptionsService {
           linkedEventName: existing.linkedEventName,
           linkedEventStartDate: existing.linkedEventStartDate,
           linkedEventEndDate: existing.linkedEventEndDate,
-          linkedEventLocationDescription: existing.linkedEventLocationDescription,
+          linkedEventLocationDescription:
+            existing.linkedEventLocationDescription,
         };
       }
-      throw new BadRequestException('Linked event was not found or is not available for new poll links.');
+      throw new BadRequestException(
+        'Linked event was not found or is not available for new poll links.',
+      );
     }
 
     return this.toPollMetadataFromEvent(
@@ -139,15 +166,18 @@ export class PollMutationOptionsService {
   ): PollResultVisibilityData {
     if (metadata?.mode === DbPollMode.CACIC_ELECTION) {
       return {
-        resultsPublic: metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION,
+        resultsPublic:
+          metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION,
         resultsLive: false,
       };
     }
 
-    const resultsPublic = input.resultsPublic ?? existing?.resultsPublic ?? false;
+    const resultsPublic =
+      input.resultsPublic ?? existing?.resultsPublic ?? false;
     return {
       resultsPublic,
-      resultsLive: resultsPublic && (input.resultsLive ?? existing?.resultsLive ?? false),
+      resultsLive:
+        resultsPublic && (input.resultsLive ?? existing?.resultsLive ?? false),
     };
   }
 
@@ -157,29 +187,40 @@ export class PollMutationOptionsService {
   ): PollPublicationScheduleData {
     return {
       visibleFrom:
-        input.visibleFrom === undefined ? existing?.visibleFrom ?? null : this.normalizeScheduleDate(input.visibleFrom),
+        input.visibleFrom === undefined
+          ? (existing?.visibleFrom ?? null)
+          : this.normalizeScheduleDate(input.visibleFrom),
       votingStartsAt:
         input.votingStartsAt === undefined
-          ? existing?.votingStartsAt ?? null
+          ? (existing?.votingStartsAt ?? null)
           : this.normalizeScheduleDate(input.votingStartsAt),
       votingEndsAt:
-        input.votingEndsAt === undefined ? existing?.votingEndsAt ?? null : this.normalizeScheduleDate(input.votingEndsAt),
+        input.votingEndsAt === undefined
+          ? (existing?.votingEndsAt ?? null)
+          : this.normalizeScheduleDate(input.votingEndsAt),
     };
   }
 
   resolvePollResponseOptions(
     input: SavePollDto,
     existing: PollResponseOptionsData | undefined,
-    metadata: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase' | 'votingStyle'>,
+    metadata: Pick<
+      PollMetadataData,
+      'mode' | 'cacicElectionPhase' | 'votingStyle'
+    >,
   ): PollResponseOptionsData {
-    if (metadata.mode === DbPollMode.CACIC_ELECTION && metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION) {
+    if (
+      metadata.mode === DbPollMode.CACIC_ELECTION &&
+      metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION
+    ) {
       return {
         allowResponseEditing: false,
         allowMultipleResponses: false,
       };
     }
 
-    const allowMultipleResponses = input.allowMultipleResponses ?? existing?.allowMultipleResponses ?? false;
+    const allowMultipleResponses =
+      input.allowMultipleResponses ?? existing?.allowMultipleResponses ?? false;
     const allowResponseEditing =
       metadata.votingStyle !== DbPollVotingStyle.ANONYMOUS &&
       !allowMultipleResponses &&
@@ -203,8 +244,11 @@ export class PollMutationOptionsService {
       };
     }
 
-    const directLinkEnabled = input.directLinkEnabled ?? existing?.directLinkEnabled ?? false;
-    const directLinkToken = directLinkEnabled ? existing?.directLinkToken ?? createUuidV7() : null;
+    const directLinkEnabled =
+      input.directLinkEnabled ?? existing?.directLinkEnabled ?? false;
+    const directLinkToken = directLinkEnabled
+      ? (existing?.directLinkToken ?? createUuidV7())
+      : null;
 
     return {
       directLinkEnabled,
@@ -212,7 +256,9 @@ export class PollMutationOptionsService {
     };
   }
 
-  normalizeElementSettings(element: SavePollDto['elements'][number]): PollElementSettings | undefined {
+  normalizeElementSettings(
+    element: SavePollDto['elements'][number],
+  ): PollElementSettings | undefined {
     if (isGridElement(element.type) && element.settings?.grid) {
       return {
         grid: {
@@ -246,14 +292,18 @@ export class PollMutationOptionsService {
 
     if (element.type === 'scheduling' && element.settings?.scheduling) {
       return {
-        scheduling: this.normalizeSchedulingSettings(element.settings.scheduling),
+        scheduling: this.normalizeSchedulingSettings(
+          element.settings.scheduling,
+        ),
       };
     }
 
     return undefined;
   }
 
-  normalizeSchedulingSettings(settings: PollSchedulingSettings): PollSchedulingSettings {
+  normalizeSchedulingSettings(
+    settings: PollSchedulingSettings,
+  ): PollSchedulingSettings {
     const hostName = cleanOptionalText(settings.hostName);
     const location = cleanOptionalText(settings.location);
     const inviteeMode = settings.inviteeMode;
@@ -277,7 +327,9 @@ export class PollMutationOptionsService {
     };
   }
 
-  normalizeSettingsOptions(options: readonly PollChoiceOption[]): PollChoiceOption[] {
+  normalizeSettingsOptions(
+    options: readonly PollChoiceOption[],
+  ): PollChoiceOption[] {
     return options.map((option) => {
       const description = cleanOptionalText(option.description);
       return {

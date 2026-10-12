@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, MessageEvent, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  MessageEvent,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import {
   PollElement,
   PollResultsAggregate,
@@ -13,7 +20,17 @@ import {
   Prisma,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { concatMap, defer, ignoreElements, merge, Observable, Subscriber, switchMap, takeUntil, timer } from 'rxjs';
+import {
+  concatMap,
+  defer,
+  ignoreElements,
+  merge,
+  Observable,
+  Subscriber,
+  switchMap,
+  takeUntil,
+  timer,
+} from 'rxjs';
 import { KeycloakAuthService } from '../auth/keycloak-auth.service';
 import { SseReplayService } from '../realtime/sse-replay.service';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
@@ -50,11 +67,15 @@ const DEFAULT_RESULT_STREAM_REAUTHORIZATION_INTERVAL_MS = 30 * 1000;
 
 @Injectable()
 export class PollResultsService {
-  readonly resultSubscribers = new Map<string, Set<(event: PollResultStreamEvent) => void>>();
-  private readonly resultStreamReauthorizationIntervalMs = this.parsePositiveInteger(
-    process.env.POLL_RESULTS_STREAM_REAUTHORIZATION_INTERVAL_MS,
-    DEFAULT_RESULT_STREAM_REAUTHORIZATION_INTERVAL_MS,
-  );
+  readonly resultSubscribers = new Map<
+    string,
+    Set<(event: PollResultStreamEvent) => void>
+  >();
+  private readonly resultStreamReauthorizationIntervalMs =
+    this.parsePositiveInteger(
+      process.env.POLL_RESULTS_STREAM_REAUTHORIZATION_INTERVAL_MS,
+      DEFAULT_RESULT_STREAM_REAUTHORIZATION_INTERVAL_MS,
+    );
 
   constructor(
     private readonly prisma: PrismaService,
@@ -64,7 +85,10 @@ export class PollResultsService {
     @Optional() private readonly auth?: KeycloakAuthService,
   ) {}
 
-  async getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+  async getAdminPollResults(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollResults> {
     const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const poll = await this.getPollResultsMetadata(id);
     if (audience === 'observer') {
@@ -73,7 +97,11 @@ export class PollResultsService {
 
     const answersReleased = this.areAnswersReleased(poll, audience);
     const responses = answersReleased
-      ? await this.listPollResultResponses(id, 0, poll.votingStyle === DbPollVotingStyle.ANONYMOUS)
+      ? await this.listPollResultResponses(
+          id,
+          0,
+          poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
+        )
       : [];
     const responseCount = await this.countPollResponses(id);
     const voters = await this.listPollResultVoters(id, audience);
@@ -84,7 +112,10 @@ export class PollResultsService {
     });
   }
 
-  async exportCacicElectionVoterEnrollments(id: string, user?: AuthenticatedPrincipal): Promise<string> {
+  async exportCacicElectionVoterEnrollments(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<string> {
     const audience = user ? resolveAdminPollAudience(user) : 'admin';
     const poll = await this.getPollResultsMetadata(id);
     if (audience === 'observer') {
@@ -92,11 +123,15 @@ export class PollResultsService {
     }
 
     if (!isCacicElectionVotingPoll(poll)) {
-      throw new BadRequestException('Only CACiC election polls can export voter enrollments.');
+      throw new BadRequestException(
+        'Only CACiC election polls can export voter enrollments.',
+      );
     }
 
     if (poll.status !== DbPollStatus.CLOSED) {
-      throw new ForbiddenException('CACiC election voter enrollments are available only after the election is closed.');
+      throw new ForbiddenException(
+        'CACiC election voter enrollments are available only after the election is closed.',
+      );
     }
 
     const voters = await this.listPollResultVoters(id, audience);
@@ -106,10 +141,16 @@ export class PollResultsService {
       .join('\n');
   }
 
-  async getPublicPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+  async getPublicPollResults(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollResults> {
     const poll = await this.getPollResultsMetadata(id);
     this.assertPublicResultsVisible(poll);
-    await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+    await this.eligibility.ensureVotingAllowed(
+      poll,
+      requireAuthenticatedVoter(user),
+    );
     const responses = this.isPublicRowLevelResults(poll)
       ? await this.listPollResultResponses(id)
       : [];
@@ -117,9 +158,10 @@ export class PollResultsService {
     const aggregates = this.isPublicRowLevelResults(poll)
       ? undefined
       : await this.buildPollResultAggregates(id);
-    const voters = poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
-      ? await this.listPublicPollResultParticipants(id)
-      : undefined;
+    const voters =
+      poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
+        ? await this.listPublicPollResultParticipants(id)
+        : undefined;
 
     return this.toPollResults(poll, responses, 'public', {
       responseCount,
@@ -142,9 +184,10 @@ export class PollResultsService {
     const aggregates = this.isPublicRowLevelResults(poll)
       ? undefined
       : await this.buildPollResultAggregates(poll.id);
-    const voters = poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
-      ? await this.listPublicPollResultParticipants(poll.id)
-      : undefined;
+    const voters =
+      poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
+        ? await this.listPublicPollResultParticipants(poll.id)
+        : undefined;
 
     return this.toPollResults(poll, responses, 'public', {
       responseCount,
@@ -153,12 +196,20 @@ export class PollResultsService {
     });
   }
 
-  streamAdminPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+  streamAdminPollResults(
+    id: string,
+    lastEventId: string | undefined,
+    user?: AuthenticatedPrincipal,
+  ): Observable<MessageEvent> {
     const audience = user ? resolveAdminPollAudience(user) : 'admin';
     return this.streamPollResults(id, lastEventId, audience, user);
   }
 
-  streamPublicPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+  streamPublicPollResults(
+    id: string,
+    lastEventId: string | undefined,
+    user?: AuthenticatedPrincipal,
+  ): Observable<MessageEvent> {
     return this.streamPollResults(id, lastEventId, 'public', user);
   }
 
@@ -171,31 +222,39 @@ export class PollResultsService {
       const realtime = this.realtime;
       const replay = this.replay;
       return defer(async () => {
-        const poll = await this.getDirectLinkPollResultsMetadata(directLinkToken);
+        const poll =
+          await this.getDirectLinkPollResultsMetadata(directLinkToken);
         this.assertPublicResultsVisible(poll);
         requireAuthenticatedVoter(user);
         return poll.id;
-      }).pipe(switchMap((pollId) => {
-        const scope = realtime.scope('public', pollId);
-        const source = realtime.watch(scope).pipe(concatMap(async (event) => {
-          const poll = await this.getDirectLinkPollResultsMetadata(directLinkToken);
-          this.assertPublicResultsVisible(poll);
-          requireAuthenticatedVoter(user);
-          if (poll.id !== pollId) throw new ForbiddenException('Poll access changed.');
-          return event;
-        }));
-        return this.protectResultStream(
-          replay.replay(scope, lastEventId, source),
-          'public',
-          user,
-        );
-      }));
+      }).pipe(
+        switchMap((pollId) => {
+          const scope = realtime.scope('public', pollId);
+          const source = realtime.watch(scope).pipe(
+            concatMap(async (event) => {
+              const poll =
+                await this.getDirectLinkPollResultsMetadata(directLinkToken);
+              this.assertPublicResultsVisible(poll);
+              requireAuthenticatedVoter(user);
+              if (poll.id !== pollId)
+                throw new ForbiddenException('Poll access changed.');
+              return event;
+            }),
+          );
+          return this.protectResultStream(
+            replay.replay(scope, lastEventId, source),
+            'public',
+            user,
+          );
+        }),
+      );
     }
     const stream = new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
 
       void (async () => {
-        const poll = await this.getDirectLinkPollResultsMetadata(directLinkToken);
+        const poll =
+          await this.getDirectLinkPollResultsMetadata(directLinkToken);
         this.assertPublicResultsVisible(poll);
         requireAuthenticatedVoter(user);
 
@@ -206,7 +265,12 @@ export class PollResultsService {
         }
 
         unsubscribe = this.subscribeToPollResults(poll.id, (event) => {
-          void this.emitDirectLinkPublicPollResultEvent(directLinkToken, user, subscriber, event);
+          void this.emitDirectLinkPublicPollResultEvent(
+            directLinkToken,
+            user,
+            subscriber,
+            event,
+          );
         });
       })().catch((error: unknown) => {
         subscriber.error(error);
@@ -236,7 +300,9 @@ export class PollResultsService {
       return;
     }
     const responseCount = await this.countPollResponses(pollId);
-    const buildRefreshDelta = (audience: AdminPollAudience | 'public'): PollResultsDelta => ({
+    const buildRefreshDelta = (
+      audience: AdminPollAudience | 'public',
+    ): PollResultsDelta => ({
       pollId,
       answersReleased: this.areAnswersReleased(poll, audience),
       responseCount,
@@ -264,8 +330,13 @@ export class PollResultsService {
         publish(realtime.scope('admin', pollId), event.admin),
         publish(realtime.scope('observer', pollId), event.observer),
       ];
-      if (poll.status !== DbPollStatus.PUBLISHED || poll.votingStyle === DbPollVotingStyle.PUBLIC) {
-        publications.push(publish(realtime.scope('public', pollId), event.public));
+      if (
+        poll.status !== DbPollStatus.PUBLISHED ||
+        poll.votingStyle === DbPollVotingStyle.PUBLIC
+      ) {
+        publications.push(
+          publish(realtime.scope('public', pollId), event.public),
+        );
       }
       await Promise.all(publications);
     }
@@ -300,7 +371,9 @@ export class PollResultsService {
     return poll;
   }
 
-  async getDirectLinkPollResultsMetadata(directLinkToken: string): Promise<PollResultsMetadata> {
+  async getDirectLinkPollResultsMetadata(
+    directLinkToken: string,
+  ): Promise<PollResultsMetadata> {
     const normalizedToken = normalizeDirectLinkToken(directLinkToken);
     const now = new Date();
     const poll = await this.prisma.poll.findFirst({
@@ -335,11 +408,17 @@ export class PollResultsService {
     return poll;
   }
 
-  async listPollResultResponses(pollId: string, skip = 0, anonymous = false): Promise<PollResultResponseRecord[]> {
+  async listPollResultResponses(
+    pollId: string,
+    skip = 0,
+    anonymous = false,
+  ): Promise<PollResultResponseRecord[]> {
     const responses = await this.prisma.pollResponse.findMany({
       where: { pollId },
       // Anonymous response IDs are random UUIDs, independent of arrival time.
-      orderBy: anonymous ? [{ id: 'asc' }] : [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: anonymous
+        ? [{ id: 'asc' }]
+        : [{ createdAt: 'asc' }, { id: 'asc' }],
       skip,
       include: {
         answers: {
@@ -401,7 +480,9 @@ export class PollResultsService {
    * to a response and uses a poll-scoped opaque reference instead of a raw
    * account-manager user id.
    */
-  async listPublicPollResultParticipants(pollId: string): Promise<PollResultsVoter[]> {
+  async listPublicPollResultParticipants(
+    pollId: string,
+  ): Promise<PollResultsVoter[]> {
     const voters = await this.prisma.pollVoter.findMany({
       where: { pollId },
       orderBy: { userId: 'asc' },
@@ -423,7 +504,11 @@ export class PollResultsService {
         return [];
       }
 
-      const participant = this.toPollResultsVoter(voter.user, 'publicParticipants', pollId);
+      const participant = this.toPollResultsVoter(
+        voter.user,
+        'publicParticipants',
+        pollId,
+      );
       return [participant];
     });
   }
@@ -437,18 +522,26 @@ export class PollResultsService {
     const normalizedAfter = Math.min(Math.max(0, after), responseCount);
     const answersReleased = this.areAnswersReleased(poll, audience);
     const anonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
-    const publicRowLevel = audience === 'public' && this.isPublicRowLevelResults(poll);
-    const responses = answersReleased && (audience !== 'public' || publicRowLevel)
-      ? await this.listPollResultResponses(poll.id, normalizedAfter, poll.votingStyle === DbPollVotingStyle.ANONYMOUS)
-      : [];
-    const aggregates = answersReleased && audience === 'public' && !publicRowLevel
-      ? await this.buildPollResultAggregates(poll.id)
-      : undefined;
-    const voters = audience === 'admin' || audience === 'observer'
-      ? await this.listPollResultVoters(poll.id, audience)
-      : poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
-        ? await this.listPublicPollResultParticipants(poll.id)
+    const publicRowLevel =
+      audience === 'public' && this.isPublicRowLevelResults(poll);
+    const responses =
+      answersReleased && (audience !== 'public' || publicRowLevel)
+        ? await this.listPollResultResponses(
+            poll.id,
+            normalizedAfter,
+            poll.votingStyle === DbPollVotingStyle.ANONYMOUS,
+          )
+        : [];
+    const aggregates =
+      answersReleased && audience === 'public' && !publicRowLevel
+        ? await this.buildPollResultAggregates(poll.id)
         : undefined;
+    const voters =
+      audience === 'admin' || audience === 'observer'
+        ? await this.listPollResultVoters(poll.id, audience)
+        : poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET
+          ? await this.listPublicPollResultParticipants(poll.id)
+          : undefined;
 
     return {
       pollId: poll.id,
@@ -456,7 +549,9 @@ export class PollResultsService {
       responseCount,
       ...(voters ? { voterCount: voters.length, voters } : {}),
       ...(aggregates ? { aggregates } : {}),
-      responses: responses.map((response) => this.toPollResultsResponse(response, audience, anonymous)),
+      responses: responses.map((response) =>
+        this.toPollResultsResponse(response, audience, anonymous),
+      ),
     };
   }
 
@@ -472,8 +567,11 @@ export class PollResultsService {
   ): PollResults {
     const answersReleased = this.areAnswersReleased(poll, audience);
     const anonymous = poll.votingStyle === DbPollVotingStyle.ANONYMOUS;
-    const publicRowLevel = audience === 'public' && this.isPublicRowLevelResults(poll);
-    const includeVoters = audience !== 'public' || poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET;
+    const publicRowLevel =
+      audience === 'public' && this.isPublicRowLevelResults(poll);
+    const includeVoters =
+      audience !== 'public' ||
+      poll.votingStyle === DbPollVotingStyle.PARTIALLY_SECRET;
     return {
       pollId: poll.id,
       anonymous,
@@ -485,11 +583,17 @@ export class PollResultsService {
       ...(audience === 'public' && !publicRowLevel && options.aggregates
         ? { aggregates: options.aggregates }
         : {}),
-      responses: answersReleased && (audience !== 'public' || publicRowLevel)
-        ? (poll.votingStyle === DbPollVotingStyle.ANONYMOUS
-            ? [...responses].sort((first, second) => first.id.localeCompare(second.id))
-            : responses).map((response) => this.toPollResultsResponse(response, audience, anonymous))
-        : [],
+      responses:
+        answersReleased && (audience !== 'public' || publicRowLevel)
+          ? (poll.votingStyle === DbPollVotingStyle.ANONYMOUS
+              ? [...responses].sort((first, second) =>
+                  first.id.localeCompare(second.id),
+                )
+              : responses
+            ).map((response) =>
+              this.toPollResultsResponse(response, audience, anonymous),
+            )
+          : [],
     };
   }
 
@@ -500,9 +604,14 @@ export class PollResultsService {
   ): PollResultsResponse {
     return {
       id: response.id,
-      submittedAt: !anonymous && (audience === 'admin' || audience === 'observer') ? response.submittedAt?.toISOString() : undefined,
+      submittedAt:
+        !anonymous && (audience === 'admin' || audience === 'observer')
+          ? response.submittedAt?.toISOString()
+          : undefined,
       voter:
-        !anonymous && (audience === 'admin' || audience === 'observer') && response.user
+        !anonymous &&
+        (audience === 'admin' || audience === 'observer') &&
+        response.user
           ? this.toPollResultsVoter(response.user, audience)
           : undefined,
       answers: response.answers.map((answer) => ({
@@ -517,8 +626,9 @@ export class PollResultsService {
     return poll.votingStyle === DbPollVotingStyle.PUBLIC;
   }
 
-
-  private async buildPollResultAggregates(pollId: string): Promise<PollResultsAggregate[]> {
+  private async buildPollResultAggregates(
+    pollId: string,
+  ): Promise<PollResultsAggregate[]> {
     const [rawElements, responses] = await Promise.all([
       this.prisma.pollElement.findMany({
         where: { pollId, retiredAt: null },
@@ -531,7 +641,12 @@ export class PollResultsService {
           settings: true,
           position: true,
           options: {
-            select: { id: true, label: true, description: true, position: true },
+            select: {
+              id: true,
+              label: true,
+              description: true,
+              position: true,
+            },
           },
         },
       }),
@@ -539,7 +654,14 @@ export class PollResultsService {
     ]);
     const elements = rawElements ?? [];
     const currentElements = new Map<string, PollElement>();
-    const versions = new Map<string, { element: PollElement; answeredCount: number; buckets: Map<string, number> }>();
+    const versions = new Map<
+      string,
+      {
+        element: PollElement;
+        answeredCount: number;
+        buckets: Map<string, number>;
+      }
+    >();
 
     for (const element of elements) {
       const snapshot = toContractElement(element, [], {}, pollId);
@@ -556,8 +678,16 @@ export class PollResultsService {
     for (const response of responses) {
       for (const answer of response.answers) {
         const currentElement = currentElements.get(answer.elementId);
-        const element = this.readHistoricalElementSnapshot(answer.elementSnapshot ?? null, pollId) ?? currentElement;
-        if (!element || element.type === 'section' || element.type === 'statement') {
+        const element =
+          this.readHistoricalElementSnapshot(
+            answer.elementSnapshot ?? null,
+            pollId,
+          ) ?? currentElement;
+        if (
+          !element ||
+          element.type === 'section' ||
+          element.type === 'statement'
+        ) {
           continue;
         }
 
@@ -575,7 +705,11 @@ export class PollResultsService {
             element.type !== 'date' &&
             element.type !== 'time'
           ) {
-            for (const key of this.aggregateValueKeys(element, answer.value, answer.elementId)) {
+            for (const key of this.aggregateValueKeys(
+              element,
+              answer.value,
+              answer.elementId,
+            )) {
               aggregate.buckets.set(key, (aggregate.buckets.get(key) ?? 0) + 1);
             }
           }
@@ -594,7 +728,10 @@ export class PollResultsService {
             ...(coordinate ? coordinate : {}),
           };
         })
-        .sort((first, second) => second.count - first.count || first.key.localeCompare(second.key));
+        .sort(
+          (first, second) =>
+            second.count - first.count || first.key.localeCompare(second.key),
+        );
       return {
         elementId: aggregate.element.id,
         versionKey: this.aggregateVersionKey(aggregate.element),
@@ -605,14 +742,24 @@ export class PollResultsService {
     });
   }
 
-  private aggregateValueKeys(element: PollElement, value: Prisma.JsonValue, storedElementId: string): string[] {
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  private aggregateValueKeys(
+    element: PollElement,
+    value: Prisma.JsonValue,
+    storedElementId: string,
+  ): string[] {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       return [this.decodeAggregateOptionKey(storedElementId, String(value))];
     }
 
     if (Array.isArray(value)) {
       return value.flatMap((item) =>
-        typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
+        typeof item === 'string' ||
+        typeof item === 'number' ||
+        typeof item === 'boolean'
           ? [this.decodeAggregateOptionKey(storedElementId, String(item))]
           : [],
       );
@@ -623,7 +770,9 @@ export class PollResultsService {
     }
 
     if (element.type === 'scheduling') {
-      return typeof value.slotId === 'string' && value.slotId.trim() ? [value.slotId] : [];
+      return typeof value.slotId === 'string' && value.slotId.trim()
+        ? [value.slotId]
+        : [];
     }
 
     if (
@@ -634,7 +783,15 @@ export class PollResultsService {
         const values = Array.isArray(rowValue) ? rowValue : [rowValue];
         return values.flatMap((columnId) =>
           typeof columnId === 'string' || typeof columnId === 'number'
-            ? [this.encodeGridAggregateKey(rowId, this.decodeAggregateOptionKey(storedElementId, String(columnId)))]
+            ? [
+                this.encodeGridAggregateKey(
+                  rowId,
+                  this.decodeAggregateOptionKey(
+                    storedElementId,
+                    String(columnId),
+                  ),
+                ),
+              ]
             : [],
         );
       });
@@ -653,7 +810,9 @@ export class PollResultsService {
     return JSON.stringify([rowId, columnId]);
   }
 
-  private decodeGridAggregateKey(key: string): { rowId: string; columnId: string } | undefined {
+  private decodeGridAggregateKey(
+    key: string,
+  ): { rowId: string; columnId: string } | undefined {
     try {
       const value: unknown = JSON.parse(key);
       if (
@@ -670,22 +829,38 @@ export class PollResultsService {
     return undefined;
   }
 
-  private aggregateVersionKey(element: Pick<PollElement, 'id' | 'type' | 'title' | 'description' | 'required' | 'options' | 'settings'>): string {
+  private aggregateVersionKey(
+    element: Pick<
+      PollElement,
+      | 'id'
+      | 'type'
+      | 'title'
+      | 'description'
+      | 'required'
+      | 'options'
+      | 'settings'
+    >,
+  ): string {
     return createHash('sha256')
-      .update(JSON.stringify({
-        id: element.id,
-        type: element.type,
-        title: element.title,
-        description: element.description ?? null,
-        required: element.required,
-        options: element.options,
-        settings: element.settings ?? null,
-      }))
+      .update(
+        JSON.stringify({
+          id: element.id,
+          type: element.type,
+          title: element.title,
+          description: element.description ?? null,
+          required: element.required,
+          options: element.options,
+          settings: element.settings ?? null,
+        }),
+      )
       .digest('base64url')
       .slice(0, 22);
   }
 
-  private readHistoricalElementSnapshot(value: Prisma.JsonValue | null, pollId: string): PollElement | undefined {
+  private readHistoricalElementSnapshot(
+    value: Prisma.JsonValue | null,
+    pollId: string,
+  ): PollElement | undefined {
     if (!this.isJsonRecord(value)) {
       return undefined;
     }
@@ -699,25 +874,37 @@ export class PollResultsService {
 
     const options = Array.isArray(value.options)
       ? value.options.flatMap((option) => {
-        if (!this.isJsonRecord(option) || typeof option.id !== 'string' || typeof option.label !== 'string') {
-          return [];
-        }
-        return [{
-          id: externalPollOptionId(id, option.id),
-          label: option.label,
-          ...(typeof option.description === 'string' ? { description: option.description } : {}),
-        }];
-      })
+          if (
+            !this.isJsonRecord(option) ||
+            typeof option.id !== 'string' ||
+            typeof option.label !== 'string'
+          ) {
+            return [];
+          }
+          return [
+            {
+              id: externalPollOptionId(id, option.id),
+              label: option.label,
+              ...(typeof option.description === 'string'
+                ? { description: option.description }
+                : {}),
+            },
+          ];
+        })
       : [];
 
     return {
       id: externalPollElementId(pollId, id),
       type: type as PollElement['type'],
       title,
-      ...(typeof value.description === 'string' ? { description: value.description } : {}),
+      ...(typeof value.description === 'string'
+        ? { description: value.description }
+        : {}),
       required: value.required === true,
       options,
-      ...(this.isJsonRecord(value.settings ?? null) ? { settings: value.settings as PollElement['settings'] } : {}),
+      ...(this.isJsonRecord(value.settings ?? null)
+        ? { settings: value.settings as PollElement['settings'] }
+        : {}),
     };
   }
 
@@ -748,7 +935,9 @@ export class PollResultsService {
         return;
       }
 
-      throw new ForbiddenException('CACiC election results are released only after the election is closed.');
+      throw new ForbiddenException(
+        'CACiC election results are released only after the election is closed.',
+      );
     }
 
     if (poll.status === DbPollStatus.CLOSED) {
@@ -770,7 +959,10 @@ export class PollResultsService {
   }
 
   areAnswersReleased(
-    poll: Pick<PollResultsMetadata, 'mode' | 'cacicElectionPhase' | 'status' | 'votingStyle'>,
+    poll: Pick<
+      PollResultsMetadata,
+      'mode' | 'cacicElectionPhase' | 'status' | 'votingStyle'
+    >,
     audience: AdminPollAudience | 'public' = 'public',
   ): boolean {
     if (isCacicElectionVotingPoll(poll)) {
@@ -784,8 +976,13 @@ export class PollResultsService {
     );
   }
 
-  subscribeToPollResults(pollId: string, listener: (event: PollResultStreamEvent) => void): () => void {
-    const existingListeners = this.resultSubscribers.get(pollId) ?? new Set<(event: PollResultStreamEvent) => void>();
+  subscribeToPollResults(
+    pollId: string,
+    listener: (event: PollResultStreamEvent) => void,
+  ): () => void {
+    const existingListeners =
+      this.resultSubscribers.get(pollId) ??
+      new Set<(event: PollResultStreamEvent) => void>();
     existingListeners.add(listener);
     this.resultSubscribers.set(pollId, existingListeners);
 
@@ -822,25 +1019,36 @@ export class PollResultsService {
         if (audience === 'observer') assertObserverCanReadElectionPoll(poll);
         if (audience === 'public') {
           this.assertPublicResultsVisible(poll);
-          await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+          await this.eligibility.ensureVotingAllowed(
+            poll,
+            requireAuthenticatedVoter(user),
+          );
         }
-      }).pipe(switchMap(() => {
-        const scope = realtime.scope(audience, id);
-        const source = realtime.watch(scope).pipe(concatMap(async (event) => {
-          const poll = await this.getPollResultsMetadata(id);
-          if (audience === 'observer') assertObserverCanReadElectionPoll(poll);
-          if (audience === 'public') {
-            this.assertPublicResultsVisible(poll);
-            await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
-          }
-          return event;
-        }));
-        return this.protectResultStream(
-          replay.replay(scope, lastEventId, source),
-          audience,
-          user,
-        );
-      }));
+      }).pipe(
+        switchMap(() => {
+          const scope = realtime.scope(audience, id);
+          const source = realtime.watch(scope).pipe(
+            concatMap(async (event) => {
+              const poll = await this.getPollResultsMetadata(id);
+              if (audience === 'observer')
+                assertObserverCanReadElectionPoll(poll);
+              if (audience === 'public') {
+                this.assertPublicResultsVisible(poll);
+                await this.eligibility.ensureVotingAllowed(
+                  poll,
+                  requireAuthenticatedVoter(user),
+                );
+              }
+              return event;
+            }),
+          );
+          return this.protectResultStream(
+            replay.replay(scope, lastEventId, source),
+            audience,
+            user,
+          );
+        }),
+      );
     }
     const stream = new Observable<MessageEvent>((subscriber) => {
       let unsubscribe: (() => void) | undefined;
@@ -852,7 +1060,10 @@ export class PollResultsService {
         }
         if (audience === 'public') {
           this.assertPublicResultsVisible(poll);
-          await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+          await this.eligibility.ensureVotingAllowed(
+            poll,
+            requireAuthenticatedVoter(user),
+          );
         }
 
         const after = 0;
@@ -900,7 +1111,9 @@ export class PollResultsService {
       this.resultStreamReauthorizationIntervalMs,
       this.resultStreamReauthorizationIntervalMs,
     ).pipe(
-      concatMap(() => defer(() => this.reauthorizeResultStream(sessionId, audience, user))),
+      concatMap(() =>
+        defer(() => this.reauthorizeResultStream(sessionId, audience, user)),
+      ),
       ignoreElements(),
     );
 
@@ -916,12 +1129,20 @@ export class PollResultsService {
     originalUser: AuthenticatedPrincipal,
   ): Promise<void> {
     const requiredPermissions = audience === 'public' ? [] : ['poll#read'];
-    const principal = await this.auth?.authenticateSession(sessionId, requiredPermissions);
+    const principal = await this.auth?.authenticateSession(
+      sessionId,
+      requiredPermissions,
+    );
     if (!principal || principal.sub !== originalUser.sub) {
-      throw new ForbiddenException('Authentication changed while the result stream was open.');
+      throw new ForbiddenException(
+        'Authentication changed while the result stream was open.',
+      );
     }
 
-    if (audience !== 'public' && resolveAdminPollAudience(principal) !== audience) {
+    if (
+      audience !== 'public' &&
+      resolveAdminPollAudience(principal) !== audience
+    ) {
       throw new ForbiddenException('Result stream permissions changed.');
     }
   }
@@ -939,7 +1160,10 @@ export class PollResultsService {
 
       const poll = await this.getPollResultsMetadata(id);
       this.assertPublicResultsVisible(poll);
-      await this.eligibility.ensureVotingAllowed(poll, requireAuthenticatedVoter(user));
+      await this.eligibility.ensureVotingAllowed(
+        poll,
+        requireAuthenticatedVoter(user),
+      );
 
       if (!subscriber.closed) {
         subscriber.next({ data: event.public });
@@ -1000,16 +1224,26 @@ export class PollResultsService {
     }
 
     return {
-      userId: voter.enrollmentNumber ? `enrollment:${voter.enrollmentNumber}` : 'redacted',
-      ...(voter.enrollmentNumber ? { enrollmentNumber: voter.enrollmentNumber } : {}),
+      userId: voter.enrollmentNumber
+        ? `enrollment:${voter.enrollmentNumber}`
+        : 'redacted',
+      ...(voter.enrollmentNumber
+        ? { enrollmentNumber: voter.enrollmentNumber }
+        : {}),
     };
   }
 
   private participantReference(pollId: string, userId: string): string {
-    return createHash('sha256').update(`${pollId}:${userId}`).digest('base64url').slice(0, 22);
+    return createHash('sha256')
+      .update(`${pollId}:${userId}`)
+      .digest('base64url')
+      .slice(0, 22);
   }
 
-  private parsePositiveInteger(rawValue: string | undefined, fallback: number): number {
+  private parsePositiveInteger(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }

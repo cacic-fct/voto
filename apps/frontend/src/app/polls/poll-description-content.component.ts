@@ -17,7 +17,8 @@ import { PollImage } from '@org/voting-contracts';
           [ngSrc]="image.url"
           [width]="image.width"
           [height]="image.height"
-          [alt]="image.altText || ''" />
+          [alt]="image.altText || ''"
+        />
         @if (image.caption) {
           <figcaption>{{ image.caption }}</figcaption>
         }

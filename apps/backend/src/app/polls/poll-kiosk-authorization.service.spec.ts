@@ -1,7 +1,4 @@
-import {
-  HttpException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpException, UnauthorizedException } from '@nestjs/common';
 import { Poll, PollResponse } from '@org/voting-contracts';
 import type { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import type { AuthenticatedPrincipal } from '../auth/auth.types';
@@ -195,8 +192,8 @@ describe('PollKioskAuthorizationService', () => {
       admin,
       'session-1',
     );
-    const storedValue = redis.set.mock.calls.find((call) =>
-      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    const storedValue = redis.set.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('"pollId"'),
     )?.[1] as string;
     redis.eval.mockResolvedValueOnce(storedValue);
 
@@ -230,19 +227,23 @@ describe('PollKioskAuthorizationService', () => {
       admin,
       'session-1',
     );
-    const storedValue = redis.set.mock.calls.find((call) =>
-      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    const storedValue = redis.set.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('"pollId"'),
     )?.[1] as string;
     expect(storedValue).not.toContain('pessoa@example.com');
     expect(storedValue).toContain('"sub":"voter-1"');
     redis.get.mockResolvedValue(storedValue);
 
-    await expect(service.getResponseState(poll.id, issued.token, admin, 'session-1')).resolves.toEqual({
+    await expect(
+      service.getResponseState(poll.id, issued.token, admin, 'session-1'),
+    ).resolves.toEqual({
       hasSubmitted: false,
       canEdit: false,
       canSubmitAnother: false,
     });
-    expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'voter-1' } }));
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'voter-1' } }),
+    );
   });
 
   it('releases a reservation after a retryable database failure without burning the authorization', async () => {
@@ -252,14 +253,22 @@ describe('PollKioskAuthorizationService', () => {
       admin,
       'session-1',
     );
-    const storedValue = redis.set.mock.calls.find((call) =>
-      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    const storedValue = redis.set.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('"pollId"'),
     )?.[1] as string;
     redis.eval.mockResolvedValueOnce(storedValue).mockResolvedValueOnce(1);
-    polls.submitResponse.mockRejectedValueOnce(new Error('database unavailable'));
+    polls.submitResponse.mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
 
     await expect(
-      service.submitResponse(poll.id, issued.token, { answers: [] }, admin, 'session-1'),
+      service.submitResponse(
+        poll.id,
+        issued.token,
+        { answers: [] },
+        admin,
+        'session-1',
+      ),
     ).rejects.toThrow('database unavailable');
     expect(redis.eval).toHaveBeenLastCalledWith(
       expect.stringContaining('redis.call("set"'),
@@ -277,15 +286,23 @@ describe('PollKioskAuthorizationService', () => {
       admin,
       'session-1',
     );
-    const storedValue = redis.set.mock.calls.find((call) =>
-      typeof call[1] === 'string' && call[1].includes('"pollId"'),
+    const storedValue = redis.set.mock.calls.find(
+      (call) => typeof call[1] === 'string' && call[1].includes('"pollId"'),
     )?.[1] as string;
     redis.eval.mockResolvedValueOnce(storedValue);
-    redis.del.mockRejectedValueOnce(new Error('redis finalization unavailable'));
+    redis.del.mockRejectedValueOnce(
+      new Error('redis finalization unavailable'),
+    );
     const evalCallsBeforeSubmit = redis.eval.mock.calls.length;
 
     await expect(
-      service.submitResponse(poll.id, issued.token, { answers: [] }, admin, 'session-1'),
+      service.submitResponse(
+        poll.id,
+        issued.token,
+        { answers: [] },
+        admin,
+        'session-1',
+      ),
     ).resolves.toMatchObject({ id: 'response-1' });
     expect(redis.eval).toHaveBeenCalledTimes(evalCallsBeforeSubmit + 1);
   });

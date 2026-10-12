@@ -3,29 +3,37 @@ import { PollMutationOptionsService } from './poll-mutation-options.service';
 
 describe('PollMutationOptionsService integrity rules', () => {
   it('revokes a direct-link token whenever direct-link access is disabled', () => {
-    const service = new PollMutationOptionsService({ listLinkableEvents: jest.fn() } as never);
-    expect(service.resolvePollDirectLink(
-      { directLinkEnabled: false } as never,
-      { directLinkEnabled: true, directLinkToken: 'old-token' },
-      { mode: DbPollMode.REGULAR },
-    )).toEqual({ directLinkEnabled: false, directLinkToken: null });
+    const service = new PollMutationOptionsService({
+      listLinkableEvents: jest.fn(),
+    } as never);
+    expect(
+      service.resolvePollDirectLink(
+        { directLinkEnabled: false } as never,
+        { directLinkEnabled: true, directLinkToken: 'old-token' },
+        { mode: DbPollMode.REGULAR },
+      ),
+    ).toEqual({ directLinkEnabled: false, directLinkToken: null });
 
-    expect(service.resolvePollDirectLink(
-      {} as never,
-      { directLinkEnabled: true, directLinkToken: 'old-token' },
-      { mode: DbPollMode.CACIC_ELECTION },
-    )).toEqual({ directLinkEnabled: false, directLinkToken: null });
+    expect(
+      service.resolvePollDirectLink(
+        {} as never,
+        { directLinkEnabled: true, directLinkToken: 'old-token' },
+        { mode: DbPollMode.CACIC_ELECTION },
+      ),
+    ).toEqual({ directLinkEnabled: false, directLinkToken: null });
   });
 
   it('refreshes linked event metadata when a current event changes', async () => {
     const eventManager = {
-      listLinkableEvents: jest.fn().mockResolvedValue([{
-        id: 'event-1',
-        name: 'Renamed event',
-        startDate: '2026-06-24T10:00:00.000Z',
-        endDate: '2026-06-24T12:00:00.000Z',
-        locationDescription: 'Room 2',
-      }]),
+      listLinkableEvents: jest.fn().mockResolvedValue([
+        {
+          id: 'event-1',
+          name: 'Renamed event',
+          startDate: '2026-06-24T10:00:00.000Z',
+          endDate: '2026-06-24T12:00:00.000Z',
+          locationDescription: 'Room 2',
+        },
+      ]),
     };
     const service = new PollMutationOptionsService(eventManager as never);
     const metadata = await service.resolvePollMetadata(
@@ -43,22 +51,26 @@ describe('PollMutationOptionsService integrity rules', () => {
   });
 
   it('inherits existing election metadata when a full save omits policy fields', async () => {
-    const service = new PollMutationOptionsService({ listLinkableEvents: jest.fn() } as never);
-    await expect(service.resolvePollMetadata(
-      { title: 'Poll', elements: [] } as never,
-      {
-        mode: DbPollMode.CACIC_ELECTION,
-        cacicElectionPhase: 'ELECTION',
-        votingStyle: 'ANONYMOUS',
-        voterEligibilitySource: 'ENROLLMENT_LIST',
-        requireVerifiedUnespRole: false,
-        linkedEventId: null,
-        linkedEventName: null,
-        linkedEventStartDate: null,
-        linkedEventEndDate: null,
-        linkedEventLocationDescription: null,
-      } as never,
-    )).resolves.toMatchObject({
+    const service = new PollMutationOptionsService({
+      listLinkableEvents: jest.fn(),
+    } as never);
+    await expect(
+      service.resolvePollMetadata(
+        { title: 'Poll', elements: [] } as never,
+        {
+          mode: DbPollMode.CACIC_ELECTION,
+          cacicElectionPhase: 'ELECTION',
+          votingStyle: 'ANONYMOUS',
+          voterEligibilitySource: 'ENROLLMENT_LIST',
+          requireVerifiedUnespRole: false,
+          linkedEventId: null,
+          linkedEventName: null,
+          linkedEventStartDate: null,
+          linkedEventEndDate: null,
+          linkedEventLocationDescription: null,
+        } as never,
+      ),
+    ).resolves.toMatchObject({
       mode: DbPollMode.CACIC_ELECTION,
       cacicElectionPhase: 'ELECTION',
       votingStyle: 'ANONYMOUS',

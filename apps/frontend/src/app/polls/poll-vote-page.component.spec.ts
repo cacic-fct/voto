@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, ParamMap, Router, convertToParamMap, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  ParamMap,
+  Router,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -109,8 +115,12 @@ describe('PollVotePageComponent', () => {
           responses: [],
         }),
       ),
-      openPublicPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
-      openDirectLinkPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      openPublicPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      openDirectLinkPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
       submitResponse: vi.fn().mockReturnValue(of(response)),
       submitDirectLinkResponse: vi.fn().mockReturnValue(of(response)),
@@ -164,11 +174,17 @@ describe('PollVotePageComponent', () => {
       canVote: { (): boolean };
     };
     vi.mocked(api.getMyPollResponse)
-      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })))
-      .mockReturnValueOnce(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }));
+      .mockReturnValueOnce(
+        throwError(() => new HttpErrorResponse({ status: 503 })),
+      )
+      .mockReturnValueOnce(
+        of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }),
+      );
 
     await component.loadUserResponseState(poll);
-    expect(component.responseStateError()).toContain('Não foi possível confirmar');
+    expect(component.responseStateError()).toContain(
+      'Não foi possível confirmar',
+    );
     expect(component.canVote()).toBe(false);
 
     component.retryResponseState(poll);
@@ -185,10 +201,18 @@ describe('PollVotePageComponent', () => {
       error: { (): string | null };
       loadCacicElectionSlates(poll: Poll): Promise<void>;
       loadMyCacicElectionSlate(poll: Poll): Promise<void>;
-      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
-      memberEnrollmentYearLabel(member: CacicElectionSlate['members'][number]): string;
+      submitSlate(
+        poll: Poll,
+        request: SubmitCacicElectionSlateRequest,
+      ): Promise<void>;
+      memberEnrollmentYearLabel(
+        member: CacicElectionSlate['members'][number],
+      ): string;
       slateStatusLabel(status: CacicElectionSlate['status']): string;
-      slateRoleLabel(role: CacicElectionSlate['members'][number]['role'], customRole?: string): string;
+      slateRoleLabel(
+        role: CacicElectionSlate['members'][number]['role'],
+        customRole?: string,
+      ): string;
     };
     const slatePoll: Poll = {
       ...poll,
@@ -246,9 +270,16 @@ describe('PollVotePageComponent', () => {
 
     expect(component.slates()).toEqual([]);
     expect(component.mySlate()).toEqual(mySlate);
-    expect(component.memberEnrollmentYearLabel({ ...publicSlate.members[0], enrollmentYear: '26' })).toBe('2026');
+    expect(
+      component.memberEnrollmentYearLabel({
+        ...publicSlate.members[0],
+        enrollmentYear: '26',
+      }),
+    ).toBe('2026');
     expect(component.slateStatusLabel('rejected')).toBe('Rejeitada');
-    expect(component.slateRoleLabel('other', 'Diretoria de Projetos')).toBe('Diretoria de Projetos');
+    expect(component.slateRoleLabel('other', 'Diretoria de Projetos')).toBe(
+      'Diretoria de Projetos',
+    );
 
     await component.submitSlate(slatePoll, request);
 
@@ -299,7 +330,11 @@ describe('PollVotePageComponent', () => {
   it('should submit extended answer values', async () => {
     const component = fixture.componentInstance as unknown as {
       setNumberAnswer(elementId: string, value: number): void;
-      setSingleGridAnswer(elementId: string, rowId: string, columnId: string): void;
+      setSingleGridAnswer(
+        elementId: string,
+        rowId: string,
+        columnId: string,
+      ): void;
       toggleMultipleGridAnswer(
         elementId: string,
         rowId: string,
@@ -307,7 +342,12 @@ describe('PollVotePageComponent', () => {
         event: { checked: boolean },
       ): void;
       setSchedulingSlot(elementId: string, slotId: string): void;
-      setSchedulingInvitee(elementId: string, index: number, field: 'name' | 'email', event: Event): void;
+      setSchedulingInvitee(
+        elementId: string,
+        index: number,
+        field: 'name' | 'email',
+        event: Event,
+      ): void;
       submit(poll: Poll): Promise<void>;
     };
     const extendedPoll: Poll = {
@@ -332,7 +372,10 @@ describe('PollVotePageComponent', () => {
           settings: {
             grid: {
               rows: [{ id: 'row-1', label: 'Comunicação' }],
-              columns: [{ id: 'high', label: 'Alta' }, { id: 'low', label: 'Baixa' }],
+              columns: [
+                { id: 'high', label: 'Alta' },
+                { id: 'low', label: 'Baixa' },
+              ],
             },
           },
         },
@@ -345,7 +388,10 @@ describe('PollVotePageComponent', () => {
           settings: {
             grid: {
               rows: [{ id: 'row-1', label: 'Reuniões' }],
-              columns: [{ id: 'mon', label: 'Segunda' }, { id: 'fri', label: 'Sexta' }],
+              columns: [
+                { id: 'mon', label: 'Segunda' },
+                { id: 'fri', label: 'Sexta' },
+              ],
             },
           },
         },
@@ -382,11 +428,15 @@ describe('PollVotePageComponent', () => {
 
     component.setNumberAnswer('scale', 4);
     component.setSingleGridAnswer('single-grid', 'row-1', 'high');
-    component.toggleMultipleGridAnswer('multiple-grid', 'row-1', 'mon', { checked: true });
+    component.toggleMultipleGridAnswer('multiple-grid', 'row-1', 'mon', {
+      checked: true,
+    });
     component.setSchedulingSlot('scheduling', 'availability-1:09:00');
     const nameInput = document.createElement('input');
     nameInput.value = 'Ana Souza';
-    component.setSchedulingInvitee('scheduling', 0, 'name', { target: nameInput } as unknown as Event);
+    component.setSchedulingInvitee('scheduling', 0, 'name', {
+      target: nameInput,
+    } as unknown as Event);
 
     await component.submit(extendedPoll);
 
@@ -395,7 +445,13 @@ describe('PollVotePageComponent', () => {
         { elementId: 'scale', value: 4 },
         { elementId: 'single-grid', value: { 'row-1': 'high' } },
         { elementId: 'multiple-grid', value: { 'row-1': ['mon'] } },
-        { elementId: 'scheduling', value: { slotId: 'availability-1:09:00', invitees: [{ name: 'Ana Souza' }] } },
+        {
+          elementId: 'scheduling',
+          value: {
+            slotId: 'availability-1:09:00',
+            invitees: [{ name: 'Ana Souza' }],
+          },
+        },
       ],
     });
   });
@@ -404,7 +460,11 @@ describe('PollVotePageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       setSingleAnswer(elementId: string, event: { value: string }): void;
       setDropdownAnswer(elementId: string, event: { value: string }): void;
-      toggleMultipleAnswer(elementId: string, optionId: string, event: { checked: boolean }): void;
+      toggleMultipleAnswer(
+        elementId: string,
+        optionId: string,
+        event: { checked: boolean },
+      ): void;
       textAnswerValue(elementId: string): string;
       singleAnswerValue(elementId: string): string;
       isSingleAnswerSelected(elementId: string, optionId: string): boolean;
@@ -430,10 +490,27 @@ describe('PollVotePageComponent', () => {
       setNumberAnswer(elementId: string, value: number): void;
       isNumberAnswerSelected(elementId: string, value: number): boolean;
       isRatingFilled(elementId: string, value: number): boolean;
-      setSingleGridAnswer(elementId: string, rowId: string, columnId: string): void;
-      toggleMultipleGridAnswer(elementId: string, rowId: string, columnId: string, event: { checked: boolean }): void;
-      isSingleGridColumnSelected(elementId: string, rowId: string, columnId: string): boolean;
-      isMultipleGridColumnSelected(elementId: string, rowId: string, columnId: string): boolean;
+      setSingleGridAnswer(
+        elementId: string,
+        rowId: string,
+        columnId: string,
+      ): void;
+      toggleMultipleGridAnswer(
+        elementId: string,
+        rowId: string,
+        columnId: string,
+        event: { checked: boolean },
+      ): void;
+      isSingleGridColumnSelected(
+        elementId: string,
+        rowId: string,
+        columnId: string,
+      ): boolean;
+      isMultipleGridColumnSelected(
+        elementId: string,
+        rowId: string,
+        columnId: string,
+      ): boolean;
       gridTemplateColumns(element: PollElement): string;
       linearScaleValues(element: PollElement): number[];
       starRatingValues(element: PollElement): number[];
@@ -448,22 +525,35 @@ describe('PollVotePageComponent', () => {
       settings: {
         grid: {
           rows: [{ id: 'row-1', label: 'Linha' }],
-          columns: [{ id: 'col-1', label: 'Coluna' }, { id: 'col-2', label: 'Outra' }],
+          columns: [
+            { id: 'col-1', label: 'Coluna' },
+            { id: 'col-2', label: 'Outra' },
+          ],
         },
       },
     };
 
     component.setNumberAnswer('rating', 4);
     component.setSingleGridAnswer('single-grid', 'row-1', 'col-1');
-    component.toggleMultipleGridAnswer('multi-grid', 'row-1', 'col-2', { checked: true });
-    component.toggleMultipleGridAnswer('multi-grid', 'row-1', 'col-2', { checked: false });
+    component.toggleMultipleGridAnswer('multi-grid', 'row-1', 'col-2', {
+      checked: true,
+    });
+    component.toggleMultipleGridAnswer('multi-grid', 'row-1', 'col-2', {
+      checked: false,
+    });
 
     expect(component.isNumberAnswerSelected('rating', 4)).toBe(true);
     expect(component.isRatingFilled('rating', 3)).toBe(true);
     expect(component.isRatingFilled('rating', 5)).toBe(false);
-    expect(component.isSingleGridColumnSelected('single-grid', 'row-1', 'col-1')).toBe(true);
-    expect(component.isMultipleGridColumnSelected('multi-grid', 'row-1', 'col-2')).toBe(false);
-    expect(component.gridTemplateColumns(gridElement)).toBe('minmax(10rem, 1.2fr) repeat(2, minmax(7rem, 1fr))');
+    expect(
+      component.isSingleGridColumnSelected('single-grid', 'row-1', 'col-1'),
+    ).toBe(true);
+    expect(
+      component.isMultipleGridColumnSelected('multi-grid', 'row-1', 'col-2'),
+    ).toBe(false);
+    expect(component.gridTemplateColumns(gridElement)).toBe(
+      'minmax(10rem, 1.2fr) repeat(2, minmax(7rem, 1fr))',
+    );
     expect(
       component.linearScaleValues({
         ...gridElement,
@@ -471,25 +561,44 @@ describe('PollVotePageComponent', () => {
         settings: { linearScale: { min: 0, max: 3 } },
       }),
     ).toEqual([0, 1, 2, 3]);
-    expect(component.starRatingValues({ ...gridElement, type: 'starRating', settings: { starRating: { max: 3 } } })).toEqual([
-      1,
-      2,
-      3,
-    ]);
-    expect(component.ratingOptionLabel('rating', 4)).toBe('4 estrelas selecionadas');
+    expect(
+      component.starRatingValues({
+        ...gridElement,
+        type: 'starRating',
+        settings: { starRating: { max: 3 } },
+      }),
+    ).toEqual([1, 2, 3]);
+    expect(component.ratingOptionLabel('rating', 4)).toBe(
+      '4 estrelas selecionadas',
+    );
     expect(component.ratingOptionLabel('rating', 5)).toBe('5 estrelas');
   });
 
   it('should build scheduling slots and invitee values', () => {
     const component = fixture.componentInstance as unknown as {
-      schedulingSlots(element: PollElement): { id: string; label: string; meta: string }[];
-      schedulingSlotGroups(element: PollElement): { date: string; label: string; slots: unknown[] }[];
+      schedulingSlots(
+        element: PollElement,
+      ): { id: string; label: string; meta: string }[];
+      schedulingSlotGroups(
+        element: PollElement,
+      ): { date: string; label: string; slots: unknown[] }[];
       setSchedulingSlot(elementId: string, slotId: string): void;
       isSchedulingSlotSelected(elementId: string, slotId: string): boolean;
       schedulingInviteeIndexes(element: PollElement): number[];
-      setSchedulingInvitee(elementId: string, index: number, field: 'name' | 'email', event: Event): void;
-      schedulingInviteeValue(elementId: string, index: number, field: 'name' | 'email'): string;
-      schedulingInviteeLabel(settings: NonNullable<PollElement['settings']>['scheduling']): string;
+      setSchedulingInvitee(
+        elementId: string,
+        index: number,
+        field: 'name' | 'email',
+        event: Event,
+      ): void;
+      schedulingInviteeValue(
+        elementId: string,
+        index: number,
+        field: 'name' | 'email',
+      ): string;
+      schedulingInviteeLabel(
+        settings: NonNullable<PollElement['settings']>['scheduling'],
+      ): string;
     };
     const schedulingElement: PollElement = {
       id: 'schedule',
@@ -508,7 +617,14 @@ describe('PollVotePageComponent', () => {
           bufferAfterMinutes: 0,
           inviteeMode: 'required',
           maxInvitees: 2,
-          availability: [{ id: 'window-1', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+          availability: [
+            {
+              id: 'window-1',
+              date: '2026-06-24',
+              startTime: '09:00',
+              endTime: '10:00',
+            },
+          ],
         },
       },
     };
@@ -517,8 +633,12 @@ describe('PollVotePageComponent', () => {
     component.setSchedulingSlot('schedule', slots[0].id);
     const input = document.createElement('input');
     input.value = 'ana@unesp.br';
-    component.setSchedulingInvitee('schedule', 0, 'email', { target: input } as unknown as Event);
-    component.setSchedulingInvitee('schedule', 1, 'name', { target: document.createElement('div') } as unknown as Event);
+    component.setSchedulingInvitee('schedule', 0, 'email', {
+      target: input,
+    } as unknown as Event);
+    component.setSchedulingInvitee('schedule', 1, 'name', {
+      target: document.createElement('div'),
+    } as unknown as Event);
 
     expect(slots).toHaveLength(2);
     expect(slots[0].label).toContain('09:00 - 09:30');
@@ -527,12 +647,20 @@ describe('PollVotePageComponent', () => {
       date: '2026-06-24',
       slots,
     });
-    expect(component.isSchedulingSlotSelected('schedule', 'window-1:09:00')).toBe(true);
-    expect(component.schedulingInviteeIndexes(schedulingElement)).toEqual([0, 1]);
-    expect(component.schedulingInviteeValue('schedule', 0, 'email')).toBe('ana@unesp.br');
+    expect(
+      component.isSchedulingSlotSelected('schedule', 'window-1:09:00'),
+    ).toBe(true);
+    expect(component.schedulingInviteeIndexes(schedulingElement)).toEqual([
+      0, 1,
+    ]);
+    expect(component.schedulingInviteeValue('schedule', 0, 'email')).toBe(
+      'ana@unesp.br',
+    );
     expect(component.schedulingInviteeValue('schedule', 1, 'name')).toBe('');
     expect(component.schedulingInviteeValue('schedule', 9, 'name')).toBe('');
-    expect(component.schedulingInviteeLabel(schedulingElement.settings?.scheduling)).toBe('Convidados obrigatórios');
+    expect(
+      component.schedulingInviteeLabel(schedulingElement.settings?.scheduling),
+    ).toBe('Convidados obrigatórios');
   });
 
   it('should expose text fallback and CACiC election vote helpers', () => {
@@ -561,15 +689,21 @@ describe('PollVotePageComponent', () => {
       elements: [poll.elements[0], voteElement],
     } satisfies Poll;
 
-    component.setTextAnswer('fallback', { target: document.createElement('div') } as unknown as Event);
+    component.setTextAnswer('fallback', {
+      target: document.createElement('div'),
+    } as unknown as Event);
     component.setCacicElectionVote('blank');
 
     expect(component.textAnswerValue('fallback')).toBe('');
     expect(component.isCacicElectionPoll(electionPoll)).toBe(true);
     expect(component.isCacicElectionVotingPoll(electionPoll)).toBe(true);
     expect(component.cacicElectionVoteElement(electionPoll)).toBe(voteElement);
-    expect(component.voteFormElements(electionPoll)).toEqual([poll.elements[0]]);
-    expect(component.cacicElectionBallotOptions(electionPoll)).toEqual([{ id: 'blank', label: 'Branco' }]);
+    expect(component.voteFormElements(electionPoll)).toEqual([
+      poll.elements[0],
+    ]);
+    expect(component.cacicElectionBallotOptions(electionPoll)).toEqual([
+      { id: 'blank', label: 'Branco' },
+    ]);
     expect(component.isCacicElectionVoteSelected('blank')).toBe(true);
   });
 
@@ -596,9 +730,18 @@ describe('PollVotePageComponent', () => {
           type: 'multipleChoice',
           title: 'Escolhas',
           required: true,
-          options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+          options: [
+            { id: 'a', label: 'A' },
+            { id: 'b', label: 'B' },
+          ],
         },
-        { id: 'text', type: 'shortText', title: 'Texto', required: false, options: [] },
+        {
+          id: 'text',
+          type: 'shortText',
+          title: 'Texto',
+          required: false,
+          options: [],
+        },
         {
           id: 'grid',
           type: 'singleSelectionGrid',
@@ -629,7 +772,14 @@ describe('PollVotePageComponent', () => {
               bufferAfterMinutes: 0,
               inviteeMode: 'optional',
               maxInvitees: 1,
-              availability: [{ id: 'window', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+              availability: [
+                {
+                  id: 'window',
+                  date: '2026-06-24',
+                  startTime: '09:00',
+                  endTime: '10:00',
+                },
+              ],
             },
           },
         },
@@ -665,13 +815,22 @@ describe('PollVotePageComponent', () => {
 
     expect(summaries[0]).toMatchObject({
       answeredCount: 2,
-      buckets: [{ label: 'A', count: 2 }, { label: 'B', count: 1 }],
+      buckets: [
+        { label: 'A', count: 2 },
+        { label: 'B', count: 1 },
+      ],
     });
     expect(summaries[1].textAnswers).toEqual(['Comentário']);
-    expect(summaries[2].buckets).toEqual([{ label: 'Linha: Coluna', count: 1 }]);
+    expect(summaries[2].buckets).toEqual([
+      { label: 'Linha: Coluna', count: 1 },
+    ]);
     expect(summaries[3].buckets[0].label).toContain('09:00 - 09:30');
-    expect(component.resultBucketPercent(summaries[0], summaries[0].buckets[1])).toBe(50);
-    expect(component.resultBucketPercent({ answeredCount: 0 }, { count: 1 })).toBe(0);
+    expect(
+      component.resultBucketPercent(summaries[0], summaries[0].buckets[1]),
+    ).toBe(50);
+    expect(
+      component.resultBucketPercent({ answeredCount: 0 }, { count: 1 }),
+    ).toBe(0);
   });
 
   it('should expose localized submit errors', async () => {
@@ -683,22 +842,40 @@ describe('PollVotePageComponent', () => {
 
     component.poll.set({ ...poll, voterEligibilitySource: 'enrollmentList' });
     vi.mocked(api.submitResponse).mockReturnValueOnce(
-      throwError(() => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' })),
+      throwError(
+        () => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' }),
+      ),
     );
-    await component.submit({ ...poll, voterEligibilitySource: 'enrollmentList' });
-    expect(component.error()).toBe('Esta votação está disponível apenas para matrículas cadastradas na lista de habilitados.');
+    await component.submit({
+      ...poll,
+      voterEligibilitySource: 'enrollmentList',
+    });
+    expect(component.error()).toBe(
+      'Esta votação está disponível apenas para matrículas cadastradas na lista de habilitados.',
+    );
 
     vi.mocked(api.submitResponse).mockReturnValueOnce(
-      throwError(() => new HttpErrorResponse({ status: 409, statusText: 'Conflict' })),
+      throwError(
+        () => new HttpErrorResponse({ status: 409, statusText: 'Conflict' }),
+      ),
     );
     await component.submit(poll);
-    expect(component.error()).toBe('Sua resposta já foi registrada nesta votação.');
+    expect(component.error()).toBe(
+      'Sua resposta já foi registrada nesta votação.',
+    );
   });
 
   it('should compute vote availability and submit labels from response state', () => {
     const component = fixture.componentInstance as unknown as {
       poll: { set(value: Poll): void };
-      responseState: { set(value: { hasSubmitted: boolean; canEdit: boolean; canSubmitAnother: boolean; response?: PollResponse }): void };
+      responseState: {
+        set(value: {
+          hasSubmitted: boolean;
+          canEdit: boolean;
+          canSubmitAnother: boolean;
+          response?: PollResponse;
+        }): void;
+      };
       loadingResponseState: { set(value: boolean): void };
       canVote: () => boolean;
       submitButtonLabel: () => string;
@@ -709,21 +886,38 @@ describe('PollVotePageComponent', () => {
 
     component.poll.set(poll);
     component.loadingResponseState.set(false);
-    component.responseState.set({ hasSubmitted: false, canEdit: false, canSubmitAnother: false });
+    component.responseState.set({
+      hasSubmitted: false,
+      canEdit: false,
+      canSubmitAnother: false,
+    });
     expect(component.canVote()).toBe(true);
     expect(component.submitButtonLabel()).toBe('Enviar voto');
 
-    component.responseState.set({ hasSubmitted: true, canEdit: false, canSubmitAnother: true });
+    component.responseState.set({
+      hasSubmitted: true,
+      canEdit: false,
+      canSubmitAnother: true,
+    });
     expect(component.canVote()).toBe(true);
     expect(component.submitButtonLabel()).toBe('Enviar nova resposta');
 
-    component.responseState.set({ hasSubmitted: true, canEdit: true, canSubmitAnother: false, response });
+    component.responseState.set({
+      hasSubmitted: true,
+      canEdit: true,
+      canSubmitAnother: false,
+      response,
+    });
     expect(component.canVote()).toBe(true);
     expect(component.submitButtonLabel()).toBe('Salvar edição');
   });
 
   it('should load public results, open live events, and apply result snapshots', async () => {
-    const eventSource = { close: vi.fn(), onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined };
+    const eventSource = {
+      close: vi.fn(),
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
+    };
     const component = fixture.componentInstance as unknown as {
       results: { (): PollResults | null };
       resultsError: { (): string | null };
@@ -736,27 +930,49 @@ describe('PollVotePageComponent', () => {
       anonymous: false,
       answersReleased: true,
       responseCount: 1,
-      responses: [{ id: 'response-1', submittedAt: '2026-06-16T10:00:00.000Z', answers: [] }],
+      responses: [
+        {
+          id: 'response-1',
+          submittedAt: '2026-06-16T10:00:00.000Z',
+          answers: [],
+        },
+      ],
     };
     const delta = {
       pollId: poll.id,
       responseCount: 2,
       responses: [
         initialResults.responses[0],
-        { id: 'response-2', submittedAt: '2026-06-16T10:05:00.000Z', answers: [] },
+        {
+          id: 'response-2',
+          submittedAt: '2026-06-16T10:05:00.000Z',
+          answers: [],
+        },
       ],
     };
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(of(initialResults));
-    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(eventSource as unknown as EventSource);
+    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(
+      eventSource as unknown as EventSource,
+    );
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce(delta);
 
-    await component.loadPublicResults({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true });
-    eventSource.onmessage?.({ data: JSON.stringify(delta) } as MessageEvent<string>);
+    await component.loadPublicResults({
+      ...poll,
+      votingStyle: 'public',
+      resultsPublic: true,
+      resultsLive: true,
+    });
+    eventSource.onmessage?.({
+      data: JSON.stringify(delta),
+    } as MessageEvent<string>);
 
     expect(api.getPublicPollResults).toHaveBeenCalledWith(poll.id);
     expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith(poll.id);
     expect(component.results()?.responseCount).toBe(2);
-    expect(component.results()?.responses.map((item) => item.id)).toEqual(['response-1', 'response-2']);
+    expect(component.results()?.responses.map((item) => item.id)).toEqual([
+      'response-1',
+      'response-2',
+    ]);
     expect(component.resultsError()).toBeNull();
     expect(component.loadingResults()).toBe(false);
 
@@ -771,10 +987,20 @@ describe('PollVotePageComponent', () => {
     };
     component.isBrowser = false;
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
-      of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
+      of({
+        pollId: poll.id,
+        anonymous: false,
+        answersReleased: true,
+        responseCount: 0,
+        responses: [],
+      }),
     );
 
-    await component.loadPublicResults({ ...poll, resultsPublic: true, resultsLive: true });
+    await component.loadPublicResults({
+      ...poll,
+      resultsPublic: true,
+      resultsLive: true,
+    });
 
     expect(api.openPublicPollResultsEvents).not.toHaveBeenCalled();
   });
@@ -786,11 +1012,34 @@ describe('PollVotePageComponent', () => {
       shouldShowPublicResults(poll: Poll): boolean;
     };
 
-    expect(component.shouldShowPublicResults({ ...poll, resultsPublic: false, resultsLive: true })).toBe(false);
-    expect(component.shouldShowPublicResults({ ...poll, resultsPublic: true, resultsLive: false })).toBe(false);
-    expect(component.shouldShowPublicResults({ ...poll, status: 'closed', resultsPublic: true, resultsLive: false })).toBe(true);
+    expect(
+      component.shouldShowPublicResults({
+        ...poll,
+        resultsPublic: false,
+        resultsLive: true,
+      }),
+    ).toBe(false);
+    expect(
+      component.shouldShowPublicResults({
+        ...poll,
+        resultsPublic: true,
+        resultsLive: false,
+      }),
+    ).toBe(false);
+    expect(
+      component.shouldShowPublicResults({
+        ...poll,
+        status: 'closed',
+        resultsPublic: true,
+        resultsLive: false,
+      }),
+    ).toBe(true);
 
-    await component.loadPublicResults({ ...poll, resultsPublic: false, resultsLive: true });
+    await component.loadPublicResults({
+      ...poll,
+      resultsPublic: false,
+      resultsLive: true,
+    });
 
     expect(api.getPublicPollResults).not.toHaveBeenCalled();
     expect(component.results()).toBeNull();
@@ -802,29 +1051,55 @@ describe('PollVotePageComponent', () => {
       loadingResults: { (): boolean };
       loadPublicResults(poll: Poll): Promise<void>;
     };
-    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
 
-    await component.loadPublicResults({ ...poll, status: 'closed', resultsPublic: true, resultsLive: false });
+    await component.loadPublicResults({
+      ...poll,
+      status: 'closed',
+      resultsPublic: true,
+      resultsLive: false,
+    });
 
-    expect(component.resultsError()).toBe('Não foi possível carregar os resultados públicos. Verifique sua conexão e tente novamente.');
+    expect(component.resultsError()).toBe(
+      'Não foi possível carregar os resultados públicos. Verifique sua conexão e tente novamente.',
+    );
     expect(component.loadingResults()).toBe(false);
   });
 
   it('should apply editable responses and localized submit success messages', async () => {
     const component = fixture.componentInstance as unknown as {
-      responseState: { set(value: { hasSubmitted: boolean; canEdit: boolean; canSubmitAnother: boolean; response?: PollResponse }): void };
+      responseState: {
+        set(value: {
+          hasSubmitted: boolean;
+          canEdit: boolean;
+          canSubmitAnother: boolean;
+          response?: PollResponse;
+        }): void;
+      };
       answers: { (): Record<string, unknown> };
       loadUserResponseState(poll: Poll): Promise<void>;
       submit(poll: Poll): Promise<void>;
     };
     vi.mocked(api.getMyPollResponse).mockReturnValueOnce(
-      of({ hasSubmitted: true, canEdit: true, canSubmitAnother: false, response }),
+      of({
+        hasSubmitted: true,
+        canEdit: true,
+        canSubmitAnother: false,
+        response,
+      }),
     );
 
     await component.loadUserResponseState(poll);
     expect(component.answers()).toEqual({ 'element-1': 'Maria' });
 
-    component.responseState.set({ hasSubmitted: true, canEdit: true, canSubmitAnother: false, response });
+    component.responseState.set({
+      hasSubmitted: true,
+      canEdit: true,
+      canSubmitAnother: false,
+      response,
+    });
     vi.mocked(api.submitResponse).mockReturnValueOnce(of(response));
 
     await component.submit({ ...poll, allowResponseEditing: true });
@@ -836,7 +1111,10 @@ describe('PollVotePageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       readSingleGridAnswer(value: unknown): Record<string, string>;
       readMultipleGridAnswer(value: unknown): Record<string, string[]>;
-      readSchedulingAnswer(value: unknown): { slotId: string; invitees: { name: string; email: string }[] };
+      readSchedulingAnswer(value: unknown): {
+        slotId: string;
+        invitees: { name: string; email: string }[];
+      };
       voterEligibilityDeniedMessage(source: unknown): string;
       formatDateLabel(value: string): string;
     };
@@ -864,23 +1142,48 @@ describe('PollVotePageComponent', () => {
     expect(answerValueLabels(element, 3)).toEqual(['3']);
     expect(answerValueLabels(element, 'missing')).toEqual(['missing']);
     expect(answerValueLabels(element, null)).toEqual([]);
-    expect(answerValueLabels({ ...element, type: 'date' }, { unexpected: true })).toEqual([]);
+    expect(
+      answerValueLabels({ ...element, type: 'date' }, { unexpected: true }),
+    ).toEqual([]);
     expect(answerValueLabels(gridElement, { row: 1 })).toEqual([]);
-    expect(component.readSingleGridAnswer({ row: 'col', invalid: 1 })).toEqual({ row: 'col' });
+    expect(component.readSingleGridAnswer({ row: 'col', invalid: 1 })).toEqual({
+      row: 'col',
+    });
     expect(component.readSingleGridAnswer('invalid')).toEqual({});
-    expect(component.readMultipleGridAnswer({ row: ['col', 1] })).toEqual({ row: ['col'] });
+    expect(component.readMultipleGridAnswer({ row: ['col', 1] })).toEqual({
+      row: ['col'],
+    });
     expect(component.readMultipleGridAnswer('invalid')).toEqual({});
-    expect(component.readSchedulingAnswer({ slotId: 1, invitees: [{ name: 2, email: 'x' }] })).toEqual({
+    expect(
+      component.readSchedulingAnswer({
+        slotId: 1,
+        invitees: [{ name: 2, email: 'x' }],
+      }),
+    ).toEqual({
       slotId: '',
       invitees: [{ name: '', email: 'x' }],
     });
     expect(component.formatDateLabel('sem-data')).toBe('sem-data');
-    expect(component.voterEligibilityDeniedMessage('eventAttendance')).toContain('presença registrada');
-    expect(component.voterEligibilityDeniedMessage('eventAttendanceUnespUsers')).toContain('unespianos');
-    expect(component.voterEligibilityDeniedMessage('eventAttendanceComputerScienceStudents')).toContain('alunos da computação');
-    expect(component.voterEligibilityDeniedMessage('unespUsers')).toContain('unespianos');
-    expect(component.voterEligibilityDeniedMessage('computerScienceStudents')).toContain('alunos da computação');
-    expect(component.voterEligibilityDeniedMessage('authenticatedUsers')).toBe('Você não está habilitado a votar nesta votação.');
+    expect(
+      component.voterEligibilityDeniedMessage('eventAttendance'),
+    ).toContain('presença registrada');
+    expect(
+      component.voterEligibilityDeniedMessage('eventAttendanceUnespUsers'),
+    ).toContain('unespianos');
+    expect(
+      component.voterEligibilityDeniedMessage(
+        'eventAttendanceComputerScienceStudents',
+      ),
+    ).toContain('alunos da computação');
+    expect(component.voterEligibilityDeniedMessage('unespUsers')).toContain(
+      'unespianos',
+    );
+    expect(
+      component.voterEligibilityDeniedMessage('computerScienceStudents'),
+    ).toContain('alunos da computação');
+    expect(component.voterEligibilityDeniedMessage('authenticatedUsers')).toBe(
+      'Você não está habilitado a votar nesta votação.',
+    );
   });
 
   it('should cover remaining public result and response-state edge branches', async () => {
@@ -889,11 +1192,19 @@ describe('PollVotePageComponent', () => {
       results: { set(value: PollResults | null): void; (): PollResults | null };
       responseState: { (): unknown };
       publicQuestionSummaries: () => unknown[];
-      toggleMultipleAnswer(elementId: string, optionId: string, event: { checked: boolean }): void;
+      toggleMultipleAnswer(
+        elementId: string,
+        optionId: string,
+        event: { checked: boolean },
+      ): void;
       schedulingSlots(element: PollElement): unknown[];
       schedulingInviteeIndexes(element: PollElement): number[];
       loadUserResponseState(poll: Poll): Promise<void>;
-      applyResultsDelta(delta: { pollId: string; responseCount: number; responses: PollResults['responses'] }): void;
+      applyResultsDelta(delta: {
+        pollId: string;
+        responseCount: number;
+        responses: PollResults['responses'];
+      }): void;
       submit(poll: Poll): Promise<void>;
     };
     const scheduleWithoutSettings: PollElement = {
@@ -908,31 +1219,58 @@ describe('PollVotePageComponent', () => {
     expect(component.publicQuestionSummaries()).toEqual([]);
     component.toggleMultipleAnswer('missing-array', 'a', { checked: false });
     expect(component.schedulingSlots(scheduleWithoutSettings)).toEqual([]);
-    expect(component.schedulingInviteeIndexes(scheduleWithoutSettings)).toEqual([]);
-    expect(component.schedulingInviteeIndexes({ ...scheduleWithoutSettings, settings: { scheduling: {
-      hostName: '',
-      location: '',
-      timezone: 'America/Sao_Paulo',
-      durationMinutes: 30,
-      slotIntervalMinutes: 30,
-      bufferBeforeMinutes: 0,
-      bufferAfterMinutes: 0,
-      inviteeMode: 'none',
-      maxInvitees: 0,
-      availability: [],
-    } } })).toEqual([]);
+    expect(component.schedulingInviteeIndexes(scheduleWithoutSettings)).toEqual(
+      [],
+    );
+    expect(
+      component.schedulingInviteeIndexes({
+        ...scheduleWithoutSettings,
+        settings: {
+          scheduling: {
+            hostName: '',
+            location: '',
+            timezone: 'America/Sao_Paulo',
+            durationMinutes: 30,
+            slotIntervalMinutes: 30,
+            bufferBeforeMinutes: 0,
+            bufferAfterMinutes: 0,
+            inviteeMode: 'none',
+            maxInvitees: 0,
+            availability: [],
+          },
+        },
+      }),
+    ).toEqual([]);
 
-    vi.mocked(api.getMyPollResponse).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.getMyPollResponse).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.loadUserResponseState(poll);
     expect(component.responseState()).toMatchObject({ hasSubmitted: false });
 
-    component.results.set({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 1, responses: [] });
-    component.applyResultsDelta({ pollId: 'other', responseCount: 2, responses: [] });
+    component.results.set({
+      pollId: poll.id,
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 1,
+      responses: [],
+    });
+    component.applyResultsDelta({
+      pollId: 'other',
+      responseCount: 2,
+      responses: [],
+    });
     expect(component.results()?.responseCount).toBe(1);
 
     vi.mocked(api.submitResponse).mockReturnValueOnce(of(response));
     vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
-      of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 1, responses: [] }),
+      of({
+        pollId: poll.id,
+        anonymous: false,
+        answersReleased: true,
+        responseCount: 1,
+        responses: [],
+      }),
     );
     component.results.set(null);
     await component.submit({ ...poll, resultsPublic: true, resultsLive: true });
@@ -946,14 +1284,21 @@ describe('PollVotePageComponent', () => {
     };
 
     vi.mocked(api.submitResponse).mockReturnValueOnce(
-      throwError(() => new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' })),
+      throwError(
+        () =>
+          new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' }),
+      ),
     );
     await component.submit(poll);
     expect(component.error()).toBe('Entre para votar nesta votação.');
 
-    vi.mocked(api.submitResponse).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.submitResponse).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.submit(poll);
-    expect(component.error()).toBe('Não foi possível registrar sua resposta. Confira os campos obrigatórios.');
+    expect(component.error()).toBe(
+      'Não foi possível registrar sua resposta. Confira os campos obrigatórios.',
+    );
   });
 
   it('should expose load errors when the route id is missing or the poll request fails', async () => {
@@ -979,14 +1324,20 @@ describe('PollVotePageComponent', () => {
     const missingFixture = TestBed.createComponent(PollVotePageComponent);
     missingFixture.detectChanges();
     await missingFixture.whenStable();
-    expect((missingFixture.componentInstance as unknown as { error: { (): string | null } }).error()).toBe(
-      'Votação não encontrada.',
-    );
+    expect(
+      (
+        missingFixture.componentInstance as unknown as {
+          error: { (): string | null };
+        }
+      ).error(),
+    ).toBe('Votação não encontrada.');
 
     TestBed.resetTestingModule();
     const failingApi = {
       ...api,
-      getPublicPoll: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+      getPublicPoll: vi
+        .fn()
+        .mockReturnValue(throwError(() => new Error('offline'))),
     };
     await TestBed.configureTestingModule({
       imports: [PollVotePageComponent],
@@ -998,10 +1349,10 @@ describe('PollVotePageComponent', () => {
           provide: ActivatedRoute,
           useValue: {
             snapshot: {
-	              data: {},
-	              paramMap: {
-	                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
-	              },
+              data: {},
+              paramMap: {
+                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
+              },
             },
           },
         },
@@ -1012,9 +1363,13 @@ describe('PollVotePageComponent', () => {
     await failingFixture.whenStable();
 
     await vi.waitFor(() => {
-      expect((failingFixture.componentInstance as unknown as { error: { (): string | null } }).error()).toBe(
-        'Não foi possível carregar a votação.',
-      );
+      expect(
+        (
+          failingFixture.componentInstance as unknown as {
+            error: { (): string | null };
+          }
+        ).error(),
+      ).toBe('Não foi possível carregar a votação.');
     });
   });
 
@@ -1022,11 +1377,19 @@ describe('PollVotePageComponent', () => {
     TestBed.resetTestingModule();
     const eventSource = {
       close: vi.fn(),
-      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
     };
     const directApi = {
       ...api,
-      getDirectLinkPoll: vi.fn().mockReturnValue(of({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true })),
+      getDirectLinkPoll: vi.fn().mockReturnValue(
+        of({
+          ...poll,
+          votingStyle: 'public',
+          resultsPublic: true,
+          resultsLive: true,
+        }),
+      ),
       getMyDirectLinkPollResponse: vi.fn().mockReturnValue(
         of({
           hasSubmitted: false,
@@ -1043,7 +1406,9 @@ describe('PollVotePageComponent', () => {
           responses: [{ id: 'response-1', answers: [] }],
         }),
       ),
-      openDirectLinkPollResultsEvents: vi.fn().mockReturnValue(eventSource as unknown as EventSource),
+      openDirectLinkPollResultsEvents: vi
+        .fn()
+        .mockReturnValue(eventSource as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue({
         pollId: poll.id,
         responseCount: 2,
@@ -1063,7 +1428,9 @@ describe('PollVotePageComponent', () => {
             snapshot: {
               data: {},
               paramMap: {
-                get: vi.fn((name: string) => (name === 'directLinkToken' ? 'direct-token' : null)),
+                get: vi.fn((name: string) =>
+                  name === 'directLinkToken' ? 'direct-token' : null,
+                ),
               },
             },
           },
@@ -1075,28 +1442,46 @@ describe('PollVotePageComponent', () => {
     directFixture.detectChanges();
     await directFixture.whenStable();
 
-	    const component = directFixture.componentInstance as unknown as {
-	      results: { (): PollResults | null };
-	      loadPublicResults(poll: Poll): Promise<void>;
-	      resultsLink(poll: Poll): unknown[];
-	      submit(poll: Poll): Promise<void>;
-	      ngOnDestroy(): void;
-	    };
+    const component = directFixture.componentInstance as unknown as {
+      results: { (): PollResults | null };
+      loadPublicResults(poll: Poll): Promise<void>;
+      resultsLink(poll: Poll): unknown[];
+      submit(poll: Poll): Promise<void>;
+      ngOnDestroy(): void;
+    };
 
-	    await new Promise<void>((resolve) => setTimeout(resolve));
-	    await component.loadPublicResults({ ...poll, votingStyle: 'public', resultsPublic: true, resultsLive: true });
-	    eventSource.onmessage?.({ data: '{}' } as MessageEvent<string>);
-	    await component.submit(poll);
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    await component.loadPublicResults({
+      ...poll,
+      votingStyle: 'public',
+      resultsPublic: true,
+      resultsLive: true,
+    });
+    eventSource.onmessage?.({ data: '{}' } as MessageEvent<string>);
+    await component.submit(poll);
 
     expect(directApi.getDirectLinkPoll).toHaveBeenCalledWith('direct-token');
-    expect(directApi.getMyDirectLinkPollResponse).toHaveBeenCalledWith('direct-token');
-    expect(directApi.getDirectLinkPollResults).toHaveBeenCalledWith('direct-token');
-    expect(directApi.openDirectLinkPollResultsEvents).toHaveBeenCalledWith('direct-token');
-    expect(directApi.submitDirectLinkResponse).toHaveBeenCalledWith('direct-token', {
-      answers: [{ elementId: 'element-1', value: null }],
-    });
+    expect(directApi.getMyDirectLinkPollResponse).toHaveBeenCalledWith(
+      'direct-token',
+    );
+    expect(directApi.getDirectLinkPollResults).toHaveBeenCalledWith(
+      'direct-token',
+    );
+    expect(directApi.openDirectLinkPollResultsEvents).toHaveBeenCalledWith(
+      'direct-token',
+    );
+    expect(directApi.submitDirectLinkResponse).toHaveBeenCalledWith(
+      'direct-token',
+      {
+        answers: [{ elementId: 'element-1', value: null }],
+      },
+    );
     expect(component.results()?.responseCount).toBe(2);
-    expect(component.resultsLink(poll)).toEqual(['/polls/direct', 'direct-token', 'results']);
+    expect(component.resultsLink(poll)).toEqual([
+      '/polls/direct',
+      'direct-token',
+      'results',
+    ]);
     component.ngOnDestroy();
     expect(eventSource.close).toHaveBeenCalled();
   });
@@ -1105,11 +1490,29 @@ describe('PollVotePageComponent', () => {
     TestBed.resetTestingModule();
     const serverApi = {
       ...api,
-      getPublicPoll: vi.fn().mockReturnValue(of({ ...poll, resultsPublic: true, resultsLive: true })),
-      getPublicPollResults: vi.fn().mockReturnValue(of({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] })),
-      listPublicCacicElectionSlates: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
-      getMyCacicElectionSlate: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
-      submitCacicElectionSlate: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+      getPublicPoll: vi
+        .fn()
+        .mockReturnValue(
+          of({ ...poll, resultsPublic: true, resultsLive: true }),
+        ),
+      getPublicPollResults: vi.fn().mockReturnValue(
+        of({
+          pollId: poll.id,
+          anonymous: false,
+          answersReleased: true,
+          responseCount: 0,
+          responses: [],
+        }),
+      ),
+      listPublicCacicElectionSlates: vi
+        .fn()
+        .mockReturnValue(throwError(() => new Error('offline'))),
+      getMyCacicElectionSlate: vi
+        .fn()
+        .mockReturnValue(throwError(() => new Error('offline'))),
+      submitCacicElectionSlate: vi
+        .fn()
+        .mockReturnValue(throwError(() => new Error('offline'))),
     };
     await TestBed.configureTestingModule({
       imports: [PollVotePageComponent],
@@ -1139,10 +1542,21 @@ describe('PollVotePageComponent', () => {
       error: { (): string | null };
       loadCacicElectionSlates(poll: Poll): Promise<void>;
       loadMyCacicElectionSlate(poll: Poll): Promise<void>;
-      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
+      submitSlate(
+        poll: Poll,
+        request: SubmitCacicElectionSlateRequest,
+      ): Promise<void>;
     };
-    const electionPoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'election' } satisfies Poll;
-    const slatePoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'slateSubmission' } satisfies Poll;
+    const electionPoll = {
+      ...poll,
+      mode: 'cacicElection',
+      cacicElectionPhase: 'election',
+    } satisfies Poll;
+    const slatePoll = {
+      ...poll,
+      mode: 'cacicElection',
+      cacicElectionPhase: 'slateSubmission',
+    } satisfies Poll;
 
     await component.loadCacicElectionSlates(electionPoll);
     await component.loadMyCacicElectionSlate(poll);
@@ -1151,7 +1565,9 @@ describe('PollVotePageComponent', () => {
 
     expect(component.slates()).toEqual([]);
     expect(component.mySlate()).toBeNull();
-    expect(component.error()).toBe('Não foi possível enviar a chapa. Confira os campos obrigatórios.');
+    expect(component.error()).toBe(
+      'Não foi possível enviar a chapa. Confira os campos obrigatórios.',
+    );
     expect(serverApi.openPublicPollResultsEvents).not.toHaveBeenCalled();
   });
 
@@ -1197,9 +1613,7 @@ describe('PollVotePageComponent', () => {
             snapshot: {
               data: { mode: 'kiosk' },
               paramMap: {
-                get: vi.fn((name: string) =>
-                  name === 'id' ? 'poll-1' : null,
-                ),
+                get: vi.fn((name: string) => (name === 'id' ? 'poll-1' : null)),
               },
             },
           },
@@ -1232,10 +1646,10 @@ describe('PollVotePageComponent', () => {
     expect(kioskApi.submitKioskResponse).toHaveBeenCalledWith('poll-1', {
       answers: [{ elementId: 'element-1', value: null }],
     });
-    expect(navigate).toHaveBeenCalledWith(
-      ['/admin/polls', 'poll-1', 'kiosk'],
-      { replaceUrl: true, queryParams: { registered: '1' } },
-    );
+    expect(navigate).toHaveBeenCalledWith(['/admin/polls', 'poll-1', 'kiosk'], {
+      replaceUrl: true,
+      queryParams: { registered: '1' },
+    });
   });
 
   it('reloads the current poll when the reused route parameter changes', async () => {
@@ -1244,8 +1658,14 @@ describe('PollVotePageComponent', () => {
     const pollB = { ...poll, id: 'poll-2', title: 'Outra votação' };
     const dynamicApi = {
       ...api,
-      getPublicPoll: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
-      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+      getPublicPoll: vi
+        .fn()
+        .mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
+      getMyPollResponse: vi
+        .fn()
+        .mockReturnValue(
+          of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }),
+        ),
     };
     await TestBed.configureTestingModule({
       imports: [PollVotePageComponent],
@@ -1285,7 +1705,9 @@ describe('PollVotePageComponent', () => {
 
   it('ignores a pending response submission after the poll load generation changes', async () => {
     const pendingResponse = new Subject<PollResponse>();
-    vi.mocked(api.submitResponse).mockReturnValueOnce(pendingResponse.asObservable());
+    vi.mocked(api.submitResponse).mockReturnValueOnce(
+      pendingResponse.asObservable(),
+    );
     const component = fixture.componentInstance as unknown as {
       submit(poll: Poll): Promise<void>;
       invalidatePollLoad(): void;
@@ -1303,15 +1725,27 @@ describe('PollVotePageComponent', () => {
 
   it('ignores a pending slate submission after the poll load generation changes', async () => {
     const pendingSlate = new Subject<{ id: string }>();
-    vi.mocked(api.submitCacicElectionSlate).mockReturnValueOnce(pendingSlate.asObservable());
+    vi.mocked(api.submitCacicElectionSlate).mockReturnValueOnce(
+      pendingSlate.asObservable(),
+    );
     const component = fixture.componentInstance as unknown as {
-      submitSlate(poll: Poll, request: SubmitCacicElectionSlateRequest): Promise<void>;
+      submitSlate(
+        poll: Poll,
+        request: SubmitCacicElectionSlateRequest,
+      ): Promise<void>;
       invalidatePollLoad(): void;
       error: () => string | null;
     };
-    const slatePoll = { ...poll, mode: 'cacicElection', cacicElectionPhase: 'slateSubmission' } satisfies Poll;
+    const slatePoll = {
+      ...poll,
+      mode: 'cacicElection',
+      cacicElectionPhase: 'slateSubmission',
+    } satisfies Poll;
 
-    const submission = component.submitSlate(slatePoll, { name: 'Chapa', members: [] });
+    const submission = component.submitSlate(slatePoll, {
+      name: 'Chapa',
+      members: [],
+    });
     component.invalidatePollLoad();
     pendingSlate.next({ id: 'slate-1' });
     pendingSlate.complete();
@@ -1333,7 +1767,11 @@ describe('PollVotePageComponent', () => {
     const clockApi = {
       ...api,
       getPublicPoll: vi.fn().mockReturnValue(of(futurePoll)),
-      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+      getMyPollResponse: vi
+        .fn()
+        .mockReturnValue(
+          of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }),
+        ),
     };
     await TestBed.configureTestingModule({
       imports: [PollVotePageComponent],
@@ -1387,7 +1825,11 @@ describe('PollVotePageComponent', () => {
     const clockApi = {
       ...api,
       getPublicPoll: vi.fn().mockReturnValue(pendingPoll),
-      getMyPollResponse: vi.fn().mockReturnValue(of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false })),
+      getMyPollResponse: vi
+        .fn()
+        .mockReturnValue(
+          of({ hasSubmitted: false, canEdit: false, canSubmitAnother: false }),
+        ),
     };
     await TestBed.configureTestingModule({
       imports: [PollVotePageComponent],
@@ -1418,7 +1860,9 @@ describe('PollVotePageComponent', () => {
     await Promise.resolve();
     clockFixture.detectChanges();
 
-    const component = clockFixture.componentInstance as unknown as { canVote: () => boolean };
+    const component = clockFixture.componentInstance as unknown as {
+      canVote: () => boolean;
+    };
     expect(component.canVote()).toBe(true);
 
     clockFixture.destroy();

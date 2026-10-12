@@ -13,7 +13,8 @@ describe('PrismaService', () => {
   });
 
   it('constructs with an explicit database URL', () => {
-    process.env.DATABASE_URL = 'postgresql://user:pass@db.example:5432/cacic_voto';
+    process.env.DATABASE_URL =
+      'postgresql://user:pass@db.example:5432/cacic_voto';
 
     expect(new PrismaService()).toBeDefined();
   });
@@ -26,8 +27,12 @@ describe('PrismaService', () => {
 
   it('connects and disconnects during module lifecycle hooks', async () => {
     const service = new PrismaService();
-    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
-    const disconnect = jest.spyOn(service, '$disconnect').mockResolvedValue(undefined);
+    const connect = jest
+      .spyOn(service, '$connect')
+      .mockResolvedValue(undefined);
+    const disconnect = jest
+      .spyOn(service, '$disconnect')
+      .mockResolvedValue(undefined);
 
     await service.onModuleInit();
     await service.onModuleDestroy();
@@ -38,13 +43,15 @@ describe('PrismaService', () => {
 
   it('closes the Nest app before process exit', async () => {
     const service = new PrismaService();
-    const app = { close: jest.fn<Promise<void>, []>().mockResolvedValue(undefined) };
+    const app = {
+      close: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
+    };
     const once = jest.spyOn(process, 'once');
 
     await service.enableShutdownHooks(app as never);
-    const listener = once.mock.calls.find(([event]) => event === 'beforeExit')?.[1] as
-      | (() => Promise<void>)
-      | undefined;
+    const listener = once.mock.calls.find(
+      ([event]) => event === 'beforeExit',
+    )?.[1] as (() => Promise<void>) | undefined;
 
     expect(listener).toEqual(expect.any(Function));
     process.removeListener('beforeExit', listener as () => void);

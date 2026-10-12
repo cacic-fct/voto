@@ -29,7 +29,10 @@ function parseRedisUrl(redisUrl: string): RedisOptions {
     port: url.port ? Number.parseInt(url.port, 10) : 6379,
     username: url.username ? decodeURIComponent(url.username) : undefined,
     password: url.password ? decodeURIComponent(url.password) : undefined,
-    db: url.pathname.length > 1 ? Number.parseInt(url.pathname.slice(1), 10) : undefined,
+    db:
+      url.pathname.length > 1
+        ? Number.parseInt(url.pathname.slice(1), 10)
+        : undefined,
     tls: url.protocol === 'rediss:' ? {} : undefined,
   };
 }

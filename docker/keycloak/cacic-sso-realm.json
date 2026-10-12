@@ -33,9 +33,7 @@
         "http://localhost:3000/api/auth/callback",
         "http://localhost:*/api/auth/callback"
       ],
-      "webOrigins": [
-        "http://localhost:4200"
-      ],
+      "webOrigins": ["http://localhost:4200"],
       "attributes": {
         "post.logout.redirect.uris": "http://localhost:4200/*"
       },
@@ -114,10 +112,7 @@
         "roles",
         "email"
       ],
-      "optionalClientScopes": [
-        "offline_access",
-        "microprofile-jwt"
-      ]
+      "optionalClientScopes": ["offline_access", "microprofile-jwt"]
     }
   ],
   "users": [
@@ -129,12 +124,8 @@
       "firstName": "Voto",
       "lastName": "Admin",
       "attributes": {
-        "identity_document": [
-          "11111111111"
-        ],
-        "enrollment_number": [
-          "24123456"
-        ]
+        "identity_document": ["11111111111"],
+        "enrollment_number": ["24123456"]
       },
       "credentials": [
         {
@@ -143,10 +134,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": [
-        "access",
-        "super-admin"
-      ]
+      "realmRoles": ["access", "super-admin"]
     }
   ]
 }

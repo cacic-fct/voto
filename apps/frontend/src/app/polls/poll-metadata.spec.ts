@@ -20,22 +20,32 @@ import {
 
 describe('poll metadata helpers', () => {
   it('exposes labels and descriptions for every voting style', () => {
-    expect(votingStyleOptions.map((option) => option.style)).toEqual(POLL_VOTING_STYLES);
+    expect(votingStyleOptions.map((option) => option.style)).toEqual(
+      POLL_VOTING_STYLES,
+    );
 
     for (const style of POLL_VOTING_STYLES) {
       expect(votingStyleLabel(style)).toBe(VOTING_STYLE_METADATA[style].label);
-      expect(votingStyleVoterDescription(style)).toBe(VOTING_STYLE_METADATA[style].voterDescription);
+      expect(votingStyleVoterDescription(style)).toBe(
+        VOTING_STYLE_METADATA[style].voterDescription,
+      );
       expect(votingStylePublicResultsDescription(style)).toBeTruthy();
       expect(VOTING_STYLE_METADATA[style].icon).toBeTruthy();
     }
   });
 
   it('exposes labels, descriptions, and linked-event requirements for every eligibility source', () => {
-    expect(voterEligibilityOptions.map((option) => option.source)).toEqual(POLL_VOTER_ELIGIBILITY_SOURCES);
+    expect(voterEligibilityOptions.map((option) => option.source)).toEqual(
+      POLL_VOTER_ELIGIBILITY_SOURCES,
+    );
 
     for (const source of POLL_VOTER_ELIGIBILITY_SOURCES) {
-      expect(voterEligibilityLabel(source)).toBe(VOTER_ELIGIBILITY_METADATA[source].label);
-      expect(voterEligibilityDescription(source)).toBe(VOTER_ELIGIBILITY_METADATA[source].description);
+      expect(voterEligibilityLabel(source)).toBe(
+        VOTER_ELIGIBILITY_METADATA[source].label,
+      );
+      expect(voterEligibilityDescription(source)).toBe(
+        VOTER_ELIGIBILITY_METADATA[source].description,
+      );
       expect(requiresLinkedEventEligibilitySource(source)).toBe(
         VOTER_ELIGIBILITY_METADATA[source].requiresLinkedEvent,
       );

@@ -90,7 +90,11 @@
   gap: 0.625rem;
   border-radius: 8px;
   padding: 0.75rem;
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 88%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-surface-container-low) 88%,
+    transparent
+  );
 }
 
 .metadata-summary-item mat-icon {
@@ -340,7 +344,11 @@ mat-checkbox {
 
 .selected-ballot-card {
   border-color: var(--mat-sys-primary);
-  background: color-mix(in srgb, var(--mat-sys-primary-container) 24%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-primary-container) 24%,
+    transparent
+  );
 }
 
 .slate-member-row {

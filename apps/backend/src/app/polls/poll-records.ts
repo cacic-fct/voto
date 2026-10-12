@@ -151,7 +151,12 @@ export type PollResultsMetadata = {
 
 export type PollEligibilityRecord = Pick<
   PollRecord,
-  'id' | 'mode' | 'cacicElectionPhase' | 'voterEligibilitySource' | 'requireVerifiedUnespRole' | 'linkedEventId'
+  | 'id'
+  | 'mode'
+  | 'cacicElectionPhase'
+  | 'voterEligibilitySource'
+  | 'requireVerifiedUnespRole'
+  | 'linkedEventId'
 >;
 
 export type PollUserResponseStateRecord = {
@@ -188,7 +193,10 @@ type PollResultResponseBase = Prisma.PollResponseGetPayload<{
   };
 }>;
 
-export type PollResultResponseRecord = Omit<PollResultResponseBase, 'answers'> & {
+export type PollResultResponseRecord = Omit<
+  PollResultResponseBase,
+  'answers'
+> & {
   answers: Array<{
     elementId: string;
     value: Prisma.JsonValue;

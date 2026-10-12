@@ -145,7 +145,10 @@ export function textAnswerValue(answers: AnswerMap, elementId: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-export function singleAnswerValue(answers: AnswerMap, elementId: string): string {
+export function singleAnswerValue(
+  answers: AnswerMap,
+  elementId: string,
+): string {
   const value = answers[elementId];
   return typeof value === 'string' ? value : '';
 }
@@ -209,7 +212,10 @@ export function isMultipleGridColumnSelected(
   rowId: string,
   columnId: string,
 ): boolean {
-  return readMultipleGridAnswer(answers[elementId])[rowId]?.includes(columnId) ?? false;
+  return (
+    readMultipleGridAnswer(answers[elementId])[rowId]?.includes(columnId) ??
+    false
+  );
 }
 
 export function gridTemplateColumns(element: PollElement): string {
@@ -222,27 +228,37 @@ export function readSingleGridAnswer(value: unknown): Record<string, string> {
     return {};
   }
 
-  return Object.entries(value).reduce<Record<string, string>>((answer, [rowId, columnId]) => {
-    if (typeof columnId === 'string') {
-      answer[rowId] = columnId;
-    }
+  return Object.entries(value).reduce<Record<string, string>>(
+    (answer, [rowId, columnId]) => {
+      if (typeof columnId === 'string') {
+        answer[rowId] = columnId;
+      }
 
-    return answer;
-  }, {});
+      return answer;
+    },
+    {},
+  );
 }
 
-export function readMultipleGridAnswer(value: unknown): Record<string, string[]> {
+export function readMultipleGridAnswer(
+  value: unknown,
+): Record<string, string[]> {
   if (!isRecord(value)) {
     return {};
   }
 
-  return Object.entries(value).reduce<Record<string, string[]>>((answer, [rowId, columnIds]) => {
-    if (Array.isArray(columnIds)) {
-      answer[rowId] = columnIds.filter((columnId): columnId is string => typeof columnId === 'string');
-    }
+  return Object.entries(value).reduce<Record<string, string[]>>(
+    (answer, [rowId, columnIds]) => {
+      if (Array.isArray(columnIds)) {
+        answer[rowId] = columnIds.filter(
+          (columnId): columnId is string => typeof columnId === 'string',
+        );
+      }
 
-    return answer;
-  }, {});
+      return answer;
+    },
+    {},
+  );
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

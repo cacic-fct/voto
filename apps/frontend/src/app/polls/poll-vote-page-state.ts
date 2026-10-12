@@ -40,8 +40,11 @@ export abstract class PollVotePageState {
     this.route.paramMap ?? of(this.route.snapshot.paramMap),
     { initialValue: this.route.snapshot.paramMap },
   );
-  protected readonly pollAccess = computed(() => resolvePollAccess(this.routeParamMap()));
-  protected readonly isKioskMode = this.route.snapshot.data?.['mode'] === 'kiosk';
+  protected readonly pollAccess = computed(() =>
+    resolvePollAccess(this.routeParamMap()),
+  );
+  protected readonly isKioskMode =
+    this.route.snapshot.data?.['mode'] === 'kiosk';
   protected readonly kioskVoter = signal<PollKioskVoter | null>(null);
 
   protected readonly poll = signal<Poll | null>(null);
@@ -60,10 +63,13 @@ export abstract class PollVotePageState {
   protected readonly savingSlate = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly resultsError = signal<string | null>(null);
-  protected readonly resultsFinalizationState = signal<PollResultsFinalizationState>('idle');
+  protected readonly resultsFinalizationState =
+    signal<PollResultsFinalizationState>('idle');
   protected readonly resultsFinalizationError = signal<string | null>(null);
   protected readonly pendingFinalResultsPollId = signal<string | null>(null);
-  protected readonly resultsConnectionState = signal<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting');
+  protected readonly resultsConnectionState = signal<
+    'connecting' | 'connected' | 'reconnecting' | 'closed'
+  >('connecting');
   protected resultsEvents?: EventSource;
 
   protected pollLoadGeneration = 0;
@@ -77,7 +83,10 @@ export abstract class PollVotePageState {
 
   constructor() {
     if (this.isBrowser) {
-      document.addEventListener('visibilitychange', this.clockVisibilityListener);
+      document.addEventListener(
+        'visibilitychange',
+        this.clockVisibilityListener,
+      );
     }
 
     effect(() => {
@@ -163,7 +172,10 @@ export abstract class PollVotePageState {
       this.clockBoundaryTimer = undefined;
     }
     if (this.isBrowser) {
-      document.removeEventListener('visibilitychange', this.clockVisibilityListener);
+      document.removeEventListener(
+        'visibilitychange',
+        this.clockVisibilityListener,
+      );
     }
   }
 

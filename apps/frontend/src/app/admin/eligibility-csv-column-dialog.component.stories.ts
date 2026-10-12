@@ -1,7 +1,17 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  input,
+  signal,
+} from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { fakerPT_BR as faker } from '@faker-js/faker';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
 import { storybookBaseProviders } from '../testing/storybook-voting-mocks';
 import {
   EligibilityCsvColumnDialogComponent,
@@ -99,7 +109,10 @@ function valueForHeader(header: string, index: number): string {
 
 const dialogRefMock = {
   close: () => undefined,
-} as unknown as MatDialogRef<EligibilityCsvColumnDialogComponent, string | null>;
+} as unknown as MatDialogRef<
+  EligibilityCsvColumnDialogComponent,
+  string | null
+>;
 
 const meta: Meta<EligibilityCsvColumnDialogStoryHostComponent> = {
   title: 'Frontend/Admin/EligibilityCsvColumnDialogComponent',

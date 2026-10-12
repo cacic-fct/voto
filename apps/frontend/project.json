@@ -4,15 +4,11 @@
   "projectType": "application",
   "prefix": "app",
   "sourceRoot": "apps/frontend/src",
-  "tags": [
-    "scope:shop"
-  ],
+  "tags": ["scope:shop"],
   "targets": {
     "build": {
       "executor": "@angular/build:application",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/apps/frontend",
         "browser": "apps/frontend/src/main.ts",
@@ -23,9 +19,7 @@
             "input": "apps/frontend/public"
           }
         ],
-        "styles": [
-          "apps/frontend/src/styles.scss"
-        ],
+        "styles": ["apps/frontend/src/styles.scss"],
         "server": "apps/frontend/src/main.server.ts",
         "ssr": {
           "entry": "apps/frontend/src/server.ts"
@@ -63,11 +57,7 @@
           ],
           "outputHashing": "all",
           "security": {
-            "allowedHosts": [
-              "localhost",
-              "127.0.0.1",
-              "::1"
-            ]
+            "allowedHosts": ["localhost", "127.0.0.1", "::1"]
           }
         },
         "development": {
@@ -95,9 +85,7 @@
         }
       },
       "defaultConfiguration": "development",
-      "dependsOn": [
-        "backend:serve"
-      ],
+      "dependsOn": ["backend:serve"],
       "options": {
         "proxyConfig": "apps/frontend/proxy.conf.json"
       }
@@ -121,9 +109,7 @@
     },
     "build-storybook": {
       "executor": "@storybook/angular:build-storybook",
-      "outputs": [
-        "{options.outputDir}"
-      ],
+      "outputs": ["{options.outputDir}"],
       "options": {
         "outputDir": "dist/storybook/frontend",
         "configDir": "apps/frontend/.storybook",
@@ -138,9 +124,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
-      "outputs": [
-        "{workspaceRoot}/coverage/apps/frontend"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/apps/frontend"],
       "options": {
         "cwd": "apps/frontend",
         "command": "vitest --passWithNoTests"

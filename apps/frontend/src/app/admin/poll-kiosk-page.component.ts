@@ -1,7 +1,21 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal, untracked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormControl,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -42,18 +56,24 @@ export class PollKioskPageComponent implements OnDestroy {
     this.route.queryParamMap ?? of(this.route.snapshot.queryParamMap),
     { initialValue: this.route.snapshot.queryParamMap },
   );
-  protected readonly pollId = computed(() => this.routeParamMap().get('id')?.trim() ?? '');
+  protected readonly pollId = computed(
+    () => this.routeParamMap().get('id')?.trim() ?? '',
+  );
   protected readonly poll = signal<Poll | null>(null);
   protected readonly loading = signal(true);
   protected readonly authorizing = signal(false);
-  protected readonly error = signal<string | null>(
-    this.initialReturnMessage(),
+  protected readonly error = signal<string | null>(this.initialReturnMessage());
+  protected readonly voteRegistered = computed(
+    () => this.routeQueryParamMap().get('registered') === '1',
   );
-  protected readonly voteRegistered = computed(() => this.routeQueryParamMap().get('registered') === '1');
   protected readonly form = new FormGroup({
     primaryEmail: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.email, Validators.maxLength(254)],
+      validators: [
+        Validators.required,
+        Validators.email,
+        Validators.maxLength(254),
+      ],
     }),
     totpCode: new FormControl('', {
       nonNullable: true,
@@ -108,10 +128,9 @@ export class PollKioskPageComponent implements OnDestroy {
         return;
       }
       this.form.reset();
-      await this.router.navigate(
-        ['/admin/polls', pollId, 'kiosk', 'vote'],
-        { replaceUrl: true },
-      );
+      await this.router.navigate(['/admin/polls', pollId, 'kiosk', 'vote'], {
+        replaceUrl: true,
+      });
     } catch (error) {
       if (generation === this.loadGeneration && pollId === this.pollId()) {
         this.form.controls.totpCode.reset();
@@ -136,7 +155,9 @@ export class PollKioskPageComponent implements OnDestroy {
   private async loadPoll(pollId: string): Promise<void> {
     const generation = ++this.loadGeneration;
     this.poll.set(null);
-    this.error.set(this.initialReturnMessage(untracked(() => this.routeQueryParamMap())));
+    this.error.set(
+      this.initialReturnMessage(untracked(() => this.routeQueryParamMap())),
+    );
     this.loading.set(true);
     this.authorizing.set(false);
     this.form.reset();
@@ -178,7 +199,9 @@ export class PollKioskPageComponent implements OnDestroy {
     return 'E-mail principal ou código TOTP inválido.';
   }
 
-  private initialReturnMessage(queryParamMap = this.routeQueryParamMap()): string | null {
+  private initialReturnMessage(
+    queryParamMap = this.routeQueryParamMap(),
+  ): string | null {
     switch (queryParamMap.get('reason')) {
       case 'expired':
         return 'A autorização expirou. Identifique a pessoa novamente para continuar.';

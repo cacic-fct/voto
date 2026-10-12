@@ -1,4 +1,7 @@
-import { PollVoterEligibilitySource, PollVotingStyle } from '@org/voting-contracts';
+import {
+  PollVoterEligibilitySource,
+  PollVotingStyle,
+} from '@org/voting-contracts';
 
 export type VotingStyleMetadata = {
   label: string;
@@ -14,34 +17,48 @@ export type VoterEligibilityMetadata = {
   requiresLinkedEvent: boolean;
 };
 
-export const VOTING_STYLE_METADATA: Record<PollVotingStyle, VotingStyleMetadata> = {
+export const VOTING_STYLE_METADATA: Record<
+  PollVotingStyle,
+  VotingStyleMetadata
+> = {
   public: {
     label: 'Público',
-    adminDescription: 'Todos os habilitados a votar podem visualizar quem votou e os votos individuais.',
-    voterDescription: 'Pessoas habilitadas a votar poderão visualizar participantes e votos individuais.',
+    adminDescription:
+      'Todos os habilitados a votar podem visualizar quem votou e os votos individuais.',
+    voterDescription:
+      'Pessoas habilitadas a votar poderão visualizar participantes e votos individuais.',
     icon: 'visibility',
   },
   partiallySecret: {
     label: 'Parcialmente sigiloso',
-    adminDescription: 'Habilitados a votar podem visualizar quem votou, mas não os votos individuais.',
-    voterDescription: 'Pessoas habilitadas a votar poderão visualizar quem participou, sem votos individuais.',
+    adminDescription:
+      'Habilitados a votar podem visualizar quem votou, mas não os votos individuais.',
+    voterDescription:
+      'Pessoas habilitadas a votar poderão visualizar quem participou, sem votos individuais.',
     icon: 'group',
   },
   secret: {
     label: 'Sigiloso',
-    adminDescription: 'Apenas administradores podem visualizar quem votou e os votos, preservando o sigilo.',
-    voterDescription: 'Apenas administradores do sistema podem consultar participantes e votos.',
+    adminDescription:
+      'Apenas administradores podem visualizar quem votou e os votos, preservando o sigilo.',
+    voterDescription:
+      'Apenas administradores do sistema podem consultar participantes e votos.',
     icon: 'lock',
   },
   anonymous: {
     label: 'Anônimo',
-    adminDescription: 'Administradores auditam quem votou, mas as respostas ficam sem usuário e sem horário.',
-    voterDescription: 'O sistema registra que você votou, mas sua resposta fica sem usuário e sem horário.',
+    adminDescription:
+      'Administradores auditam quem votou, mas as respostas ficam sem usuário e sem horário.',
+    voterDescription:
+      'O sistema registra que você votou, mas sua resposta fica sem usuário e sem horário.',
     icon: 'shield_lock',
   },
 };
 
-export const VOTER_ELIGIBILITY_METADATA: Record<PollVoterEligibilitySource, VoterEligibilityMetadata> = {
+export const VOTER_ELIGIBILITY_METADATA: Record<
+  PollVoterEligibilitySource,
+  VoterEligibilityMetadata
+> = {
   authenticatedUsers: {
     label: 'Usuários autenticados',
     description: 'Todos os usuários autenticados estão habilitados a votar.',
@@ -50,25 +67,29 @@ export const VOTER_ELIGIBILITY_METADATA: Record<PollVoterEligibilitySource, Vote
   },
   unespUsers: {
     label: 'Unespianos',
-    description: 'Apenas usuários com e-mail principal ou secundário @unesp.br estão habilitados a votar.',
+    description:
+      'Apenas usuários com e-mail principal ou secundário @unesp.br estão habilitados a votar.',
     icon: 'school',
     requiresLinkedEvent: false,
   },
   computerScienceStudents: {
     label: 'Alunos da computação',
-    description: 'Apenas alunos da graduação com matrícula de Ciência da Computação estão habilitados a votar.',
+    description:
+      'Apenas alunos da graduação com matrícula de Ciência da Computação estão habilitados a votar.',
     icon: 'terminal',
     requiresLinkedEvent: false,
   },
   eventAttendance: {
     label: 'Presença no evento - todos',
-    description: 'Apenas usuários com presença registrada no evento vinculado estão habilitados a votar.',
+    description:
+      'Apenas usuários com presença registrada no evento vinculado estão habilitados a votar.',
     icon: 'event_available',
     requiresLinkedEvent: true,
   },
   eventAttendanceUnespUsers: {
     label: 'Presença no evento - unespianos',
-    description: 'Apenas unespianos com presença registrada no evento vinculado estão habilitados a votar.',
+    description:
+      'Apenas unespianos com presença registrada no evento vinculado estão habilitados a votar.',
     icon: 'event_available',
     requiresLinkedEvent: true,
   },
@@ -81,18 +102,23 @@ export const VOTER_ELIGIBILITY_METADATA: Record<PollVoterEligibilitySource, Vote
   },
   enrollmentList: {
     label: 'Lista de matrículas',
-    description: 'Apenas matrículas cadastradas manualmente ou importadas por arquivo estão habilitadas a votar.',
+    description:
+      'Apenas matrículas cadastradas manualmente ou importadas por arquivo estão habilitadas a votar.',
     icon: 'format_list_numbered',
     requiresLinkedEvent: false,
   },
 };
 
-export const votingStyleOptions = Object.entries(VOTING_STYLE_METADATA).map(([style, metadata]) => ({
-  style: style as PollVotingStyle,
-  ...metadata,
-}));
+export const votingStyleOptions = Object.entries(VOTING_STYLE_METADATA).map(
+  ([style, metadata]) => ({
+    style: style as PollVotingStyle,
+    ...metadata,
+  }),
+);
 
-export const voterEligibilityOptions = Object.entries(VOTER_ELIGIBILITY_METADATA).map(([source, metadata]) => ({
+export const voterEligibilityOptions = Object.entries(
+  VOTER_ELIGIBILITY_METADATA,
+).map(([source, metadata]) => ({
   source: source as PollVoterEligibilitySource,
   ...metadata,
 }));
@@ -105,7 +131,9 @@ export function votingStyleVoterDescription(style: PollVotingStyle): string {
   return VOTING_STYLE_METADATA[style].voterDescription;
 }
 
-export function votingStylePublicResultsDescription(style: PollVotingStyle): string {
+export function votingStylePublicResultsDescription(
+  style: PollVotingStyle,
+): string {
   switch (style) {
     case 'public':
       return 'Resultados públicos podem exibir resumo, participantes e respostas individuais.';
@@ -118,18 +146,29 @@ export function votingStylePublicResultsDescription(style: PollVotingStyle): str
   }
 }
 
-export function voterEligibilityLabel(source: PollVoterEligibilitySource): string {
+export function voterEligibilityLabel(
+  source: PollVoterEligibilitySource,
+): string {
   return VOTER_ELIGIBILITY_METADATA[source].label;
 }
 
-export function voterEligibilityDescription(source: PollVoterEligibilitySource): string {
+export function voterEligibilityDescription(
+  source: PollVoterEligibilitySource,
+): string {
   return VOTER_ELIGIBILITY_METADATA[source].description;
 }
 
-export function requiresLinkedEventEligibilitySource(source: PollVoterEligibilitySource): boolean {
+export function requiresLinkedEventEligibilitySource(
+  source: PollVoterEligibilitySource,
+): boolean {
   return VOTER_ELIGIBILITY_METADATA[source].requiresLinkedEvent;
 }
 
-export function supportsVerifiedUnespRoleRequirement(source: PollVoterEligibilitySource): boolean {
-  return source === 'computerScienceStudents' || source === 'eventAttendanceComputerScienceStudents';
+export function supportsVerifiedUnespRoleRequirement(
+  source: PollVoterEligibilitySource,
+): boolean {
+  return (
+    source === 'computerScienceStudents' ||
+    source === 'eventAttendanceComputerScienceStudents'
+  );
 }

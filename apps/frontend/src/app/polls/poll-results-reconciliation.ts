@@ -1,4 +1,5 @@
-export type PollResultsFinalizationState = 'idle' | 'pending' | 'failed' | 'complete';
+export type PollResultsFinalizationState =
+  'idle' | 'pending' | 'failed' | 'complete';
 
 export async function reconcilePollResults<T>(
   load: () => Promise<T>,

@@ -1,7 +1,16 @@
-import { Injectable, Logger, MessageEvent, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  MessageEvent,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import Redis from 'ioredis';
 import { Observable, Subject } from 'rxjs';
-import { SseReplayService, type SseRecordOptions } from '../realtime/sse-replay.service';
+import {
+  SseReplayService,
+  type SseRecordOptions,
+} from '../realtime/sse-replay.service';
 
 const REDIS_CHANNEL = 'poll-results:realtime:v1';
 const MAX_PUBLICATION_ATTEMPTS = 3;
@@ -21,15 +30,23 @@ end
 return 0
 `;
 
-interface Envelope { scope: string; event: MessageEvent }
+interface Envelope {
+  scope: string;
+  event: MessageEvent;
+}
 
 @Injectable()
-export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy {
+export class PollResultsRealtimeService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PollResultsRealtimeService.name);
   private readonly channels = new Map<string, Subject<MessageEvent>>();
   private subscriber?: Redis;
 
-  constructor(private readonly redis: Redis, private readonly replay: SseReplayService) {}
+  constructor(
+    private readonly redis: Redis,
+    private readonly replay: SseReplayService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     const subscriber = this.redis.duplicate();
@@ -80,21 +97,37 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
       );
       return ready === 1;
     } catch (error) {
-      this.logger.warn(`Poll result batching unavailable for ${pollId}; publishing refresh.`, error);
+      this.logger.warn(
+        `Poll result batching unavailable for ${pollId}; publishing refresh.`,
+        error,
+      );
       return true;
     }
   }
 
-  async publish(scope: string, data: object, deduplicationKey?: string): Promise<void> {
+  async publish(
+    scope: string,
+    data: object,
+    deduplicationKey?: string,
+  ): Promise<void> {
     let event: MessageEvent | undefined;
-    const recordOptions: SseRecordOptions = deduplicationKey ? { deduplicationKey } : {};
+    const recordOptions: SseRecordOptions = deduplicationKey
+      ? { deduplicationKey }
+      : {};
     for (let attempt = 1; attempt <= MAX_PUBLICATION_ATTEMPTS; attempt += 1) {
       try {
-        event = await this.replay.record(scope, { data, retry: 3_000 }, recordOptions);
+        event = await this.replay.record(
+          scope,
+          { data, retry: 3_000 },
+          recordOptions,
+        );
         break;
       } catch (error) {
         if (attempt === MAX_PUBLICATION_ATTEMPTS) {
-          this.logger.warn(`Poll result replay recording failed for scope ${scope}.`, error);
+          this.logger.warn(
+            `Poll result replay recording failed for scope ${scope}.`,
+            error,
+          );
           this.channels.get(scope)?.next({ data, retry: 3_000 });
           return;
         }
@@ -106,7 +139,10 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
       return;
     }
     const publishedEvent = event;
-    const payload = JSON.stringify({ scope, event: publishedEvent } satisfies Envelope);
+    const payload = JSON.stringify({
+      scope,
+      event: publishedEvent,
+    } satisfies Envelope);
     for (let attempt = 1; attempt <= MAX_PUBLICATION_ATTEMPTS; attempt += 1) {
       try {
         const subscribers = await this.redis.publish(REDIS_CHANNEL, payload);
@@ -114,7 +150,10 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
         return;
       } catch (error) {
         if (attempt === MAX_PUBLICATION_ATTEMPTS) {
-          this.logger.warn(`Poll result pub/sub delivery failed for scope ${scope}.`, error);
+          this.logger.warn(
+            `Poll result pub/sub delivery failed for scope ${scope}.`,
+            error,
+          );
           this.channels.get(scope)?.next(publishedEvent);
           return;
         }
@@ -130,9 +169,13 @@ export class PollResultsRealtimeService implements OnModuleInit, OnModuleDestroy
   private parseEnvelope(payload: string): Envelope | null {
     try {
       const envelope = JSON.parse(payload) as Envelope;
-      return typeof envelope.scope === 'string' && envelope.event && typeof envelope.event === 'object'
+      return typeof envelope.scope === 'string' &&
+        envelope.event &&
+        typeof envelope.event === 'object'
         ? envelope
         : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 }

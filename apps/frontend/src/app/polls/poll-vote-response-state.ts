@@ -6,7 +6,10 @@ import {
   PollUserResponseState,
   PollVoterEligibilitySource,
 } from '@org/voting-contracts';
-import { AnswerMap, responseAnswersToAnswerMap } from './poll-vote-answer-state';
+import {
+  AnswerMap,
+  responseAnswersToAnswerMap,
+} from './poll-vote-answer-state';
 import { readSchedulingAnswer } from './poll-vote-scheduling';
 import { voterEligibilityDeniedMessage } from './poll-vote-metadata';
 
@@ -21,7 +24,10 @@ export function buildPollResponseAnswers(
 ): PollResponseAnswer[] {
   return poll.elements.map((element) => ({
     elementId: element.id,
-    value: normalizeAnswerValueForSubmission(element, answers[element.id] ?? null),
+    value: normalizeAnswerValueForSubmission(
+      element,
+      answers[element.id] ?? null,
+    ),
   }));
 }
 
@@ -37,7 +43,8 @@ function normalizeAnswerValueForSubmission(
   return {
     ...answer,
     invitees: answer.invitees.filter(
-      (invitee) => invitee.name.trim().length > 0 || Boolean(invitee.email?.trim()),
+      (invitee) =>
+        invitee.name.trim().length > 0 || Boolean(invitee.email?.trim()),
     ),
   };
 }

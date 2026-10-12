@@ -1,6 +1,16 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Readable } from 'node:stream';
 
 @Injectable()
@@ -8,7 +18,10 @@ export class S3Service implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(S3Service.name);
   private readonly s3Client?: S3Client;
   private readonly bucketName?: string;
-  private readonly requestTimeoutMs = this.positiveInteger(process.env.S3_REQUEST_TIMEOUT_MS, 15_000);
+  private readonly requestTimeoutMs = this.positiveInteger(
+    process.env.S3_REQUEST_TIMEOUT_MS,
+    15_000,
+  );
 
   constructor() {
     const endpoint = process.env.S3_ENDPOINT;
@@ -39,7 +52,9 @@ export class S3Service implements OnModuleDestroy, OnModuleInit {
       },
     });
 
-    this.logger.log(`S3Service initialized with endpoint: ${endpoint}, bucket: ${bucketName}`);
+    this.logger.log(
+      `S3Service initialized with endpoint: ${endpoint}, bucket: ${bucketName}`,
+    );
   }
 
   async uploadFile(
@@ -128,7 +143,11 @@ export class S3Service implements OnModuleDestroy, OnModuleInit {
 
   onModuleInit(): void {
     const required = process.env.S3_REQUIRED?.trim().toLowerCase() !== 'false';
-    if (process.env.NODE_ENV === 'production' && required && (!this.s3Client || !this.bucketName)) {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      required &&
+      (!this.s3Client || !this.bucketName)
+    ) {
       throw new Error('S3 configuration is required in production.');
     }
   }
@@ -158,7 +177,10 @@ export class S3Service implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  private positiveInteger(rawValue: string | undefined, fallback: number): number {
+  private positiveInteger(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }

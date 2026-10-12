@@ -1,7 +1,10 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
-import { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
+import {
+  AuthenticatedPrincipal,
+  AuthenticatedRequest,
+} from '../auth/auth.types';
 import { AdminPollsController } from './admin-polls.controller';
 import { PollImagesService } from './poll-images.service';
 import { PollsService } from './polls.service';
@@ -33,7 +36,9 @@ type PollsMock = jest.Mocked<
   >
 >;
 
-type PollImagesMock = jest.Mocked<Pick<PollImagesService, 'deletePollImage' | 'uploadPollImage'>>;
+type PollImagesMock = jest.Mocked<
+  Pick<PollImagesService, 'deletePollImage' | 'uploadPollImage'>
+>;
 
 function createUser(): AuthenticatedPrincipal {
   return {
@@ -58,19 +63,41 @@ describe('AdminPollsController', () => {
     polls = {
       listAdminPolls: jest.fn().mockResolvedValue(['poll-summary']),
       listLinkableEvents: jest.fn().mockResolvedValue(['event']),
-      listEligibilityEnrollments: jest.fn().mockResolvedValue({ entries: [], totalCount: 0 }),
-      addEligibilityEnrollments: jest.fn().mockResolvedValue({ createdCount: 1 }),
-      importEligibilityEnrollments: jest.fn().mockResolvedValue({ createdCount: 1 }),
-      clearEligibilityEnrollments: jest.fn().mockResolvedValue({ entries: [], totalCount: 0 }),
+      listEligibilityEnrollments: jest
+        .fn()
+        .mockResolvedValue({ entries: [], totalCount: 0 }),
+      addEligibilityEnrollments: jest
+        .fn()
+        .mockResolvedValue({ createdCount: 1 }),
+      importEligibilityEnrollments: jest
+        .fn()
+        .mockResolvedValue({ createdCount: 1 }),
+      clearEligibilityEnrollments: jest
+        .fn()
+        .mockResolvedValue({ entries: [], totalCount: 0 }),
       deleteEligibilityEnrollment: jest.fn().mockResolvedValue(undefined),
       getAdminPollResults: jest.fn().mockResolvedValue({ pollId: 'poll-1' }),
-      exportCacicElectionVoterEnrollments: jest.fn().mockResolvedValue('24123456\n25123456'),
-      streamAdminPollResults: jest.fn().mockReturnValue(of({ data: { pollId: 'poll-1' } })),
-      listAdminCacicElectionSlates: jest.fn().mockResolvedValue([{ id: 'slate-1' }]),
-      createAdminCacicElectionSlate: jest.fn().mockResolvedValue({ id: 'slate-1' }),
-      updateAdminCacicElectionSlate: jest.fn().mockResolvedValue({ id: 'slate-1' }),
-      rejectCacicElectionSlate: jest.fn().mockResolvedValue({ id: 'slate-1', status: 'rejected' }),
-      updateCacicElectionSlateEnabled: jest.fn().mockResolvedValue({ id: 'slate-1', enabled: false }),
+      exportCacicElectionVoterEnrollments: jest
+        .fn()
+        .mockResolvedValue('24123456\n25123456'),
+      streamAdminPollResults: jest
+        .fn()
+        .mockReturnValue(of({ data: { pollId: 'poll-1' } })),
+      listAdminCacicElectionSlates: jest
+        .fn()
+        .mockResolvedValue([{ id: 'slate-1' }]),
+      createAdminCacicElectionSlate: jest
+        .fn()
+        .mockResolvedValue({ id: 'slate-1' }),
+      updateAdminCacicElectionSlate: jest
+        .fn()
+        .mockResolvedValue({ id: 'slate-1' }),
+      rejectCacicElectionSlate: jest
+        .fn()
+        .mockResolvedValue({ id: 'slate-1', status: 'rejected' }),
+      updateCacicElectionSlateEnabled: jest
+        .fn()
+        .mockResolvedValue({ id: 'slate-1', enabled: false }),
       deleteCacicElectionSlate: jest.fn().mockResolvedValue(undefined),
       getAdminPoll: jest.fn().mockResolvedValue({ id: 'poll-1' }),
       createPoll: jest.fn().mockResolvedValue({ id: 'poll-1' }),
@@ -91,33 +118,62 @@ describe('AdminPollsController', () => {
   it('delegates read operations to PollsService', async () => {
     const request = { user: createUser() } as AuthenticatedRequest;
 
-    await expect(controller.listPolls(request)).resolves.toEqual(['poll-summary']);
+    await expect(controller.listPolls(request)).resolves.toEqual([
+      'poll-summary',
+    ]);
     await expect(controller.listLinkableEvents()).resolves.toEqual(['event']);
-    await expect(controller.listEligibilityEnrollments('poll-1', request)).resolves.toEqual({
+    await expect(
+      controller.listEligibilityEnrollments('poll-1', request),
+    ).resolves.toEqual({
       entries: [],
       totalCount: 0,
     });
-    await expect(controller.getPollResults('poll-1', request)).resolves.toEqual({ pollId: 'poll-1' });
-    await expect(controller.listCacicElectionSlates('poll-1', request)).resolves.toEqual([{ id: 'slate-1' }]);
-    await expect(controller.getPoll('poll-1', request)).resolves.toEqual({ id: 'poll-1' });
+    await expect(controller.getPollResults('poll-1', request)).resolves.toEqual(
+      { pollId: 'poll-1' },
+    );
+    await expect(
+      controller.listCacicElectionSlates('poll-1', request),
+    ).resolves.toEqual([{ id: 'slate-1' }]);
+    await expect(controller.getPoll('poll-1', request)).resolves.toEqual({
+      id: 'poll-1',
+    });
 
     const response = {
       attachment: jest.fn().mockReturnThis(),
       send: jest.fn().mockReturnThis(),
       type: jest.fn().mockReturnThis(),
     };
-    await controller.exportCacicElectionVoterEnrollments('poll-1', request, response as never);
-    expect(polls.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith('poll-1', request.user);
+    await controller.exportCacicElectionVoterEnrollments(
+      'poll-1',
+      request,
+      response as never,
+    );
+    expect(polls.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith(
+      'poll-1',
+      request.user,
+    );
     expect(response.type).toHaveBeenCalledWith('text/plain; charset=utf-8');
-    expect(response.attachment).toHaveBeenCalledWith('cacic-election-poll-1-voters.txt');
+    expect(response.attachment).toHaveBeenCalledWith(
+      'cacic-election-poll-1-voters.txt',
+    );
     expect(response.send).toHaveBeenCalledWith('24123456\n25123456');
 
     const events = controller.streamPollResults('poll-1', request, '3');
-    expect(polls.streamAdminPollResults).toHaveBeenCalledWith('poll-1', '3', request.user);
-    await expect(new Promise((resolve) => events.subscribe(resolve))).resolves.toEqual({ data: { pollId: 'poll-1' } });
+    expect(polls.streamAdminPollResults).toHaveBeenCalledWith(
+      'poll-1',
+      '3',
+      request.user,
+    );
+    await expect(
+      new Promise((resolve) => events.subscribe(resolve)),
+    ).resolves.toEqual({ data: { pollId: 'poll-1' } });
 
     controller.streamPollResults('poll-1', request, 'bad');
-    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith('poll-1', 'bad', request.user);
+    expect(polls.streamAdminPollResults).toHaveBeenLastCalledWith(
+      'poll-1',
+      'bad',
+      request.user,
+    );
   });
 
   it('delegates write operations with the authenticated user', async () => {
@@ -125,54 +181,106 @@ describe('AdminPollsController', () => {
     const request = { user } as AuthenticatedRequest;
     const savePoll = { title: 'Poll', elements: [] };
 
-    await controller.addEligibilityEnrollments('poll-1', request, { enrollmentNumbers: ['20240001'] });
+    await controller.addEligibilityEnrollments('poll-1', request, {
+      enrollmentNumbers: ['20240001'],
+    });
     await controller.importEligibilityEnrollments('poll-1', request, {
       format: 'txt',
       content: '20240001',
     });
-    await controller.createCacicElectionSlate('poll-1', request, { name: 'Chapa 1' } as never);
-    await controller.updateCacicElectionSlate('poll-1', 'slate-1', request, { name: 'Chapa 2' } as never);
+    await controller.createCacicElectionSlate('poll-1', request, {
+      name: 'Chapa 1',
+    } as never);
+    await controller.updateCacicElectionSlate('poll-1', 'slate-1', request, {
+      name: 'Chapa 2',
+    } as never);
     await controller.rejectCacicElectionSlate('poll-1', 'slate-1', request, {
       reason: 'Documentos incompletos.',
     });
-    await controller.updateCacicElectionSlateEnabled('poll-1', 'slate-1', { enabled: false }, request);
+    await controller.updateCacicElectionSlateEnabled(
+      'poll-1',
+      'slate-1',
+      { enabled: false },
+      request,
+    );
     await controller.deleteCacicElectionSlate('poll-1', 'slate-1', request);
     await controller.clearEligibilityEnrollments('poll-1', request);
     await controller.deleteEligibilityEnrollment('poll-1', '20240001', request);
-    await controller.uploadPollImage('poll-1', { originalname: 'image.png' } as never, request);
+    await controller.uploadPollImage(
+      'poll-1',
+      { originalname: 'image.png' } as never,
+      request,
+    );
     await controller.deletePollImage('poll-1', 'image-1');
     await controller.createPoll(request, savePoll as never);
     await controller.updatePoll('poll-1', request, savePoll as never);
     await controller.updateStatus('poll-1', request, { status: 'published' });
     await controller.deletePoll('poll-1', request);
 
-    expect(polls.addEligibilityEnrollments).toHaveBeenCalledWith('poll-1', { enrollmentNumbers: ['20240001'] }, user);
+    expect(polls.addEligibilityEnrollments).toHaveBeenCalledWith(
+      'poll-1',
+      { enrollmentNumbers: ['20240001'] },
+      user,
+    );
     expect(polls.importEligibilityEnrollments).toHaveBeenCalledWith(
       'poll-1',
       { format: 'txt', content: '20240001' },
       user,
     );
-    expect(polls.createAdminCacicElectionSlate).toHaveBeenCalledWith('poll-1', { name: 'Chapa 1' }, user);
-    expect(polls.updateAdminCacicElectionSlate).toHaveBeenCalledWith('poll-1', 'slate-1', { name: 'Chapa 2' }, user);
+    expect(polls.createAdminCacicElectionSlate).toHaveBeenCalledWith(
+      'poll-1',
+      { name: 'Chapa 1' },
+      user,
+    );
+    expect(polls.updateAdminCacicElectionSlate).toHaveBeenCalledWith(
+      'poll-1',
+      'slate-1',
+      { name: 'Chapa 2' },
+      user,
+    );
     expect(polls.rejectCacicElectionSlate).toHaveBeenCalledWith(
       'poll-1',
       'slate-1',
       { reason: 'Documentos incompletos.' },
       user,
     );
-    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith('poll-1', 'slate-1', { enabled: false }, user);
-    expect(polls.deleteCacicElectionSlate).toHaveBeenCalledWith('poll-1', 'slate-1', user);
-    expect(pollImages.uploadPollImage).toHaveBeenCalledWith('poll-1', { originalname: 'image.png' }, user);
-    expect(pollImages.deletePollImage).toHaveBeenCalledWith('poll-1', 'image-1');
+    expect(polls.updateCacicElectionSlateEnabled).toHaveBeenCalledWith(
+      'poll-1',
+      'slate-1',
+      { enabled: false },
+      user,
+    );
+    expect(polls.deleteCacicElectionSlate).toHaveBeenCalledWith(
+      'poll-1',
+      'slate-1',
+      user,
+    );
+    expect(pollImages.uploadPollImage).toHaveBeenCalledWith(
+      'poll-1',
+      { originalname: 'image.png' },
+      user,
+    );
+    expect(pollImages.deletePollImage).toHaveBeenCalledWith(
+      'poll-1',
+      'image-1',
+    );
     expect(polls.createPoll).toHaveBeenCalledWith(savePoll, user);
     expect(polls.updatePoll).toHaveBeenCalledWith('poll-1', savePoll, user);
-    expect(polls.updatePollStatus).toHaveBeenCalledWith('poll-1', 'published', user, undefined);
+    expect(polls.updatePollStatus).toHaveBeenCalledWith(
+      'poll-1',
+      'published',
+      user,
+      undefined,
+    );
     expect(polls.deletePoll).toHaveBeenCalledWith('poll-1', user);
   });
 
   it('rejects write operations without an authenticated user', async () => {
     expect(() =>
-      controller.createPoll({} as AuthenticatedRequest, { title: 'Poll', elements: [] } as never),
+      controller.createPoll(
+        {} as AuthenticatedRequest,
+        { title: 'Poll', elements: [] } as never,
+      ),
     ).toThrow(UnauthorizedException);
   });
 

@@ -1,8 +1,14 @@
 import 'dotenv/config';
 import { Logger, type INestApplication } from '@nestjs/common';
 import type { Server } from '@grpc/grpc-js';
-import { createBackendHttpApp, getBackendGlobalPrefix } from './app/bootstrap/backend-http-app';
-import { startVotingGrpcServer, shutdownVotingGrpcServer } from './app/grpc/voting-grpc.server';
+import {
+  createBackendHttpApp,
+  getBackendGlobalPrefix,
+} from './app/bootstrap/backend-http-app';
+import {
+  startVotingGrpcServer,
+  shutdownVotingGrpcServer,
+} from './app/grpc/voting-grpc.server';
 
 export async function bootstrap(): Promise<void> {
   let app: INestApplication | undefined;

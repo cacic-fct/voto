@@ -25,7 +25,9 @@ export function normalizePostLoginRedirect(
     return undefined;
   }
 
-  const applicationOrigin = normalizeApplicationOrigin(options.applicationOrigin);
+  const applicationOrigin = normalizeApplicationOrigin(
+    options.applicationOrigin,
+  );
   const isRelativePath = redirect.startsWith('/');
 
   if (isRelativePath) {

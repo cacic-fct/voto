@@ -47,7 +47,9 @@ export class VotingGrpcServerLifecycle implements OnApplicationShutdown {
   }
 }
 
-export async function startVotingGrpcServer(app: INestApplication): Promise<Server> {
+export async function startVotingGrpcServer(
+  app: INestApplication,
+): Promise<Server> {
   const server = new Server({
     'grpc.max_receive_message_length': 4 * 1024 * 1024,
     'grpc.max_send_message_length': 4 * 1024 * 1024,
@@ -69,14 +71,19 @@ export async function startVotingGrpcServer(app: INestApplication): Promise<Serv
   const bindUrl = process.env.VOTING_GRPC_BIND_URL?.trim() || '0.0.0.0:50051';
   app.get(VotingGrpcServerLifecycle).register(server);
   await new Promise<void>((resolve, reject) => {
-    server.bindAsync(bindUrl, ServerCredentials.createInsecure(), (error) => (error ? reject(error) : resolve()));
+    server.bindAsync(bindUrl, ServerCredentials.createInsecure(), (error) =>
+      error ? reject(error) : resolve(),
+    );
   });
   logger.log(`CACiC Voto LGPD gRPC server is listening on ${bindUrl}.`);
   return server;
 }
 
 export async function shutdownVotingGrpcServer(server: Server): Promise<void> {
-  const timeoutMs = parsePositiveIntegerEnv(process.env.VOTING_GRPC_SHUTDOWN_TIMEOUT_MS, 10_000);
+  const timeoutMs = parsePositiveIntegerEnv(
+    process.env.VOTING_GRPC_SHUTDOWN_TIMEOUT_MS,
+    10_000,
+  );
   let settled = false;
   let resolveShutdown: (() => void) | undefined;
   const shutdown = new Promise<void>((resolve) => {
@@ -106,36 +113,66 @@ export async function shutdownVotingGrpcServer(server: Server): Promise<void> {
   }
 }
 
-function parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {
+function parsePositiveIntegerEnv(
+  rawValue: string | undefined,
+  fallback: number,
+): number {
   const value = Number.parseInt(rawValue ?? '', 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-export function createVotingGrpcHandlers(dependencies: VotingGrpcDependencies): UntypedServiceImplementation {
+export function createVotingGrpcHandlers(
+  dependencies: VotingGrpcDependencies,
+): UntypedServiceImplementation {
   return {
     collectLgpdUserData: unary(async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:read']);
-      return { json: JSON.stringify(await dependencies.lgpd.collectUserData(lgpdUserInput(call.request))) };
+      return {
+        json: JSON.stringify(
+          await dependencies.lgpd.collectUserData(lgpdUserInput(call.request)),
+        ),
+      };
     }),
     scheduleLgpdDeletion: unary(async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
-      return { json: JSON.stringify(await dependencies.lgpd.scheduleDeletion(lgpdDeletionInput(call.request))) };
+      return {
+        json: JSON.stringify(
+          await dependencies.lgpd.scheduleDeletion(
+            lgpdDeletionInput(call.request),
+          ),
+        ),
+      };
     }),
     cancelLgpdDeletion: unary(async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
-      return { json: JSON.stringify(await dependencies.lgpd.cancelDeletion(lgpdDeletionInput(call.request))) };
+      return {
+        json: JSON.stringify(
+          await dependencies.lgpd.cancelDeletion(
+            lgpdDeletionInput(call.request),
+          ),
+        ),
+      };
     }),
     deleteLgpdData: unary(async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
-      return { json: JSON.stringify(await dependencies.lgpd.hardDelete(lgpdDeletionInput(call.request))) };
+      return {
+        json: JSON.stringify(
+          await dependencies.lgpd.hardDelete(lgpdDeletionInput(call.request)),
+        ),
+      };
     }),
   };
 }
 
 function unary(
-  handler: (call: ServerUnaryCall<GrpcRequest, GrpcResponse>) => Promise<GrpcResponse>,
+  handler: (
+    call: ServerUnaryCall<GrpcRequest, GrpcResponse>,
+  ) => Promise<GrpcResponse>,
 ): handleUnaryCall<GrpcRequest, GrpcResponse> {
-  return (call: ServerUnaryCall<GrpcRequest, GrpcResponse>, callback: sendUnaryData<GrpcResponse>) => {
+  return (
+    call: ServerUnaryCall<GrpcRequest, GrpcResponse>,
+    callback: sendUnaryData<GrpcResponse>,
+  ) => {
     void handler(call).then(
       (response) => callback(null, response),
       (error: unknown) => callback(toServiceError(error), null),
@@ -143,7 +180,11 @@ function unary(
   };
 }
 
-async function authorize(metadata: Metadata, auth: KeycloakAuthService, requiredRoles: readonly string[]): Promise<void> {
+async function authorize(
+  metadata: Metadata,
+  auth: KeycloakAuthService,
+  requiredRoles: readonly string[],
+): Promise<void> {
   const raw = metadata.get('authorization')[0];
   const header = Buffer.isBuffer(raw) ? raw.toString('utf8') : raw;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
@@ -157,18 +198,29 @@ async function authorize(metadata: Metadata, auth: KeycloakAuthService, required
 }
 
 function allowedLgpdM2mClients(): string[] {
-  const configured = process.env.LGPD_M2M_ALLOWED_CLIENTS ?? 'cacic-account-manager-m2m';
-  return configured.split(',').map((clientId) => clientId.trim()).filter(Boolean);
+  const configured =
+    process.env.LGPD_M2M_ALLOWED_CLIENTS ?? 'cacic-account-manager-m2m';
+  return configured
+    .split(',')
+    .map((clientId) => clientId.trim())
+    .filter(Boolean);
 }
 
-function lgpdUserInput(request: GrpcRequest): { userId: string; email?: string } {
+function lgpdUserInput(request: GrpcRequest): {
+  userId: string;
+  email?: string;
+} {
   return {
     userId: requiredString(request, 'userId'),
     ...optionalStringFields(request, ['email']),
   };
 }
 
-function lgpdDeletionInput(request: GrpcRequest): { requestId: string; userId: string; email?: string } {
+function lgpdDeletionInput(request: GrpcRequest): {
+  requestId: string;
+  userId: string;
+  email?: string;
+} {
   return {
     requestId: requiredString(request, 'requestId'),
     ...lgpdUserInput(request),
@@ -185,7 +237,10 @@ function requiredString(value: GrpcRequest, key: string): string {
   if (normalized.length > maxLength || containsControlCharacters(normalized)) {
     throw new BadRequestException(`${key} is invalid.`);
   }
-  if (key === 'requestId' && !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(normalized)) {
+  if (
+    key === 'requestId' &&
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(normalized)
+  ) {
     throw new BadRequestException('requestId is invalid.');
   }
   return normalized;
@@ -198,7 +253,11 @@ function optionalStringFields<T extends readonly string[]>(
   return Object.fromEntries(
     keys.flatMap((key) => {
       const raw = value[key];
-      if (raw === undefined || raw === null || (typeof raw === 'string' && !raw.trim())) {
+      if (
+        raw === undefined ||
+        raw === null ||
+        (typeof raw === 'string' && !raw.trim())
+      ) {
         return [];
       }
       if (typeof raw !== 'string') {
@@ -224,9 +283,19 @@ function containsControlCharacters(value: string): boolean {
 }
 
 export function toServiceError(error: unknown): ServiceError {
-  const code = error instanceof HttpException ? grpcStatusForHttpStatus(error.getStatus()) : status.INTERNAL;
-  const details = error instanceof HttpException ? error.message : 'Internal gRPC service error.';
-  return Object.assign(new Error(details), { code, details, metadata: new Metadata() });
+  const code =
+    error instanceof HttpException
+      ? grpcStatusForHttpStatus(error.getStatus())
+      : status.INTERNAL;
+  const details =
+    error instanceof HttpException
+      ? error.message
+      : 'Internal gRPC service error.';
+  return Object.assign(new Error(details), {
+    code,
+    details,
+    metadata: new Metadata(),
+  });
 }
 
 function grpcStatusForHttpStatus(httpStatus: number): status {

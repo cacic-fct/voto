@@ -43,7 +43,10 @@ import type {
 } from '@org/voting-contracts';
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
-import type { AuthenticatedPrincipal, AuthenticatedRequest } from '../auth/auth.types';
+import type {
+  AuthenticatedPrincipal,
+  AuthenticatedRequest,
+} from '../auth/auth.types';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import {
   AddPollEligibilityEnrollmentsDto,
@@ -90,7 +93,9 @@ export class AdminPollsController {
 
   @Get('linkable-events')
   @RequirePermissions('poll#create')
-  @ApiOperation({ summary: 'List Event Manager events available for poll links' })
+  @ApiOperation({
+    summary: 'List Event Manager events available for poll links',
+  })
   @ApiOkResponse({ description: 'Events happening today or in the future.' })
   listLinkableEvents(): Promise<EventManagerEvent[]> {
     return this.polls.listLinkableEvents();
@@ -98,15 +103,21 @@ export class AdminPollsController {
 
   @Get(':id/eligibility-enrollments')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'List enrollment numbers allowed to vote in a poll' })
-  @ApiOkResponse({ description: 'Enrollment numbers enriched with Event Manager display data when available.' })
+  @ApiOperation({
+    summary: 'List enrollment numbers allowed to vote in a poll',
+  })
+  @ApiOkResponse({
+    description:
+      'Enrollment numbers enriched with Event Manager display data when available.',
+  })
   listEligibilityEnrollments(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<PollEligibilityEnrollmentList> {
     const user = this.getUser(request);
     return this.polls.listEligibilityEnrollments(id, user, {
-      includePeople: hasVotingAdminRole(user.roles) || user.permissionSet.has('poll#read'),
+      includePeople:
+        hasVotingAdminRole(user.roles) || user.permissionSet.has('poll#read'),
     });
   }
 
@@ -120,60 +131,101 @@ export class AdminPollsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: AddPollEligibilityEnrollmentsDto,
   ): Promise<PollEligibilityEnrollmentImportResult> {
-    return this.polls.addEligibilityEnrollments(id, body, this.getUser(request));
+    return this.polls.addEligibilityEnrollments(
+      id,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Put(':id/eligibility-enrollments/import')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Import enrollment numbers from TXT or CSV content' })
+  @ApiOperation({
+    summary: 'Import enrollment numbers from TXT or CSV content',
+  })
   @ApiBody({ type: ImportPollEligibilityEnrollmentsDto })
-  @ApiOkResponse({ description: 'Import summary and updated enrollment eligibility list.' })
+  @ApiOkResponse({
+    description: 'Import summary and updated enrollment eligibility list.',
+  })
   importEligibilityEnrollments(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
     @Body() body: ImportPollEligibilityEnrollmentsDto,
   ): Promise<PollEligibilityEnrollmentImportResult> {
-    return this.polls.importEligibilityEnrollments(id, body, this.getUser(request));
+    return this.polls.importEligibilityEnrollments(
+      id,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Delete(':id/eligibility-enrollments')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Remove every enrollment number from a poll eligibility list' })
+  @ApiOperation({
+    summary: 'Remove every enrollment number from a poll eligibility list',
+  })
   @ApiOkResponse({ description: 'Empty enrollment eligibility list.' })
-  clearEligibilityEnrollments(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<PollEligibilityEnrollmentList> {
+  clearEligibilityEnrollments(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PollEligibilityEnrollmentList> {
     return this.polls.clearEligibilityEnrollments(id, this.getUser(request));
   }
 
   @Delete(':id/eligibility-enrollments/:enrollmentNumber')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Remove one enrollment number from a poll eligibility list' })
-  @ApiNoContentResponse({ description: 'Enrollment number removed when present.' })
+  @ApiOperation({
+    summary: 'Remove one enrollment number from a poll eligibility list',
+  })
+  @ApiNoContentResponse({
+    description: 'Enrollment number removed when present.',
+  })
   async deleteEligibilityEnrollment(
     @Param('id') id: string,
     @Param('enrollmentNumber') enrollmentNumber: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<void> {
-    await this.polls.deleteEligibilityEnrollment(id, enrollmentNumber, this.getUser(request));
+    await this.polls.deleteEligibilityEnrollment(
+      id,
+      enrollmentNumber,
+      this.getUser(request),
+    );
   }
 
   @Get(':id/results')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'Read poll responses and voter metadata for administrators' })
-  @ApiOkResponse({ description: 'Poll results with response answers and identity data when available.' })
-  getPollResults(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<PollResults> {
+  @ApiOperation({
+    summary: 'Read poll responses and voter metadata for administrators',
+  })
+  @ApiOkResponse({
+    description:
+      'Poll results with response answers and identity data when available.',
+  })
+  getPollResults(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PollResults> {
     return this.polls.getAdminPollResults(id, this.getUser(request));
   }
 
   @Get(':id/cacic-election/voter-enrollments.txt')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'Download enrollment numbers for voters in a closed CACiC election' })
-  @ApiOkResponse({ description: 'Plain text with one enrollment number per line.' })
+  @ApiOperation({
+    summary:
+      'Download enrollment numbers for voters in a closed CACiC election',
+  })
+  @ApiOkResponse({
+    description: 'Plain text with one enrollment number per line.',
+  })
   async exportCacicElectionVoterEnrollments(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
-    const content = await this.polls.exportCacicElectionVoterEnrollments(id, this.getUser(request));
+    const content = await this.polls.exportCacicElectionVoterEnrollments(
+      id,
+      this.getUser(request),
+    );
     response
       .type('text/plain; charset=utf-8')
       .attachment(`cacic-election-${id}-voters.txt`)
@@ -182,19 +234,30 @@ export class AdminPollsController {
 
   @Sse(':id/results/events')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'Stream new poll result responses for administrators' })
+  @ApiOperation({
+    summary: 'Stream new poll result responses for administrators',
+  })
   streamPollResults(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
     @Headers('last-event-id') lastEventId?: string,
   ): Observable<MessageEvent> {
-    return this.polls.streamAdminPollResults(id, lastEventId, this.getUser(request));
+    return this.polls.streamAdminPollResults(
+      id,
+      lastEventId,
+      this.getUser(request),
+    );
   }
 
   @Get(':id/cacic-election/slates')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'List CACiC election slate submissions for administrator review' })
-  @ApiOkResponse({ description: 'Slate submissions including private identifier fields for administrator review.' })
+  @ApiOperation({
+    summary: 'List CACiC election slate submissions for administrator review',
+  })
+  @ApiOkResponse({
+    description:
+      'Slate submissions including private identifier fields for administrator review.',
+  })
   listCacicElectionSlates(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
@@ -204,7 +267,9 @@ export class AdminPollsController {
 
   @Post(':id/cacic-election/slates')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Create a CACiC election slate manually as an administrator' })
+  @ApiOperation({
+    summary: 'Create a CACiC election slate manually as an administrator',
+  })
   @ApiBody({ type: UpdateCacicElectionSlateDto })
   @ApiCreatedResponse({ description: 'Created slate submission.' })
   createCacicElectionSlate(
@@ -212,12 +277,18 @@ export class AdminPollsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: UpdateCacicElectionSlateDto,
   ): Promise<AdminCacicElectionSlate> {
-    return this.polls.createAdminCacicElectionSlate(id, body, this.getUser(request));
+    return this.polls.createAdminCacicElectionSlate(
+      id,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Put(':id/cacic-election/slates/:slateId')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Replace a CACiC election slate submission as an administrator' })
+  @ApiOperation({
+    summary: 'Replace a CACiC election slate submission as an administrator',
+  })
   @ApiBody({ type: UpdateCacicElectionSlateDto })
   @ApiOkResponse({ description: 'Updated slate submission.' })
   updateCacicElectionSlate(
@@ -226,12 +297,19 @@ export class AdminPollsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: UpdateCacicElectionSlateDto,
   ): Promise<AdminCacicElectionSlate> {
-    return this.polls.updateAdminCacicElectionSlate(id, slateId, body, this.getUser(request));
+    return this.polls.updateAdminCacicElectionSlate(
+      id,
+      slateId,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Patch(':id/cacic-election/slates/:slateId/rejection')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Reject a CACiC election slate submission with a reason' })
+  @ApiOperation({
+    summary: 'Reject a CACiC election slate submission with a reason',
+  })
   @ApiBody({ type: RejectCacicElectionSlateDto })
   @ApiOkResponse({ description: 'Rejected slate submission.' })
   rejectCacicElectionSlate(
@@ -240,12 +318,19 @@ export class AdminPollsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: RejectCacicElectionSlateDto,
   ): Promise<AdminCacicElectionSlate> {
-    return this.polls.rejectCacicElectionSlate(id, slateId, body, this.getUser(request));
+    return this.polls.rejectCacicElectionSlate(
+      id,
+      slateId,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Patch(':id/cacic-election/slates/:slateId/enabled')
   @RequirePermissions('poll#edit')
-  @ApiOperation({ summary: 'Enable or disable an approved CACiC election slate' })
+  @ApiOperation({
+    summary: 'Enable or disable an approved CACiC election slate',
+  })
   @ApiBody({ type: UpdateCacicElectionSlateEnabledDto })
   @ApiOkResponse({ description: 'Updated slate submission.' })
   updateCacicElectionSlateEnabled(
@@ -254,7 +339,12 @@ export class AdminPollsController {
     @Body() body: UpdateCacicElectionSlateEnabledDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<AdminCacicElectionSlate> {
-    return this.polls.updateCacicElectionSlateEnabled(id, slateId, body, this.getUser(request));
+    return this.polls.updateCacicElectionSlateEnabled(
+      id,
+      slateId,
+      body,
+      this.getUser(request),
+    );
   }
 
   @Delete(':id/cacic-election/slates/:slateId')
@@ -266,14 +356,23 @@ export class AdminPollsController {
     @Param('slateId') slateId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<void> {
-    await this.polls.deleteCacicElectionSlate(id, slateId, this.getUser(request));
+    await this.polls.deleteCacicElectionSlate(
+      id,
+      slateId,
+      this.getUser(request),
+    );
   }
 
   @Get(':id')
   @RequirePermissions('poll#read')
-  @ApiOperation({ summary: 'Read a poll draft or published poll for administrators' })
+  @ApiOperation({
+    summary: 'Read a poll draft or published poll for administrators',
+  })
   @ApiOkResponse({ description: 'Full poll definition.' })
-  getPoll(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<Poll> {
+  getPoll(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<Poll> {
     return this.polls.getAdminPoll(id, this.getUser(request));
   }
 
@@ -291,7 +390,12 @@ export class AdminPollsController {
         callback: (error: Error | null, acceptFile: boolean) => void,
       ) => {
         if (!isAllowedPollImageMimeType(file.mimetype)) {
-          callback(new BadRequestException('A imagem precisa estar em um formato raster suportado.'), false);
+          callback(
+            new BadRequestException(
+              'A imagem precisa estar em um formato raster suportado.',
+            ),
+            false,
+          );
           return;
         }
 
@@ -303,7 +407,11 @@ export class AdminPollsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: PollImageUploadBodyDto })
   @ApiCreatedResponse({ description: 'Stored AVIF image metadata.' })
-  @ApiResponse({ status: 413, description: 'Returned when the uploaded file exceeds the configured image size limit.' })
+  @ApiResponse({
+    status: 413,
+    description:
+      'Returned when the uploaded file exceeds the configured image size limit.',
+  })
   uploadPollImage(
     @Param('id') id: string,
     @UploadedFile() file: UploadedPollImageFile | undefined,
@@ -316,7 +424,10 @@ export class AdminPollsController {
   @RequirePermissions('poll#edit')
   @ApiOperation({ summary: 'Delete an image uploaded for a poll' })
   @ApiNoContentResponse({ description: 'Image deleted when present.' })
-  async deletePollImage(@Param('id') id: string, @Param('imageId') imageId: string): Promise<void> {
+  async deletePollImage(
+    @Param('id') id: string,
+    @Param('imageId') imageId: string,
+  ): Promise<void> {
     await this.pollImages.deletePollImage(id, imageId);
   }
 
@@ -324,7 +435,10 @@ export class AdminPollsController {
   @RequirePermissions('poll#create')
   @ApiOperation({ summary: 'Create a poll' })
   @ApiCreatedResponse({ description: 'Created poll.' })
-  createPoll(@Req() request: AuthenticatedRequest, @Body() body: SavePollDto): Promise<Poll> {
+  createPoll(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: SavePollDto,
+  ): Promise<Poll> {
     return this.polls.createPoll(body, this.getUser(request));
   }
 
@@ -332,7 +446,11 @@ export class AdminPollsController {
   @RequirePermissions('poll#edit')
   @ApiOperation({ summary: 'Replace a poll definition' })
   @ApiOkResponse({ description: 'Updated poll.' })
-  updatePoll(@Param('id') id: string, @Req() request: AuthenticatedRequest, @Body() body: SavePollDto): Promise<Poll> {
+  updatePoll(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: SavePollDto,
+  ): Promise<Poll> {
     return this.polls.updatePoll(id, body, this.getUser(request));
   }
 
@@ -340,15 +458,27 @@ export class AdminPollsController {
   @RequirePermissions('poll#publish')
   @ApiOperation({ summary: 'Publish, close, or reopen a poll' })
   @ApiOkResponse({ description: 'Poll with updated status.' })
-  updateStatus(@Param('id') id: string, @Req() request: AuthenticatedRequest, @Body() body: PollStatusDto): Promise<Poll> {
-    return this.polls.updatePollStatus(id, body.status, this.getUser(request), body.expectedUpdatedAt);
+  updateStatus(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: PollStatusDto,
+  ): Promise<Poll> {
+    return this.polls.updatePollStatus(
+      id,
+      body.status,
+      this.getUser(request),
+      body.expectedUpdatedAt,
+    );
   }
 
   @Delete(':id')
   @RequirePermissions('poll#delete')
   @ApiOperation({ summary: 'Delete a poll and its responses' })
   @ApiNoContentResponse({ description: 'Poll deleted.' })
-  async deletePoll(@Param('id') id: string, @Req() request: AuthenticatedRequest): Promise<void> {
+  async deletePoll(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
     await this.polls.deletePoll(id, this.getUser(request));
   }
 
@@ -359,5 +489,4 @@ export class AdminPollsController {
 
     return request.user;
   }
-
 }

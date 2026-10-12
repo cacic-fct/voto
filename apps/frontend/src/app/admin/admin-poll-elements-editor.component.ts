@@ -1,5 +1,10 @@
 import { DragDropModule } from '@angular/cdk/drag-drop';
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -50,11 +55,17 @@ export class AdminPollElementsEditorComponent {
     return this.uploadingImageTarget() === target;
   }
 
-  protected uploadElementDescriptionImage(elementId: string, file: File | null): void {
+  protected uploadElementDescriptionImage(
+    elementId: string,
+    file: File | null,
+  ): void {
     this.uploadImage.emit({ elementId, file });
   }
 
-  protected removeElementDescriptionImage(elementId: string, image: PollImage): void {
+  protected removeElementDescriptionImage(
+    elementId: string,
+    image: PollImage,
+  ): void {
     this.removeImage.emit({ elementId, image });
   }
 }

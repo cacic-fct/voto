@@ -37,10 +37,18 @@ export class PollCacicElectionElementsService {
       return input.elements;
     }
 
-    return this.resolveCacicElectionElements(tx, pollId, input.elements, metadata.cacicElectionPhase);
+    return this.resolveCacicElectionElements(
+      tx,
+      pollId,
+      input.elements,
+      metadata.cacicElectionPhase,
+    );
   }
 
-  async refreshCacicElectionVoteElement(tx: Prisma.TransactionClient, pollId: string): Promise<void> {
+  async refreshCacicElectionVoteElement(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+  ): Promise<void> {
     const poll = await tx.poll.findUnique({
       where: { id: pollId },
       select: {
@@ -49,11 +57,19 @@ export class PollCacicElectionElementsService {
       },
     });
 
-    if (!poll || poll.mode !== DbPollMode.CACIC_ELECTION || poll.cacicElectionPhase !== DbCacicElectionPhase.ELECTION) {
+    if (
+      !poll ||
+      poll.mode !== DbPollMode.CACIC_ELECTION ||
+      poll.cacicElectionPhase !== DbCacicElectionPhase.ELECTION
+    ) {
       return;
     }
 
-    await this.upsertCacicElectionVoteElement(tx, pollId, await this.buildCacicElectionVoteElement(tx, pollId));
+    await this.upsertCacicElectionVoteElement(
+      tx,
+      pollId,
+      await this.buildCacicElectionVoteElement(tx, pollId),
+    );
   }
 
   private async resolveCacicElectionElements(
@@ -66,7 +82,10 @@ export class PollCacicElectionElementsService {
       phase === DbCacicElectionPhase.ELECTION
         ? await this.buildCacicElectionVoteElement(tx, pollId)
         : this.buildCacicElectionSlateFormElement();
-    const generatedIds = new Set([CACIC_ELECTION_SLATE_FORM_ELEMENT_ID, CACIC_ELECTION_VOTE_ELEMENT_ID]);
+    const generatedIds = new Set([
+      CACIC_ELECTION_SLATE_FORM_ELEMENT_ID,
+      CACIC_ELECTION_VOTE_ELEMENT_ID,
+    ]);
     const resolvedElements: SavePollDto['elements'] = [];
     let insertedGeneratedElement = false;
 
@@ -82,7 +101,9 @@ export class PollCacicElectionElementsService {
       }
     }
 
-    return insertedGeneratedElement ? resolvedElements : [generatedElement, ...resolvedElements];
+    return insertedGeneratedElement
+      ? resolvedElements
+      : [generatedElement, ...resolvedElements];
   }
 
   private buildCacicElectionSlateFormElement(): SavePollDto['elements'][number] {
@@ -118,7 +139,8 @@ export class PollCacicElectionElementsService {
       id: CACIC_ELECTION_VOTE_ELEMENT_ID,
       type: 'singleChoice',
       title: 'Escolha a chapa',
-      description: 'Selecione uma chapa aprovada ou registre voto em branco ou nulo.',
+      description:
+        'Selecione uma chapa aprovada ou registre voto em branco ou nulo.',
       required: true,
       options: [
         ...slates.map((slate) => ({
@@ -147,18 +169,24 @@ export class PollCacicElectionElementsService {
     const existingElement = await tx.pollElement.findFirst({
       where: {
         pollId,
-        OR: [{ id: element.id }, { id: namespacedPollElementId(pollId, element.id) }],
+        OR: [
+          { id: element.id },
+          { id: namespacedPollElementId(pollId, element.id) },
+        ],
       },
       select: { id: true },
     });
-    const storedElementId = existingElement?.id ?? namespacedPollElementId(pollId, element.id);
+    const storedElementId =
+      existingElement?.id ?? namespacedPollElementId(pollId, element.id);
     if (!existingElement) {
       const conflictingElement = await tx.pollElement.findFirst({
         where: { id: storedElementId },
         select: { id: true, pollId: true },
       });
       assertDeterministicIdentifierAvailable(
-        conflictingElement ? { id: conflictingElement.id, parentId: conflictingElement.pollId } : null,
+        conflictingElement
+          ? { id: conflictingElement.id, parentId: conflictingElement.pollId }
+          : null,
         pollId,
         'element identifier',
       );

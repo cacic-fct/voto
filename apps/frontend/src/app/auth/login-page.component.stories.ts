@@ -1,9 +1,16 @@
 import { computed, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
 import { AuthService } from './auth.service';
 import { LoginPageComponent } from './login-page.component';
-import { createStoryUser, storybookBaseProviders } from '../testing/storybook-voting-mocks';
+import {
+  createStoryUser,
+  storybookBaseProviders,
+} from '../testing/storybook-voting-mocks';
 
 type LoginStoryArgs = {
   autenticado: boolean;
@@ -21,7 +28,9 @@ function createAuthServiceMock(): AuthService {
     login: async () => undefined,
     consumeLogoutWarning: () => null,
     user: computed(() =>
-      loginStoryState().autenticado ? createStoryUser(loginStoryState().email, false) : null,
+      loginStoryState().autenticado
+        ? createStoryUser(loginStoryState().email, false)
+        : null,
     ),
   } as unknown as AuthService;
 }

@@ -13,13 +13,20 @@ import {
   PollEligibilityEnrollmentList,
   PollEligibilityMutationMode,
 } from '@org/voting-contracts';
-import { PollStatus as DbPollStatus, Prisma, PollVoterEligibilitySource as DbPollVoterEligibilitySource } from '@prisma/client';
+import {
+  PollStatus as DbPollStatus,
+  Prisma,
+  PollVoterEligibilitySource as DbPollVoterEligibilitySource,
+} from '@prisma/client';
 import { AuthenticatedPrincipal, AuthenticatedVoter } from '../auth/auth.types';
 import { AccountManagerIntegrationService } from '../account-manager/account-manager-integration.service';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
 import { FeatureFlagService } from '../feature-flags/feature-flags.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AddPollEligibilityEnrollmentsDto, ImportPollEligibilityEnrollmentsDto } from './dto/poll.dto';
+import {
+  AddPollEligibilityEnrollmentsDto,
+  ImportPollEligibilityEnrollmentsDto,
+} from './dto/poll.dto';
 import { recordPollAdminAudit } from './poll-admin-audit';
 import { isSerializationConflictError } from './poll-auth';
 import {
@@ -70,7 +77,9 @@ export class PollEligibilityService {
       },
     });
 
-    return this.toEligibilityEnrollmentList(records, { includePeople: options.includePeople ?? true });
+    return this.toEligibilityEnrollmentList(records, {
+      includePeople: options.includePeople ?? true,
+    });
   }
 
   async addEligibilityEnrollments(
@@ -80,7 +89,12 @@ export class PollEligibilityService {
   ): Promise<PollEligibilityEnrollmentImportResult> {
     await this.assertEligibilityMutable(pollId);
     const parsed = this.normalizeEnrollmentNumbers(input.enrollmentNumbers);
-    return this.replaceOrAppendEligibilityEnrollments(pollId, parsed, 'append', user.sub);
+    return this.replaceOrAppendEligibilityEnrollments(
+      pollId,
+      parsed,
+      'append',
+      user.sub,
+    );
   }
 
   async importEligibilityEnrollments(
@@ -90,12 +104,22 @@ export class PollEligibilityService {
   ): Promise<PollEligibilityEnrollmentImportResult> {
     await this.assertEligibilityMutable(pollId);
     const parsed = this.parseEligibilityImport(input);
-    return this.replaceOrAppendEligibilityEnrollments(pollId, parsed, input.mode ?? 'append', user.sub);
+    return this.replaceOrAppendEligibilityEnrollments(
+      pollId,
+      parsed,
+      input.mode ?? 'append',
+      user.sub,
+    );
   }
 
-  async deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string, user?: AuthenticatedPrincipal): Promise<void> {
+  async deleteEligibilityEnrollment(
+    pollId: string,
+    enrollmentNumber: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<void> {
     await this.assertEligibilityMutable(pollId);
-    const normalizedEnrollmentNumber = normalizeEnrollmentNumber(enrollmentNumber);
+    const normalizedEnrollmentNumber =
+      normalizeEnrollmentNumber(enrollmentNumber);
     if (!normalizedEnrollmentNumber) {
       throw new BadRequestException('Enrollment number is required.');
     }
@@ -108,18 +132,37 @@ export class PollEligibilityService {
           enrollmentNumber: normalizedEnrollmentNumber,
         },
       });
-      const updated = await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
-      await recordPollAdminAudit(tx, { pollId, actorId: user?.sub, action: 'eligibility.removed', afterVersion: updated?.updatedAt });
+      const updated = await tx.poll.update({
+        where: { id: pollId },
+        data: { updatedAt: new Date() },
+      });
+      await recordPollAdminAudit(tx, {
+        pollId,
+        actorId: user?.sub,
+        action: 'eligibility.removed',
+        afterVersion: updated?.updatedAt,
+      });
     }, 'Eligibility list changed concurrently. Reload and retry.');
   }
 
-  async clearEligibilityEnrollments(pollId: string, user?: AuthenticatedPrincipal): Promise<PollEligibilityEnrollmentList> {
+  async clearEligibilityEnrollments(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollEligibilityEnrollmentList> {
     await this.assertEligibilityMutable(pollId);
     await this.runSerializableTransaction(async (tx) => {
       await this.assertEligibilityMutableWithClient(tx, pollId);
       await tx.pollEligibilityEnrollment.deleteMany({ where: { pollId } });
-      const updated = await tx.poll.update({ where: { id: pollId }, data: { updatedAt: new Date() } });
-      await recordPollAdminAudit(tx, { pollId, actorId: user?.sub, action: 'eligibility.cleared', afterVersion: updated?.updatedAt });
+      const updated = await tx.poll.update({
+        where: { id: pollId },
+        data: { updatedAt: new Date() },
+      });
+      await recordPollAdminAudit(tx, {
+        pollId,
+        actorId: user?.sub,
+        action: 'eligibility.cleared',
+        afterVersion: updated?.updatedAt,
+      });
     }, 'Eligibility list changed concurrently. Reload and retry.');
     return {
       entries: [],
@@ -130,7 +173,9 @@ export class PollEligibilityService {
   async ensureVotingAllowed(
     poll: PollEligibilityRecord,
     user: AuthenticatedVoter,
-    client: Pick<PrismaService, 'pollEligibilityEnrollment'> | Prisma.TransactionClient = this.prisma,
+    client:
+      | Pick<PrismaService, 'pollEligibilityEnrollment'>
+      | Prisma.TransactionClient = this.prisma,
     options: EligibilityCheckOptions = {},
   ): Promise<void> {
     switch (poll.voterEligibilitySource) {
@@ -140,7 +185,11 @@ export class PollEligibilityService {
         this.ensureUnespUserVotingAllowed(user);
         return;
       case DbPollVoterEligibilitySource.COMPUTER_SCIENCE_STUDENTS:
-        await this.ensureComputerScienceStudentVotingAllowed(poll, user, options);
+        await this.ensureComputerScienceStudentVotingAllowed(
+          poll,
+          user,
+          options,
+        );
         return;
       case DbPollVoterEligibilitySource.EVENT_ATTENDANCE:
         await this.ensureEventAttendanceVotingAllowed(poll, user, options);
@@ -151,7 +200,11 @@ export class PollEligibilityService {
         return;
       case DbPollVoterEligibilitySource.EVENT_ATTENDANCE_COMPUTER_SCIENCE_STUDENTS:
         await this.ensureEventAttendanceVotingAllowed(poll, user, options);
-        await this.ensureComputerScienceStudentVotingAllowed(poll, user, options);
+        await this.ensureComputerScienceStudentVotingAllowed(
+          poll,
+          user,
+          options,
+        );
         return;
       case DbPollVoterEligibilitySource.ENROLLMENT_LIST:
         await this.ensureEnrollmentListVotingAllowed(poll, user, client);
@@ -161,16 +214,23 @@ export class PollEligibilityService {
     throw new ForbiddenException('Voting is not allowed for this poll.');
   }
 
-  parseEligibilityImport(input: ImportPollEligibilityEnrollmentsDto): ParsedEligibilityEnrollments {
+  parseEligibilityImport(
+    input: ImportPollEligibilityEnrollmentsDto,
+  ): ParsedEligibilityEnrollments {
     switch (input.format) {
       case 'csv':
-        return this.parseEligibilityCsvImport(input.content, input.selectedHeader);
+        return this.parseEligibilityCsvImport(
+          input.content,
+          input.selectedHeader,
+        );
       case 'txt':
         return this.parseEligibilityTxtImport(input.content);
     }
   }
 
-  normalizeEnrollmentNumbers(rawValues: readonly unknown[]): ParsedEligibilityEnrollments {
+  normalizeEnrollmentNumbers(
+    rawValues: readonly unknown[],
+  ): ParsedEligibilityEnrollments {
     const enrollmentNumbers: string[] = [];
     const seen = new Set<string>();
     let duplicateCount = 0;
@@ -208,7 +268,9 @@ export class PollEligibilityService {
     createdById?: string,
   ): Promise<PollEligibilityEnrollmentImportResult> {
     if (parsed.enrollmentNumbers.length === 0) {
-      throw new BadRequestException('At least one valid enrollment number is required.');
+      throw new BadRequestException(
+        'At least one valid enrollment number is required.',
+      );
     }
 
     const result = await this.runSerializableTransaction(async (tx) => {
@@ -233,7 +295,12 @@ export class PollEligibilityService {
         where: { id: pollId },
         data: { updatedAt: new Date() },
       });
-      await recordPollAdminAudit(tx, { pollId, actorId: createdById, action: `eligibility.${mode}`, afterVersion: updated?.updatedAt });
+      await recordPollAdminAudit(tx, {
+        pollId,
+        actorId: createdById,
+        action: `eligibility.${mode}`,
+        afterVersion: updated?.updatedAt,
+      });
 
       return {
         createdCount: created.count,
@@ -247,13 +314,19 @@ export class PollEligibilityService {
       ...entries,
       createdCount: result.createdCount,
       duplicateCount: parsed.duplicateCount,
-      existingCount: mode === 'append' ? parsed.enrollmentNumbers.length - result.createdCount : 0,
+      existingCount:
+        mode === 'append'
+          ? parsed.enrollmentNumbers.length - result.createdCount
+          : 0,
       invalidCount: parsed.invalidCount,
       replacedCount: result.replacedCount,
     };
   }
 
-  private parseEligibilityCsvImport(content: string, selectedHeader?: string): ParsedEligibilityEnrollments {
+  private parseEligibilityCsvImport(
+    content: string,
+    selectedHeader?: string,
+  ): ParsedEligibilityEnrollments {
     const header = selectedHeader?.trim();
     if (!header) {
       throw new BadRequestException('A CSV header must be selected.');
@@ -265,14 +338,21 @@ export class PollEligibilityService {
     }
 
     /* istanbul ignore next -- parseCsv only returns rows with every declared header key. */
-    return this.normalizeEnrollmentNumbers(rows.map((row) => row[header] ?? ''));
+    return this.normalizeEnrollmentNumbers(
+      rows.map((row) => row[header] ?? ''),
+    );
   }
 
-  private parseEligibilityTxtImport(content: string): ParsedEligibilityEnrollments {
+  private parseEligibilityTxtImport(
+    content: string,
+  ): ParsedEligibilityEnrollments {
     return this.normalizeEnrollmentNumbers(content.split(/\r?\n/));
   }
 
-  private parseCsv(csvContent: string): { headers: string[]; rows: Record<string, string>[] } {
+  private parseCsv(csvContent: string): {
+    headers: string[];
+    rows: Record<string, string>[];
+  } {
     const records: string[][] = [];
     const delimiter = this.detectCsvDelimiter(csvContent);
     let currentField = '';
@@ -325,7 +405,9 @@ export class PollEligibilityService {
     }
 
     const [headerRecord, ...dataRecords] = records;
-    const headers = (headerRecord ?? []).map((header) => header.replace(/^\uFEFF/, '').trim());
+    const headers = (headerRecord ?? []).map((header) =>
+      header.replace(/^\uFEFF/, '').trim(),
+    );
     if (headers.length === 0) {
       throw new BadRequestException('CSV file must include a header row.');
     }
@@ -339,21 +421,28 @@ export class PollEligibilityService {
       seenHeaders.add(header);
     }
     if (duplicateHeaders.size > 0) {
-      throw new BadRequestException(`CSV file has duplicate headers: ${[...duplicateHeaders].join(', ')}.`);
+      throw new BadRequestException(
+        `CSV file has duplicate headers: ${[...duplicateHeaders].join(', ')}.`,
+      );
     }
 
     return {
       headers,
       rows: dataRecords.map((record, index) => {
         if (record.length !== headers.length) {
-          throw new BadRequestException(`CSV row ${index + 2} has ${record.length} columns; expected ${headers.length}.`);
+          throw new BadRequestException(
+            `CSV row ${index + 2} has ${record.length} columns; expected ${headers.length}.`,
+          );
         }
 
-        return headers.reduce<Record<string, string>>((row, currentHeader, headerIndex) => {
-          /* istanbul ignore next -- record length is validated before reducing headers. */
-          row[currentHeader] = record[headerIndex]?.trim() ?? '';
-          return row;
-        }, {});
+        return headers.reduce<Record<string, string>>(
+          (row, currentHeader, headerIndex) => {
+            /* istanbul ignore next -- record length is validated before reducing headers. */
+            row[currentHeader] = record[headerIndex]?.trim() ?? '';
+            return row;
+          },
+          {},
+        );
       }),
     };
   }
@@ -391,7 +480,9 @@ export class PollEligibilityService {
     options: { includePeople: boolean },
   ): Promise<PollEligibilityEnrollmentList> {
     const peopleByEnrollmentNumber = options.includePeople
-      ? await this.lookupEventManagerPeople(records.map((record) => record.enrollmentNumber))
+      ? await this.lookupEventManagerPeople(
+          records.map((record) => record.enrollmentNumber),
+        )
       : new Map<string, AccountManagerPerson[]>();
 
     return {
@@ -405,25 +496,38 @@ export class PollEligibilityService {
     };
   }
 
-  private async lookupEventManagerPeople(enrollmentNumbers: string[]): Promise<Map<string, AccountManagerPerson[]>> {
+  private async lookupEventManagerPeople(
+    enrollmentNumbers: string[],
+  ): Promise<Map<string, AccountManagerPerson[]>> {
     const peopleByEnrollmentNumber = new Map<string, AccountManagerPerson[]>();
     if (enrollmentNumbers.length === 0) {
       return peopleByEnrollmentNumber;
     }
 
     try {
-      const people = await this.accountManager.lookupPeopleByEnrollmentNumbers(enrollmentNumbers);
+      const people =
+        await this.accountManager.lookupPeopleByEnrollmentNumbers(
+          enrollmentNumbers,
+        );
       for (const person of people) {
-        const normalizedEnrollmentNumber = normalizeEnrollmentNumber(person.enrollmentNumber);
+        const normalizedEnrollmentNumber = normalizeEnrollmentNumber(
+          person.enrollmentNumber,
+        );
         if (!normalizedEnrollmentNumber) {
           continue;
         }
 
-        const existingPeople = peopleByEnrollmentNumber.get(normalizedEnrollmentNumber) ?? [];
-        peopleByEnrollmentNumber.set(normalizedEnrollmentNumber, [...existingPeople, person]);
+        const existingPeople =
+          peopleByEnrollmentNumber.get(normalizedEnrollmentNumber) ?? [];
+        peopleByEnrollmentNumber.set(normalizedEnrollmentNumber, [
+          ...existingPeople,
+          person,
+        ]);
       }
     } catch {
-      this.logger.warn('Could not enrich eligibility enrollments with Account Manager user data.');
+      this.logger.warn(
+        'Could not enrich eligibility enrollments with Account Manager user data.',
+      );
     }
 
     return peopleByEnrollmentNumber;
@@ -465,7 +569,9 @@ export class PollEligibilityService {
       throw new NotFoundException('Poll not found.');
     }
     if (poll.status !== DbPollStatus.DRAFT) {
-      throw new ForbiddenException('Eligibility lists are frozen after poll publication.');
+      throw new ForbiddenException(
+        'Eligibility lists are frozen after poll publication.',
+      );
     }
   }
 
@@ -481,7 +587,9 @@ export class PollEligibilityService {
       throw new NotFoundException('Poll not found.');
     }
     if (poll.status !== DbPollStatus.DRAFT) {
-      throw new ForbiddenException('Eligibility lists are frozen after poll publication.');
+      throw new ForbiddenException(
+        'Eligibility lists are frozen after poll publication.',
+      );
     }
   }
 
@@ -491,7 +599,9 @@ export class PollEligibilityService {
     options: EligibilityCheckOptions,
   ): Promise<void> {
     if (!poll.linkedEventId) {
-      throw new BadRequestException('Poll is not linked to an Event Manager event.');
+      throw new BadRequestException(
+        'Poll is not linked to an Event Manager event.',
+      );
     }
 
     const hasAttendance = await this.withRemoteEligibilityBudget(
@@ -505,40 +615,51 @@ export class PollEligibilityService {
       options.remoteTimeoutMs,
     );
     if (!hasAttendance) {
-      throw new ForbiddenException('Voting is restricted to users with registered attendance for the linked event.');
+      throw new ForbiddenException(
+        'Voting is restricted to users with registered attendance for the linked event.',
+      );
     }
   }
 
   private async ensureEnrollmentListVotingAllowed(
     poll: PollEligibilityRecord,
     user: AuthenticatedVoter,
-    client: Pick<PrismaService, 'pollEligibilityEnrollment'> | Prisma.TransactionClient,
+    client:
+      | Pick<PrismaService, 'pollEligibilityEnrollment'>
+      | Prisma.TransactionClient,
   ): Promise<void> {
     const enrollmentNumber = readUserEnrollmentNumber(user);
     if (!enrollmentNumber) {
-      throw new ForbiddenException('Voting is restricted to users with an enrollment number.');
+      throw new ForbiddenException(
+        'Voting is restricted to users with an enrollment number.',
+      );
     }
 
-    const eligibleEnrollment = await client.pollEligibilityEnrollment.findUnique({
-      where: {
-        pollId_enrollmentNumber: {
-          pollId: poll.id,
-          enrollmentNumber,
+    const eligibleEnrollment =
+      await client.pollEligibilityEnrollment.findUnique({
+        where: {
+          pollId_enrollmentNumber: {
+            pollId: poll.id,
+            enrollmentNumber,
+          },
         },
-      },
-      select: {
-        enrollmentNumber: true,
-      },
-    });
+        select: {
+          enrollmentNumber: true,
+        },
+      });
 
     if (!eligibleEnrollment) {
-      throw new ForbiddenException('Voting is restricted to users in the enrollment eligibility list.');
+      throw new ForbiddenException(
+        'Voting is restricted to users in the enrollment eligibility list.',
+      );
     }
   }
 
   private ensureUnespUserVotingAllowed(user: AuthenticatedVoter): void {
     if (!hasUnespEmail(user)) {
-      throw new ForbiddenException('Voting is restricted to users with an Unesp email.');
+      throw new ForbiddenException(
+        'Voting is restricted to users with an Unesp email.',
+      );
     }
   }
 
@@ -548,19 +669,28 @@ export class PollEligibilityService {
     options: EligibilityCheckOptions,
   ): Promise<void> {
     if (!hasUndergraduateUnespRole(user)) {
-      throw new ForbiddenException('Voting is restricted to undergraduate Unesp students.');
+      throw new ForbiddenException(
+        'Voting is restricted to undergraduate Unesp students.',
+      );
     }
 
     const enrollmentNumber = readUserEnrollmentNumber(user);
     if (!hasComputerScienceEnrollmentPattern(enrollmentNumber)) {
-      throw new ForbiddenException('Voting is restricted to computer science students.');
+      throw new ForbiddenException(
+        'Voting is restricted to computer science students.',
+      );
     }
 
     if (
-      (await this.withRemoteEligibilityBudget(this.shouldRequireVerifiedUnespRole(poll), options.remoteTimeoutMs)) &&
+      (await this.withRemoteEligibilityBudget(
+        this.shouldRequireVerifiedUnespRole(poll),
+        options.remoteTimeoutMs,
+      )) &&
       !hasVerifiedUnespRole(user)
     ) {
-      throw new ForbiddenException('Voting is restricted to users with a verified Unesp role.');
+      throw new ForbiddenException(
+        'Voting is restricted to users with a verified Unesp role.',
+      );
     }
   }
 
@@ -574,7 +704,10 @@ export class PollEligibilityService {
     return !(await this.featureFlags.isUndergraduateUnespRoleVerificationDisabled());
   }
 
-  private async withRemoteEligibilityBudget<T>(operation: Promise<T>, timeoutMs?: number): Promise<T> {
+  private async withRemoteEligibilityBudget<T>(
+    operation: Promise<T>,
+    timeoutMs?: number,
+  ): Promise<T> {
     if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       return operation;
     }
@@ -582,7 +715,12 @@ export class PollEligibilityService {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new ServiceUnavailableException('Eligibility verification timed out.')),
+        () =>
+          reject(
+            new ServiceUnavailableException(
+              'Eligibility verification timed out.',
+            ),
+          ),
         timeoutMs,
       );
       timer.unref?.();

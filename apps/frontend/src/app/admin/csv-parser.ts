@@ -56,7 +56,9 @@ export function parseCsv(csvContent: string): CsvParseResult {
   }
 
   const [headerRecord, ...dataRecords] = records;
-  const headers = (headerRecord ?? []).map((header) => header.replace(/^\uFEFF/, '').trim());
+  const headers = (headerRecord ?? []).map((header) =>
+    header.replace(/^\uFEFF/, '').trim(),
+  );
   if (headers.length === 0) {
     throw new Error('O CSV precisa incluir uma linha de cabeçalho.');
   }
@@ -70,14 +72,18 @@ export function parseCsv(csvContent: string): CsvParseResult {
     seenHeaders.add(header);
   }
   if (duplicateHeaders.size > 0) {
-    throw new Error(`O CSV possui cabeçalhos duplicados: ${[...duplicateHeaders].join(', ')}.`);
+    throw new Error(
+      `O CSV possui cabeçalhos duplicados: ${[...duplicateHeaders].join(', ')}.`,
+    );
   }
 
   return {
     headers,
     rows: dataRecords.map((record, recordIndex) => {
       if (record.length !== headers.length) {
-        throw new Error(`A linha ${recordIndex + 2} possui ${record.length} colunas; esperado: ${headers.length}.`);
+        throw new Error(
+          `A linha ${recordIndex + 2} possui ${record.length} colunas; esperado: ${headers.length}.`,
+        );
       }
 
       return headers.reduce<Record<string, string>>((row, header, index) => {

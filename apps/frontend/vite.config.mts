@@ -4,7 +4,9 @@ import { defineConfig } from 'vite';
 import angular from '@analogjs/vite-plugin-angular';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
-const hasProjectRootMarkdown = readdirSync(import.meta.dirname).some((entry) => entry.endsWith('.md'));
+const hasProjectRootMarkdown = readdirSync(import.meta.dirname).some((entry) =>
+  entry.endsWith('.md'),
+);
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
@@ -33,7 +35,11 @@ export default defineConfig(() => ({
       provider: 'v8' as const,
       reporter: ['lcov', 'text', 'json'],
       include: ['src/app/**/*.ts'],
-      exclude: ['src/app/**/*.spec.ts', 'src/app/**/*.stories.ts', 'src/app/testing/**'],
+      exclude: [
+        'src/app/**/*.spec.ts',
+        'src/app/**/*.stories.ts',
+        'src/app/testing/**',
+      ],
     },
   },
 }));

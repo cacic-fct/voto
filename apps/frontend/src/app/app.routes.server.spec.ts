@@ -8,7 +8,10 @@ describe('serverRoutes', () => {
       { path: 'login', renderMode: RenderMode.Prerender },
       { path: '', renderMode: RenderMode.Client },
       { path: 'polls', renderMode: RenderMode.Client },
-      { path: 'polls/direct/:directLinkToken/results', renderMode: RenderMode.Client },
+      {
+        path: 'polls/direct/:directLinkToken/results',
+        renderMode: RenderMode.Client,
+      },
       { path: 'polls/direct/:directLinkToken', renderMode: RenderMode.Client },
       { path: 'polls/:id/results', renderMode: RenderMode.Client },
       { path: 'polls/:id', renderMode: RenderMode.Client },

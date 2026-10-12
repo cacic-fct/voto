@@ -28,7 +28,10 @@ export function resolvePollAccess(paramMap: ParamMap): PublicPollAccess | null {
     : null;
 }
 
-export function pollResultsLink(access: PublicPollAccess, pollId: string): unknown[] {
+export function pollResultsLink(
+  access: PublicPollAccess,
+  pollId: string,
+): unknown[] {
   return access.kind === 'directLink'
     ? ['/polls/direct', access.value, 'results']
     : ['/polls', pollId, 'results'];

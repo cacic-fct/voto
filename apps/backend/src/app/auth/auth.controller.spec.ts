@@ -113,18 +113,14 @@ describe('AuthController', () => {
         expiresAt: Date.now() + 1000,
         sessionExpiresAt: Date.now() + 2000,
       }),
-      getSessionLogoutInput: jest
-        .fn()
-        .mockResolvedValue({
-          refreshToken: 'refresh',
-        }),
+      getSessionLogoutInput: jest.fn().mockResolvedValue({
+        refreshToken: 'refresh',
+      }),
       clearSession: jest.fn().mockResolvedValue(undefined),
-      logout: jest
-        .fn()
-        .mockResolvedValue({
-          globalLogoutComplete: false,
-          logoutUrl: 'https://sso.example/logout',
-        }),
+      logout: jest.fn().mockResolvedValue({
+        globalLogoutComplete: false,
+        logoutUrl: 'https://sso.example/logout',
+      }),
       evaluateSessionPermissions: jest.fn().mockResolvedValue(['poll#read']),
     };
     controller = new AuthController(auth as unknown as KeycloakAuthService);
@@ -414,7 +410,10 @@ describe('AuthController', () => {
     await expect(
       controller.refresh(
         createRequest({
-          headers: { host: 'localhost:3000', cookie: `${AUTH_SESSION_COOKIE_NAME}=%` },
+          headers: {
+            host: 'localhost:3000',
+            cookie: `${AUTH_SESSION_COOKIE_NAME}=%`,
+          },
         }),
         createResponse() as unknown as Response,
       ),
@@ -441,7 +440,9 @@ describe('AuthController', () => {
       logoutUrl: 'https://sso.example/logout',
     });
 
-    await expect(controller.logout(request, response as unknown as Response, body)).resolves.toEqual({
+    await expect(
+      controller.logout(request, response as unknown as Response, body),
+    ).resolves.toEqual({
       success: true,
       globalLogoutComplete: true,
       logoutUrl: 'https://sso.example/logout',
@@ -457,7 +458,9 @@ describe('AuthController', () => {
       AUTH_SESSION_COOKIE_NAME,
       expect.objectContaining({ secure: true, path: '/' }),
     );
-    expect(response.clearCookie.mock.invocationCallOrder[0]).toBeLessThan(auth.logout.mock.invocationCallOrder[0]);
+    expect(response.clearCookie.mock.invocationCallOrder[0]).toBeLessThan(
+      auth.logout.mock.invocationCallOrder[0],
+    );
   });
 
   it('marks logout to bypass the optional session authenticator', () => {
@@ -637,7 +640,8 @@ describe('AuthController', () => {
   });
 
   it('rejects browser-normalized authorities and unsafe post-login destinations', () => {
-    const controllerInternals = controller as unknown as AuthControllerInternals;
+    const controllerInternals =
+      controller as unknown as AuthControllerInternals;
 
     for (const redirect of [
       String.raw`/\attacker.example/`,
@@ -648,12 +652,20 @@ describe('AuthController', () => {
       '/foo/../api/auth/login',
       'https://user:password@app.example/polls',
     ]) {
-      expect(() => controllerInternals.resolveReturnTo(redirect)).toThrow(BadRequestException);
+      expect(() => controllerInternals.resolveReturnTo(redirect)).toThrow(
+        BadRequestException,
+      );
     }
 
-    expect(controllerInternals.resolveReturnTo('/api/auth/../../polls')).toBe('/polls');
-    expect(controllerInternals.resolveReturnTo('/polls?tab=1#results')).toBe('/polls?tab=1#results');
-    expect(controllerInternals.resolveReturnTo('https://app.example/polls')).toBe('https://app.example/polls');
+    expect(controllerInternals.resolveReturnTo('/api/auth/../../polls')).toBe(
+      '/polls',
+    );
+    expect(controllerInternals.resolveReturnTo('/polls?tab=1#results')).toBe(
+      '/polls?tab=1#results',
+    );
+    expect(
+      controllerInternals.resolveReturnTo('https://app.example/polls'),
+    ).toBe('https://app.example/polls');
   });
 
   it('ignores blank allowed-origin entries and falls back to raw silent-login redirects when they cannot be parsed', async () => {

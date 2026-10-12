@@ -12,17 +12,25 @@ import {
 } from './keycloak-claims.utils';
 
 function tokenWithPayload(payload: unknown): string {
-  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString(
+    'base64url',
+  );
   return `header.${encoded}.signature`;
 }
 
 describe('keycloak claim utilities', () => {
   it('decodes JWT payloads and ignores malformed payloads', () => {
-    expect(decodeJwtPayload(tokenWithPayload({ sub: 'user-1' }))).toEqual({ sub: 'user-1' });
+    expect(decodeJwtPayload(tokenWithPayload({ sub: 'user-1' }))).toEqual({
+      sub: 'user-1',
+    });
     expect(decodeJwtPayload('not-a-jwt')).toEqual({});
     expect(decodeJwtPayload('header.not-json.signature')).toEqual({});
     expect(decodeJwtPayload(tokenWithPayload('not-a-record'))).toEqual({});
-    expect(decodeJwtPayload(tokenWithPayload(['not', 'a', 'record']))).toEqual(['not', 'a', 'record']);
+    expect(decodeJwtPayload(tokenWithPayload(['not', 'a', 'record']))).toEqual([
+      'not',
+      'a',
+      'record',
+    ]);
   });
 
   it('extracts distinct realm and client roles from multiple claim sources', () => {
@@ -40,7 +48,13 @@ describe('keycloak claim utilities', () => {
       },
     );
 
-    expect(roles).toEqual(['super-admin', 'member', 'voting:poll-admin', 'voting:member', 'auditor']);
+    expect(roles).toEqual([
+      'super-admin',
+      'member',
+      'voting:poll-admin',
+      'voting:member',
+      'auditor',
+    ]);
   });
 
   it('skips invalid client-role and realm-role structures', () => {
@@ -50,15 +64,19 @@ describe('keycloak claim utilities', () => {
     extractClientRoles({ voting: { roles: 'super-admin' } }, roles);
 
     expect([...roles]).toEqual([]);
-    expect(extractRealmRoles(null, 'invalid', { roles: [' valid ', 1] })).toEqual(['valid']);
+    expect(
+      extractRealmRoles(null, 'invalid', { roles: [' valid ', 1] }),
+    ).toEqual(['valid']);
   });
 
   it('extracts OIDC scopes from space separated scope claims', () => {
-    expect(extractOidcScopes({ scope: 'openid  profile ' }, { scope: 'profile email' }, { scope: 10 })).toEqual([
-      'openid',
-      'profile',
-      'email',
-    ]);
+    expect(
+      extractOidcScopes(
+        { scope: 'openid  profile ' },
+        { scope: 'profile email' },
+        { scope: 10 },
+      ),
+    ).toEqual(['openid', 'profile', 'email']);
   });
 
   it('extracts string and structured permissions', () => {
@@ -77,8 +95,18 @@ describe('keycloak claim utilities', () => {
       permissionSet,
     );
 
-    expect([...permissionSet]).toEqual(['poll#read', 'poll#edit', 'result#read', 'global']);
-    expect(extractPermissions({ permissions: ['a'] }, { authorization: { permissions: ['b'] } })).toEqual(['a', 'b']);
+    expect([...permissionSet]).toEqual([
+      'poll#read',
+      'poll#edit',
+      'result#read',
+      'global',
+    ]);
+    expect(
+      extractPermissions(
+        { permissions: ['a'] },
+        { authorization: { permissions: ['b'] } },
+      ),
+    ).toEqual(['a', 'b']);
 
     const unchanged = new Set<string>(['existing']);
     extractPermissionClaims('invalid', unchanged);

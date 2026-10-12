@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import {
@@ -45,14 +50,18 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing authenticated session.');
     }
 
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
-      REQUIRED_PERMISSIONS_KEY,
-      targets,
-    ) ?? [];
+    const requiredPermissions =
+      this.reflector.getAllAndOverride<string[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        targets,
+      ) ?? [];
 
     try {
       request.sessionId = sessionId;
-      request.user = await this.auth.authenticateSession(sessionId, requiredPermissions);
+      request.user = await this.auth.authenticateSession(
+        sessionId,
+        requiredPermissions,
+      );
       return true;
     } catch (error) {
       if (isPublic) {

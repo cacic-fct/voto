@@ -47,16 +47,23 @@ export abstract class AdminPollBuilderPageBase {
   protected readonly authoritativePoll = signal<Poll | null>(null);
   protected readonly polls = signal<PollSummary[]>([]);
   protected readonly linkableEvents = signal<EventManagerEvent[]>([]);
-  protected readonly eligibilityEntries = signal<PollEligibilityEnrollment[]>([]);
-  protected readonly selectedVotingStyle = computed(() => VOTING_STYLE_METADATA[this.builder.draft().votingStyle]);
+  protected readonly eligibilityEntries = signal<PollEligibilityEnrollment[]>(
+    [],
+  );
+  protected readonly selectedVotingStyle = computed(
+    () => VOTING_STYLE_METADATA[this.builder.draft().votingStyle],
+  );
   protected readonly selectedVoterEligibility = computed(
-    () => VOTER_ELIGIBILITY_METADATA[this.builder.draft().voterEligibilitySource],
+    () =>
+      VOTER_ELIGIBILITY_METADATA[this.builder.draft().voterEligibilitySource],
   );
   protected readonly shouldShowEnrollmentListControls = computed(
     () => this.builder.draft().voterEligibilitySource === 'enrollmentList',
   );
   protected readonly shouldShowVerifiedUnespRoleRequirement = computed(() =>
-    supportsVerifiedUnespRoleRequirement(this.builder.draft().voterEligibilitySource),
+    supportsVerifiedUnespRoleRequirement(
+      this.builder.draft().voterEligibilitySource,
+    ),
   );
   protected readonly eventOptions = computed(() => {
     const linkedEvent = this.builder.draft().linkedEvent;
@@ -81,13 +88,16 @@ export abstract class AdminPollBuilderPageBase {
   protected readonly slates = signal<AdminCacicElectionSlate[]>([]);
   protected readonly loadingSlates = signal(false);
   protected readonly savingSlate = signal(false);
-  protected readonly editingSlate = signal<AdminCacicElectionSlate | null>(null);
+  protected readonly editingSlate = signal<AdminCacicElectionSlate | null>(
+    null,
+  );
   protected readonly uploadingImageTarget = signal<string | null>(null);
   protected readonly imageAccept =
     'image/avif,image/bmp,image/gif,image/heic,image/heif,image/jpeg,image/png,image/tiff,image/webp';
   protected readonly manualEnrollmentNumbers = signal('');
   protected readonly results = signal<PollResults | null>(null);
-  protected readonly resultsFinalizationState = signal<PollResultsFinalizationState>('idle');
+  protected readonly resultsFinalizationState =
+    signal<PollResultsFinalizationState>('idle');
   protected readonly resultsFinalizationError = signal<string | null>(null);
   protected readonly pendingFinalResultsPollId = signal<string | null>(null);
   protected readonly loadingResults = signal(false);
@@ -98,19 +108,31 @@ export abstract class AdminPollBuilderPageBase {
     this.builder.draft().elements.filter((element) => isAnswerElement(element)),
   );
   protected readonly questionSummaries = computed(() =>
-    buildQuestionSummaries(this.builder.draft().elements, this.results()?.responses ?? []),
+    buildQuestionSummaries(
+      this.builder.draft().elements,
+      this.results()?.responses ?? [],
+    ),
   );
   protected readonly selectedQuestionSummary = computed(() => {
     const summaries = this.questionSummaries();
     const selectedId = this.selectedResultsElementId();
-    return summaries.find((summary) => summary.key === selectedId) ?? summaries[0] ?? null;
+    return (
+      summaries.find((summary) => summary.key === selectedId) ??
+      summaries[0] ??
+      null
+    );
   });
-  protected readonly selectedQuestionElementId = computed(() => this.selectedQuestionSummary()?.key ?? null);
+  protected readonly selectedQuestionElementId = computed(
+    () => this.selectedQuestionSummary()?.key ?? null,
+  );
   protected readonly voterRows = computed(() =>
     toVoterRows(this.results()?.responses ?? []),
   );
   protected readonly demographicsCharts = computed(() =>
-    buildDemographicsCharts(this.voterRows(), this.individualResultsAvailable()),
+    buildDemographicsCharts(
+      this.voterRows(),
+      this.individualResultsAvailable(),
+    ),
   );
   protected readonly answerSummaryCharts = computed(() =>
     buildAnswerSummaryCharts(this.questionSummaries()),
@@ -119,12 +141,18 @@ export abstract class AdminPollBuilderPageBase {
     buildTextQuestionSummaries(this.questionSummaries()),
   );
   protected readonly individualResultsAvailable = computed(() =>
-    (this.results()?.responses ?? []).some((response) => Boolean(response.voter)),
+    (this.results()?.responses ?? []).some((response) =>
+      Boolean(response.voter),
+    ),
   );
   protected readonly selectedIndividualResponse = computed(() => {
     const responses = this.results()?.responses ?? [];
     const selectedId = this.selectedIndividualResponseId();
-    return responses.find((response) => response.id === selectedId) ?? responses.find((response) => response.voter) ?? null;
+    return (
+      responses.find((response) => response.id === selectedId) ??
+      responses.find((response) => response.voter) ??
+      null
+    );
   });
   protected readonly selectedIndividualAnswers = computed(() => {
     const response = this.selectedIndividualResponse();
@@ -141,7 +169,9 @@ export abstract class AdminPollBuilderPageBase {
     }
 
     const path = `/polls/direct/${encodeURIComponent(draft.directLinkToken)}`;
-    return this.isBrowser ? new URL(path, globalThis.location.origin).toString() : path;
+    return this.isBrowser
+      ? new URL(path, globalThis.location.origin).toString()
+      : path;
   });
   protected readonly pollLinkUrl = computed(() => {
     const draft = this.builder.draft();
@@ -150,25 +180,35 @@ export abstract class AdminPollBuilderPageBase {
     }
 
     const path = `/polls/${encodeURIComponent(draft.id)}`;
-    return this.isBrowser ? new URL(path, globalThis.location.origin).toString() : path;
+    return this.isBrowser
+      ? new URL(path, globalThis.location.origin).toString()
+      : path;
   });
   protected readonly canExportCacicElectionVoters = computed(() => {
     const draft = this.builder.draft();
     return Boolean(
-      draft.id && draft.mode === 'cacicElection' && draft.cacicElectionPhase === 'election' && draft.status === 'closed',
+      draft.id &&
+      draft.mode === 'cacicElection' &&
+      draft.cacicElectionPhase === 'election' &&
+      draft.status === 'closed',
     );
   });
-  protected readonly isReadOnlyAdmin = computed(() => this.permissions.isAdmin() && !this.permissions.canManageAdmin());
+  protected readonly isReadOnlyAdmin = computed(
+    () => this.permissions.isAdmin() && !this.permissions.canManageAdmin(),
+  );
   protected readonly canOpenKiosk = computed(() => {
     const draft = this.builder.draft();
     return Boolean(
       draft.id &&
-        draft.status === 'published' &&
-        this.permissions.canUseKiosk(),
+      draft.status === 'published' &&
+      this.permissions.canUseKiosk(),
     );
   });
 
-  protected abstract loadEligibilityEnrollments(showLoading?: boolean, selectionGeneration?: number): Promise<void>;
+  protected abstract loadEligibilityEnrollments(
+    showLoading?: boolean,
+    selectionGeneration?: number,
+  ): Promise<void>;
   protected abstract resetResults(): void;
 
   private pollSelectionGeneration = 0;
@@ -185,8 +225,14 @@ export abstract class AdminPollBuilderPageBase {
     return this.pollSelectionGeneration;
   }
 
-  protected isPollSelectionCurrent(generation: number, pollId?: string): boolean {
-    return generation === this.pollSelectionGeneration && (!pollId || this.builder.draft().id === pollId);
+  protected isPollSelectionCurrent(
+    generation: number,
+    pollId?: string,
+  ): boolean {
+    return (
+      generation === this.pollSelectionGeneration &&
+      (!pollId || this.builder.draft().id === pollId)
+    );
   }
 
   protected setServerPoll(poll: Poll): void {
@@ -211,12 +257,16 @@ export abstract class AdminPollBuilderPageBase {
 
     if (this.builder.draft().updatedAt === expectedUpdatedAt) {
       this.builder.setDraftUpdatedAt(latest.updatedAt);
-      this.authoritativePoll.set({ ...(baseline ?? latest), updatedAt: latest.updatedAt });
+      this.authoritativePoll.set({
+        ...(baseline ?? latest),
+        updatedAt: latest.updatedAt,
+      });
     }
   }
 
   private samePollContent(left: Poll, right: Poll): boolean {
-    const withoutVersion = (poll: Poll): string => JSON.stringify({ ...poll, updatedAt: undefined });
+    const withoutVersion = (poll: Poll): string =>
+      JSON.stringify({ ...poll, updatedAt: undefined });
     return withoutVersion(left) === withoutVersion(right);
   }
 
@@ -249,13 +299,17 @@ export abstract class AdminPollBuilderPageBase {
   }
 
   protected updateManualEnrollmentNumbers(event: Event): void {
-    this.manualEnrollmentNumbers.set((event.target as HTMLTextAreaElement).value);
+    this.manualEnrollmentNumbers.set(
+      (event.target as HTMLTextAreaElement).value,
+    );
   }
 
   protected async copyDirectLink(): Promise<void> {
     const url = this.directLinkUrl();
     if (!url || !this.isBrowser || !globalThis.navigator?.clipboard) {
-      this.snackBar.open('Link direto ainda não disponível.', 'OK', { duration: 3000 });
+      this.snackBar.open('Link direto ainda não disponível.', 'OK', {
+        duration: 3000,
+      });
       return;
     }
 
@@ -263,14 +317,18 @@ export abstract class AdminPollBuilderPageBase {
       await globalThis.navigator.clipboard.writeText(url);
       this.snackBar.open('Link direto copiado.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível copiar o link direto.', 'OK', { duration: 3000 });
+      this.snackBar.open('Não foi possível copiar o link direto.', 'OK', {
+        duration: 3000,
+      });
     }
   }
 
   protected async copyPollLink(): Promise<void> {
     const url = this.pollLinkUrl();
     if (!url || !this.isBrowser || !globalThis.navigator?.clipboard) {
-      this.snackBar.open('Salve a votação para copiar o link.', 'OK', { duration: 3000 });
+      this.snackBar.open('Salve a votação para copiar o link.', 'OK', {
+        duration: 3000,
+      });
       return;
     }
 
@@ -278,7 +336,9 @@ export abstract class AdminPollBuilderPageBase {
       await globalThis.navigator.clipboard.writeText(url);
       this.snackBar.open('Link da votação copiado.', 'OK', { duration: 2500 });
     } catch {
-      this.snackBar.open('Não foi possível copiar o link da votação.', 'OK', { duration: 3000 });
+      this.snackBar.open('Não foi possível copiar o link da votação.', 'OK', {
+        duration: 3000,
+      });
     }
   }
 
@@ -298,7 +358,11 @@ export abstract class AdminPollBuilderPageBase {
     try {
       this.polls.set(await firstValueFrom(this.api.listAdminPolls()));
     } catch {
-      this.snackBar.open('Não foi possível carregar a lista de votações.', 'OK', { duration: 3000 });
+      this.snackBar.open(
+        'Não foi possível carregar a lista de votações.',
+        'OK',
+        { duration: 3000 },
+      );
     } finally {
       this.loadingList.set(false);
     }
@@ -308,12 +372,17 @@ export abstract class AdminPollBuilderPageBase {
     this.loadingEvents.set(true);
 
     try {
-      this.linkableEvents.set(await firstValueFrom(this.api.listLinkableEvents()));
+      this.linkableEvents.set(
+        await firstValueFrom(this.api.listLinkableEvents()),
+      );
     } catch {
-      this.snackBar.open('Não foi possível carregar os eventos disponíveis.', 'OK', { duration: 3000 });
+      this.snackBar.open(
+        'Não foi possível carregar os eventos disponíveis.',
+        'OK',
+        { duration: 3000 },
+      );
     } finally {
       this.loadingEvents.set(false);
     }
   }
-
 }

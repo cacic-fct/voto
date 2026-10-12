@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { DEFAULT_KEYCLOAK_REALM_URL } from './auth.constants';
 
@@ -21,15 +25,26 @@ const MAX_CACHED_TOKENS = 128;
 export class KeycloakM2mTokenService {
   private readonly logger = new Logger(KeycloakM2mTokenService.name);
   private readonly tokenRefreshSkewMs = 30_000;
-  private readonly cachedTokens = new Map<string, { token: string; expiresAt: number }>();
-  private readonly requestTimeoutMs = this.parsePositiveIntegerEnv(process.env.KEYCLOAK_REQUEST_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS);
+  private readonly cachedTokens = new Map<
+    string,
+    { token: string; expiresAt: number }
+  >();
+  private readonly requestTimeoutMs = this.parsePositiveIntegerEnv(
+    process.env.KEYCLOAK_REQUEST_TIMEOUT_MS,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+  );
 
-  async getClientCredentialsToken(options: ClientCredentialsTokenOptions = {}): Promise<string> {
+  async getClientCredentialsToken(
+    options: ClientCredentialsTokenOptions = {},
+  ): Promise<string> {
     const clientId = options.clientId ?? process.env.KEYCLOAK_M2M_CLIENT_ID;
-    const clientSecret = options.clientSecret ?? process.env.KEYCLOAK_M2M_CLIENT_SECRET;
+    const clientSecret =
+      options.clientSecret ?? process.env.KEYCLOAK_M2M_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-      throw new ServiceUnavailableException('Keycloak M2M client credentials are not configured.');
+      throw new ServiceUnavailableException(
+        'Keycloak M2M client credentials are not configured.',
+      );
     }
 
     const cacheKey = JSON.stringify({
@@ -70,10 +85,15 @@ export class KeycloakM2mTokenService {
       );
 
       if (typeof data.access_token !== 'string' || !data.access_token) {
-        throw new ServiceUnavailableException('Keycloak M2M token response did not include an access token.');
+        throw new ServiceUnavailableException(
+          'Keycloak M2M token response did not include an access token.',
+        );
       }
 
-      const expiresInSeconds = typeof data.expires_in === 'number' && data.expires_in > 0 ? data.expires_in : 300;
+      const expiresInSeconds =
+        typeof data.expires_in === 'number' && data.expires_in > 0
+          ? data.expires_in
+          : 300;
       this.cachedTokens.set(cacheKey, {
         token: data.access_token,
         expiresAt: now + expiresInSeconds * 1000,
@@ -86,12 +106,16 @@ export class KeycloakM2mTokenService {
       }
 
       if (axios.isAxiosError(error)) {
-        this.logger.warn(`Could not obtain Keycloak M2M access token. Status=${error.response?.status ?? 'none'}.`);
+        this.logger.warn(
+          `Could not obtain Keycloak M2M access token. Status=${error.response?.status ?? 'none'}.`,
+        );
       } else {
         this.logger.warn('Could not obtain Keycloak M2M access token.');
       }
 
-      throw new ServiceUnavailableException('Could not authenticate with Keycloak for M2M access.');
+      throw new ServiceUnavailableException(
+        'Could not authenticate with Keycloak for M2M access.',
+      );
     }
   }
 
@@ -110,12 +134,17 @@ export class KeycloakM2mTokenService {
     }
   }
 
-  private parsePositiveIntegerEnv(rawValue: string | undefined, fallback: number): number {
+  private parsePositiveIntegerEnv(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
   private get realmUrl(): string {
-    return (process.env.KEYCLOAK_REALM_URL ?? DEFAULT_KEYCLOAK_REALM_URL).replace(/\/+$/, '');
+    return (
+      process.env.KEYCLOAK_REALM_URL ?? DEFAULT_KEYCLOAK_REALM_URL
+    ).replace(/\/+$/, '');
   }
 }

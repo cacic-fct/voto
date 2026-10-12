@@ -1,4 +1,7 @@
-import { PollEligibilityEnrollment, PollEligibilityMutationMode } from '@org/voting-contracts';
+import {
+  PollEligibilityEnrollment,
+  PollEligibilityMutationMode,
+} from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
 import { parseCsv } from './csv-parser';
 import { EligibilityCsvColumnDialogComponent } from './eligibility-csv-column-dialog.component';
@@ -12,7 +15,11 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
 
     const pollId = this.builder.draft().id;
     if (!pollId) {
-      this.snackBar.open('Salve a votação antes de adicionar matrículas.', 'OK', { duration: 3000 });
+      this.snackBar.open(
+        'Salve a votação antes de adicionar matrículas.',
+        'OK',
+        { duration: 3000 },
+      );
       return;
     }
 
@@ -21,7 +28,9 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
       .map((value) => value.trim())
       .filter(Boolean);
     if (enrollmentNumbers.length === 0) {
-      this.snackBar.open('Informe pelo menos uma matrícula.', 'OK', { duration: 3000 });
+      this.snackBar.open('Informe pelo menos uma matrícula.', 'OK', {
+        duration: 3000,
+      });
       return;
     }
 
@@ -29,17 +38,29 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
-      const result = await firstValueFrom(this.api.addPollEligibilityEnrollments(pollId, { enrollmentNumbers }));
+      const result = await firstValueFrom(
+        this.api.addPollEligibilityEnrollments(pollId, { enrollmentNumbers }),
+      );
       if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
         return;
       }
       this.eligibilityEntries.set(result.entries);
-      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
+      await this.synchronizePollVersion(
+        pollId,
+        expectedUpdatedAt,
+        selectionGeneration,
+      );
       this.manualEnrollmentNumbers.set('');
-      this.snackBar.open(this.importResultLabel(result.createdCount, result.existingCount), 'OK', { duration: 3500 });
+      this.snackBar.open(
+        this.importResultLabel(result.createdCount, result.existingCount),
+        'OK',
+        { duration: 3500 },
+      );
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-        this.snackBar.open('Não foi possível adicionar as matrículas.', 'OK', { duration: 4000 });
+        this.snackBar.open('Não foi possível adicionar as matrículas.', 'OK', {
+          duration: 4000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
@@ -48,7 +69,10 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     }
   }
 
-  protected async importEligibilityFile(file: File | null, mode: PollEligibilityMutationMode): Promise<void> {
+  protected async importEligibilityFile(
+    file: File | null,
+    mode: PollEligibilityMutationMode,
+  ): Promise<void> {
     if (this.isReadOnlyAdmin()) {
       return;
     }
@@ -56,7 +80,11 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     const pollId = this.builder.draft().id;
     if (!file || !pollId) {
       if (!pollId) {
-        this.snackBar.open('Salve a votação antes de importar matrículas.', 'OK', { duration: 3000 });
+        this.snackBar.open(
+          'Salve a votação antes de importar matrículas.',
+          'OK',
+          { duration: 3000 },
+        );
       }
       return;
     }
@@ -67,7 +95,10 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     try {
       const content = await file.text();
       const format = this.detectEligibilityFileFormat(file);
-      const selectedHeader = format === 'csv' ? await this.selectCsvHeader(file.name, content) : undefined;
+      const selectedHeader =
+        format === 'csv'
+          ? await this.selectCsvHeader(file.name, content)
+          : undefined;
       if (format === 'csv' && !selectedHeader) {
         return;
       }
@@ -85,13 +116,23 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
         return;
       }
       this.eligibilityEntries.set(result.entries);
-      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
-      this.snackBar.open(this.importResultLabel(result.createdCount, result.existingCount, mode), 'OK', {
-        duration: 4000,
-      });
+      await this.synchronizePollVersion(
+        pollId,
+        expectedUpdatedAt,
+        selectionGeneration,
+      );
+      this.snackBar.open(
+        this.importResultLabel(result.createdCount, result.existingCount, mode),
+        'OK',
+        {
+          duration: 4000,
+        },
+      );
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-        this.snackBar.open('Não foi possível importar o arquivo.', 'OK', { duration: 4000 });
+        this.snackBar.open('Não foi possível importar o arquivo.', 'OK', {
+          duration: 4000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
@@ -100,7 +141,9 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     }
   }
 
-  protected async deleteEligibilityEnrollment(enrollmentNumber: string): Promise<void> {
+  protected async deleteEligibilityEnrollment(
+    enrollmentNumber: string,
+  ): Promise<void> {
     if (this.isReadOnlyAdmin()) {
       return;
     }
@@ -114,18 +157,26 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
-      await firstValueFrom(this.api.deletePollEligibilityEnrollment(pollId, enrollmentNumber));
+      await firstValueFrom(
+        this.api.deletePollEligibilityEnrollment(pollId, enrollmentNumber),
+      );
       if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
         return;
       }
       this.eligibilityEntries.update((entries) =>
         entries.filter((entry) => entry.enrollmentNumber !== enrollmentNumber),
       );
-      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
+      await this.synchronizePollVersion(
+        pollId,
+        expectedUpdatedAt,
+        selectionGeneration,
+      );
       this.snackBar.open('Matrícula removida.', 'OK', { duration: 2500 });
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-        this.snackBar.open('Não foi possível remover a matrícula.', 'OK', { duration: 3000 });
+        this.snackBar.open('Não foi possível remover a matrícula.', 'OK', {
+          duration: 3000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
@@ -140,7 +191,12 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     }
 
     const pollId = this.builder.draft().id;
-    if (!pollId || !globalThis.confirm('Remover todas as matrículas habilitadas nesta votação?')) {
+    if (
+      !pollId ||
+      !globalThis.confirm(
+        'Remover todas as matrículas habilitadas nesta votação?',
+      )
+    ) {
       return;
     }
 
@@ -148,16 +204,26 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     const selectionGeneration = this.currentPollSelectionGeneration();
     this.importingEligibility.set(true);
     try {
-      const result = await firstValueFrom(this.api.clearPollEligibilityEnrollments(pollId));
+      const result = await firstValueFrom(
+        this.api.clearPollEligibilityEnrollments(pollId),
+      );
       if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
         return;
       }
       this.eligibilityEntries.set(result.entries);
-      await this.synchronizePollVersion(pollId, expectedUpdatedAt, selectionGeneration);
-      this.snackBar.open('Lista de matrículas limpa.', 'OK', { duration: 3000 });
+      await this.synchronizePollVersion(
+        pollId,
+        expectedUpdatedAt,
+        selectionGeneration,
+      );
+      this.snackBar.open('Lista de matrículas limpa.', 'OK', {
+        duration: 3000,
+      });
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-        this.snackBar.open('Não foi possível limpar a lista.', 'OK', { duration: 3000 });
+        this.snackBar.open('Não foi possível limpar a lista.', 'OK', {
+          duration: 3000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
@@ -192,14 +258,20 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
     }
 
     try {
-      const result = await firstValueFrom(this.api.listPollEligibilityEnrollments(poll.id));
+      const result = await firstValueFrom(
+        this.api.listPollEligibilityEnrollments(poll.id),
+      );
       if (!this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
         return;
       }
       this.eligibilityEntries.set(result.entries);
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
-        this.snackBar.open('Não foi possível carregar as matrículas habilitadas.', 'OK', { duration: 3000 });
+        this.snackBar.open(
+          'Não foi possível carregar as matrículas habilitadas.',
+          'OK',
+          { duration: 3000 },
+        );
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, poll.id)) {
@@ -210,10 +282,15 @@ export abstract class AdminPollBuilderPageEligibility extends AdminPollBuilderPa
 
   private detectEligibilityFileFormat(file: File): 'csv' | 'txt' {
     const fileName = file.name.toLowerCase();
-    return file.type.includes('csv') || fileName.endsWith('.csv') ? 'csv' : 'txt';
+    return file.type.includes('csv') || fileName.endsWith('.csv')
+      ? 'csv'
+      : 'txt';
   }
 
-  private async selectCsvHeader(fileName: string, content: string): Promise<string | undefined> {
+  private async selectCsvHeader(
+    fileName: string,
+    content: string,
+  ): Promise<string | undefined> {
     const parsedCsv = parseCsv(content);
     const dialogRef = this.dialog.open(EligibilityCsvColumnDialogComponent, {
       width: '32rem',

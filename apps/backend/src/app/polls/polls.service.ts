@@ -104,7 +104,9 @@ export class PollsService {
     return this.query.listAdminPolls(user);
   }
 
-  listPublicPolls(user?: AuthenticatedPrincipal | null): Promise<PollSummary[]> {
+  listPublicPolls(
+    user?: AuthenticatedPrincipal | null,
+  ): Promise<PollSummary[]> {
     return this.query.listPublicPolls(user);
   }
 
@@ -116,15 +118,24 @@ export class PollsService {
     return this.query.getPublishedPoll(id, user);
   }
 
-  getPublishedPollForKiosk(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+  getPublishedPollForKiosk(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     return this.query.getPublishedPollForKiosk(id, user);
   }
 
-  getPublishedPollByDirectLink(directLinkToken: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+  getPublishedPollByDirectLink(
+    directLinkToken: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     return this.query.getPublishedPollByDirectLink(directLinkToken, user);
   }
 
-  assertPublishedPollReadable(id: string, user?: AuthenticatedPrincipal): Promise<void> {
+  assertPublishedPollReadable(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<void> {
     return this.query.assertPublishedPollReadable(id, user);
   }
 
@@ -132,18 +143,30 @@ export class PollsService {
     directLinkToken: string,
     user?: AuthenticatedPrincipal,
   ): Promise<string> {
-    return this.query.assertPublishedDirectLinkPollReadable(directLinkToken, user);
+    return this.query.assertPublishedDirectLinkPollReadable(
+      directLinkToken,
+      user,
+    );
   }
 
-  getAdminPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+  getAdminPollResults(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollResults> {
     return this.results.getAdminPollResults(id, user);
   }
 
-  exportCacicElectionVoterEnrollments(id: string, user?: AuthenticatedPrincipal): Promise<string> {
+  exportCacicElectionVoterEnrollments(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<string> {
     return this.results.exportCacicElectionVoterEnrollments(id, user);
   }
 
-  getPublicPollResults(id: string, user?: AuthenticatedPrincipal): Promise<PollResults> {
+  getPublicPollResults(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollResults> {
     return this.results.getPublicPollResults(id, user);
   }
 
@@ -154,11 +177,19 @@ export class PollsService {
     return this.results.getDirectLinkPublicPollResults(directLinkToken, user);
   }
 
-  streamAdminPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+  streamAdminPollResults(
+    id: string,
+    lastEventId: string | undefined,
+    user?: AuthenticatedPrincipal,
+  ): Observable<MessageEvent> {
     return this.results.streamAdminPollResults(id, lastEventId, user);
   }
 
-  streamPublicPollResults(id: string, lastEventId: string | undefined, user?: AuthenticatedPrincipal): Observable<MessageEvent> {
+  streamPublicPollResults(
+    id: string,
+    lastEventId: string | undefined,
+    user?: AuthenticatedPrincipal,
+  ): Observable<MessageEvent> {
     return this.results.streamPublicPollResults(id, lastEventId, user);
   }
 
@@ -167,7 +198,11 @@ export class PollsService {
     lastEventId: string | undefined,
     user?: AuthenticatedPrincipal,
   ): Observable<MessageEvent> {
-    return this.results.streamDirectLinkPublicPollResults(directLinkToken, lastEventId, user);
+    return this.results.streamDirectLinkPublicPollResults(
+      directLinkToken,
+      lastEventId,
+      user,
+    );
   }
 
   getPollResultsDelta(
@@ -182,7 +217,11 @@ export class PollsService {
     return this.mutations.createPoll(input, user);
   }
 
-  updatePoll(id: string, input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {
+  updatePoll(
+    id: string,
+    input: SavePollDto,
+    user: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     return this.mutations.updatePoll(id, input, user);
   }
 
@@ -192,12 +231,20 @@ export class PollsService {
     user: AuthenticatedPrincipal,
     expectedUpdatedAt?: string,
   ): Promise<Poll> {
-    const poll = await this.mutations.updatePollStatus(id, status, user, expectedUpdatedAt);
+    const poll = await this.mutations.updatePollStatus(
+      id,
+      status,
+      user,
+      expectedUpdatedAt,
+    );
     if (status === 'closed') {
       try {
         await this.results.publishPollResultsForResponse(id, true);
       } catch (error) {
-        this.logger.warn(`Could not publish the final results for closed poll ${id}.`, error);
+        this.logger.warn(
+          `Could not publish the final results for closed poll ${id}.`,
+          error,
+        );
       }
     }
     return poll;
@@ -215,7 +262,9 @@ export class PollsService {
     if (user && resolveAdminPollAudience(user) === 'observer') {
       return this.query
         .getAdminPoll(pollId, user)
-        .then(() => this.eligibility.listEligibilityEnrollments(pollId, options));
+        .then(() =>
+          this.eligibility.listEligibilityEnrollments(pollId, options),
+        );
     }
 
     return this.eligibility.listEligibilityEnrollments(pollId, options);
@@ -237,15 +286,29 @@ export class PollsService {
     return this.eligibility.importEligibilityEnrollments(pollId, input, user);
   }
 
-  deleteEligibilityEnrollment(pollId: string, enrollmentNumber: string, user?: AuthenticatedPrincipal): Promise<void> {
-    return this.eligibility.deleteEligibilityEnrollment(pollId, enrollmentNumber, user);
+  deleteEligibilityEnrollment(
+    pollId: string,
+    enrollmentNumber: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<void> {
+    return this.eligibility.deleteEligibilityEnrollment(
+      pollId,
+      enrollmentNumber,
+      user,
+    );
   }
 
-  clearEligibilityEnrollments(pollId: string, user?: AuthenticatedPrincipal): Promise<PollEligibilityEnrollmentList> {
+  clearEligibilityEnrollments(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollEligibilityEnrollmentList> {
     return this.eligibility.clearEligibilityEnrollments(pollId, user);
   }
 
-  listPublicCacicElectionSlates(pollId: string, user?: AuthenticatedPrincipal): Promise<CacicElectionSlate[]> {
+  listPublicCacicElectionSlates(
+    pollId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<CacicElectionSlate[]> {
     return this.cacicElection.listPublicCacicElectionSlates(pollId, user);
   }
 
@@ -276,7 +339,11 @@ export class PollsService {
     input: UpdateCacicElectionSlateDto,
     user: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
-    return this.cacicElection.createAdminCacicElectionSlate(pollId, input, user);
+    return this.cacicElection.createAdminCacicElectionSlate(
+      pollId,
+      input,
+      user,
+    );
   }
 
   updateAdminCacicElectionSlate(
@@ -285,7 +352,12 @@ export class PollsService {
     input: UpdateCacicElectionSlateDto,
     user: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
-    return this.cacicElection.updateAdminCacicElectionSlate(pollId, slateId, input, user);
+    return this.cacicElection.updateAdminCacicElectionSlate(
+      pollId,
+      slateId,
+      input,
+      user,
+    );
   }
 
   rejectCacicElectionSlate(
@@ -294,7 +366,12 @@ export class PollsService {
     input: RejectCacicElectionSlateDto,
     user: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
-    return this.cacicElection.rejectCacicElectionSlate(pollId, slateId, input, user);
+    return this.cacicElection.rejectCacicElectionSlate(
+      pollId,
+      slateId,
+      input,
+      user,
+    );
   }
 
   updateCacicElectionSlateEnabled(
@@ -303,14 +380,27 @@ export class PollsService {
     input: UpdateCacicElectionSlateEnabledDto,
     user?: AuthenticatedPrincipal,
   ): Promise<AdminCacicElectionSlate> {
-    return this.cacicElection.updateCacicElectionSlateEnabled(pollId, slateId, input, user);
+    return this.cacicElection.updateCacicElectionSlateEnabled(
+      pollId,
+      slateId,
+      input,
+      user,
+    );
   }
 
-  deleteCacicElectionSlate(pollId: string, slateId: string, user?: AuthenticatedPrincipal): Promise<void> {
+  deleteCacicElectionSlate(
+    pollId: string,
+    slateId: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<void> {
     return this.cacicElection.deleteCacicElectionSlate(pollId, slateId, user);
   }
 
-  submitResponse(id: string, input: SubmitPollResponseDto, user?: AuthenticatedPrincipal): Promise<PollResponse> {
+  submitResponse(
+    id: string,
+    input: SubmitPollResponseDto,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollResponse> {
     return this.responses.submitResponse(id, input, user);
   }
 
@@ -319,10 +409,17 @@ export class PollsService {
     input: SubmitPollResponseDto,
     user?: AuthenticatedPrincipal,
   ): Promise<PollResponse> {
-    return this.responses.submitDirectLinkResponse(directLinkToken, input, user);
+    return this.responses.submitDirectLinkResponse(
+      directLinkToken,
+      input,
+      user,
+    );
   }
 
-  getUserResponseState(id: string, user?: AuthenticatedPrincipal): Promise<PollUserResponseState> {
+  getUserResponseState(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<PollUserResponseState> {
     return this.responses.getUserResponseState(id, user);
   }
 
@@ -333,7 +430,10 @@ export class PollsService {
     return this.responses.getDirectLinkUserResponseState(directLinkToken, user);
   }
 
-  private get resultSubscribers(): Map<string, Set<(event: PollResultStreamEvent) => void>> {
+  private get resultSubscribers(): Map<
+    string,
+    Set<(event: PollResultStreamEvent) => void>
+  > {
     return this.results.resultSubscribers;
   }
 
@@ -341,15 +441,22 @@ export class PollsService {
     return this.mutations.validatePollInput(input);
   }
 
-  private validatePollPublicationSchedule(schedule: PollPublicationScheduleData): void {
+  private validatePollPublicationSchedule(
+    schedule: PollPublicationScheduleData,
+  ): void {
     return this.mutations.validatePollPublicationSchedule(schedule);
   }
 
-  private normalizeElementSettings(element: SavePollDto['elements'][number]): PollElementSettings | undefined {
+  private normalizeElementSettings(
+    element: SavePollDto['elements'][number],
+  ): PollElementSettings | undefined {
     return this.mutations.normalizeElementSettings(element);
   }
 
-  private resolvePollMetadata(input: SavePollDto, existing?: PollMetadataData): Promise<PollMetadataData> {
+  private resolvePollMetadata(
+    input: SavePollDto,
+    existing?: PollMetadataData,
+  ): Promise<PollMetadataData> {
     return this.mutations.resolvePollMetadata(input, existing);
   }
 
@@ -358,13 +465,20 @@ export class PollsService {
     existing?: PollResultVisibilityData,
     metadata?: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase'>,
   ): PollResultVisibilityData {
-    return this.mutations.resolvePollResultVisibility(input, existing, metadata);
+    return this.mutations.resolvePollResultVisibility(
+      input,
+      existing,
+      metadata,
+    );
   }
 
   private resolvePollResponseOptions(
     input: SavePollDto,
     existing: PollResponseOptionsData | undefined,
-    metadata: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase' | 'votingStyle'>,
+    metadata: Pick<
+      PollMetadataData,
+      'mode' | 'cacicElectionPhase' | 'votingStyle'
+    >,
   ): PollResponseOptionsData {
     return this.mutations.resolvePollResponseOptions(input, existing, metadata);
   }
@@ -376,11 +490,15 @@ export class PollsService {
     return this.mutations.resolvePollPublicationSchedule(input, existing);
   }
 
-  private parseEligibilityImport(input: ImportPollEligibilityEnrollmentsDto): ParsedEligibilityEnrollments {
+  private parseEligibilityImport(
+    input: ImportPollEligibilityEnrollmentsDto,
+  ): ParsedEligibilityEnrollments {
     return this.eligibility.parseEligibilityImport(input);
   }
 
-  private normalizeEnrollmentNumbers(rawValues: readonly unknown[]): ParsedEligibilityEnrollments {
+  private normalizeEnrollmentNumbers(
+    rawValues: readonly unknown[],
+  ): ParsedEligibilityEnrollments {
     return this.eligibility.normalizeEnrollmentNumbers(rawValues);
   }
 
@@ -391,10 +509,16 @@ export class PollsService {
     email: string | null;
     claims: unknown;
   }): PollResultsVoter {
-    return toPollResultsVoter({ ...user, claims: user.claims as Prisma.JsonValue });
+    return toPollResultsVoter({
+      ...user,
+      claims: user.claims as Prisma.JsonValue,
+    });
   }
 
-  private ensureVotingAllowed(poll: PollEligibilityRecord, user: AuthenticatedVoter): Promise<void> {
+  private ensureVotingAllowed(
+    poll: PollEligibilityRecord,
+    user: AuthenticatedVoter,
+  ): Promise<void> {
     return this.eligibility.ensureVotingAllowed(poll, user);
   }
 
@@ -405,7 +529,10 @@ export class PollsService {
     return validatePollResponse(poll, input);
   }
 
-  private normalizeAnswer(element: ElementRecord, rawValue: unknown): PollResponseAnswer['value'] {
+  private normalizeAnswer(
+    element: ElementRecord,
+    rawValue: unknown,
+  ): PollResponseAnswer['value'] {
     return normalizeAnswer(element, rawValue);
   }
 
@@ -421,11 +548,16 @@ export class PollsService {
     return isEmptyAnswer(value);
   }
 
-  private buildSchedulingSlots(settings: PollSchedulingSettings): { id: string }[] {
+  private buildSchedulingSlots(
+    settings: PollSchedulingSettings,
+  ): { id: string }[] {
     return buildSchedulingSlots(settings);
   }
 
-  private subscribeToPollResults(pollId: string, listener: (event: PollResultStreamEvent) => void): () => void {
+  private subscribeToPollResults(
+    pollId: string,
+    listener: (event: PollResultStreamEvent) => void,
+  ): () => void {
     return this.results.subscribeToPollResults(pollId, listener);
   }
 
@@ -433,7 +565,10 @@ export class PollsService {
     return this.results.publishPollResults(event);
   }
 
-  private toContractPoll(poll: Parameters<typeof toContractPoll>[0], options: PollContractOptions = {}): Poll {
+  private toContractPoll(
+    poll: Parameters<typeof toContractPoll>[0],
+    options: PollContractOptions = {},
+  ): Poll {
     return toContractPoll(poll, options);
   }
 
@@ -457,11 +592,15 @@ export class PollsService {
     return toContractVotingStyle(status);
   }
 
-  private toDbVoterEligibilitySource(source: string): DbPollVoterEligibilitySource {
+  private toDbVoterEligibilitySource(
+    source: string,
+  ): DbPollVoterEligibilitySource {
     return toDbVoterEligibilitySource(source as PollVoterEligibilitySource);
   }
 
-  private toContractVoterEligibilitySource(source: DbPollVoterEligibilitySource): PollVoterEligibilitySource {
+  private toContractVoterEligibilitySource(
+    source: DbPollVoterEligibilitySource,
+  ): PollVoterEligibilitySource {
     return toContractVoterEligibilitySource(source);
   }
 

@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PollImagePlacement as DbPollImagePlacement, Prisma } from '@prisma/client';
+import {
+  PollImagePlacement as DbPollImagePlacement,
+  Prisma,
+} from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
 import { PollMutationValidationService } from './poll-mutation-validation.service';
 import { externalPollElementId } from './poll-identifiers';
@@ -27,9 +30,14 @@ export class PollImageMutationsService {
       select: { id: true },
     });
     const elementIdsByExternalId = new Map(
-      elements.map((element) => [externalPollElementId(pollId, element.id), element.id]),
+      elements.map((element) => [
+        externalPollElementId(pollId, element.id),
+        element.id,
+      ]),
     );
-    const existingById = new Map(existingImages.map((image) => [image.id, image]));
+    const existingById = new Map(
+      existingImages.map((image) => [image.id, image]),
+    );
 
     for (const reference of references) {
       if (!existingById.has(reference.id)) {
@@ -40,7 +48,9 @@ export class PollImageMutationsService {
         ? elementIdsByExternalId.get(reference.elementId)
         : null;
       if (reference.elementId && !storedElementId) {
-        throw new BadRequestException('Poll image references an unknown element.');
+        throw new BadRequestException(
+          'Poll image references an unknown element.',
+        );
       }
 
       await tx.pollImage.update({
@@ -61,7 +71,9 @@ export class PollImageMutationsService {
     // UNUSED rows are staged uploads. Keep them across every editor's save;
     // explicit image deletion and the durable staging cleanup own their lifecycle.
     const removedImages = existingImages.filter(
-      (image) => image.placement !== DbPollImagePlacement.UNUSED && !referencedIds.has(image.id),
+      (image) =>
+        image.placement !== DbPollImagePlacement.UNUSED &&
+        !referencedIds.has(image.id),
     );
     if (removedImages.length > 0) {
       await tx.pollObjectDeletion.createMany({

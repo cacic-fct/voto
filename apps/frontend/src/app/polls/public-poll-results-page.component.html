@@ -5,7 +5,11 @@
 
   @if (poll(); as currentPoll) {
     <header class="page-header">
-      <a matIconButton [routerLink]="backLink()" aria-label="Voltar para a votação">
+      <a
+        matIconButton
+        [routerLink]="backLink()"
+        aria-label="Voltar para a votação"
+      >
         <mat-icon>arrow_back</mat-icon>
       </a>
       <div>
@@ -17,7 +21,9 @@
     </header>
 
     @if (results(); as currentResults) {
-      <p class="result-count">{{ voteCountText(currentResults.responseCount) }}</p>
+      <p class="result-count">
+        {{ voteCountText(currentResults.responseCount) }}
+      </p>
 
       @if (resultsFinalizationState() === 'pending') {
         <mat-card appearance="outlined" class="notice-card" aria-live="polite">
@@ -27,7 +33,11 @@
         <mat-card appearance="outlined" class="notice-card" aria-live="polite">
           <mat-card-content>{{ resultsFinalizationError() }}</mat-card-content>
           <mat-card-actions>
-            <button mat-stroked-button type="button" (click)="retryFinalResults()">
+            <button
+              mat-stroked-button
+              type="button"
+              (click)="retryFinalResults()"
+            >
               <mat-icon>refresh</mat-icon>
               Tentar novamente
             </button>
@@ -37,11 +47,20 @@
 
       @if (resultsConnectionState() === 'reconnecting') {
         <mat-card appearance="outlined" class="notice-card">
-          <mat-card-content>Conexão instável. Tentando atualizar os resultados novamente.</mat-card-content>
+          <mat-card-content
+            >Conexão instável. Tentando atualizar os resultados
+            novamente.</mat-card-content
+          >
         </mat-card>
-      } @else if (resultsConnectionState() === 'closed' && currentPoll.status === 'published') {
+      } @else if (
+        resultsConnectionState() === 'closed' &&
+        currentPoll.status === 'published'
+      ) {
         <mat-card appearance="outlined" class="notice-card">
-          <mat-card-content>A atualização ao vivo foi interrompida. Recarregue a página para tentar novamente.</mat-card-content>
+          <mat-card-content
+            >A atualização ao vivo foi interrompida. Recarregue a página para
+            tentar novamente.</mat-card-content
+          >
         </mat-card>
       }
 
@@ -61,7 +80,8 @@
             <mat-icon mat-card-avatar>inbox</mat-icon>
             <mat-card-title>Nenhuma resposta registrada</mat-card-title>
             <mat-card-subtitle>
-              Os resultados aparecerão aqui assim que houver respostas liberadas.
+              Os resultados aparecerão aqui assim que houver respostas
+              liberadas.
             </mat-card-subtitle>
           </mat-card-header>
         </mat-card>
@@ -69,7 +89,9 @@
         <section class="result-section" aria-labelledby="summary-title">
           <div class="section-heading">
             <h2 id="summary-title">Resumo por pergunta</h2>
-            <p>Contagens calculadas a partir das respostas liberadas ao público.</p>
+            <p>
+              Contagens calculadas a partir das respostas liberadas ao público.
+            </p>
           </div>
 
           <div class="question-result-list">
@@ -78,7 +100,9 @@
                 <mat-card-header>
                   <mat-icon mat-card-avatar>bar_chart</mat-icon>
                   <mat-card-title>{{ summary.element.title }}</mat-card-title>
-                  <mat-card-subtitle>{{ summary.answeredCount }} respostas</mat-card-subtitle>
+                  <mat-card-subtitle
+                    >{{ summary.answeredCount }} respostas</mat-card-subtitle
+                  >
                 </mat-card-header>
 
                 <mat-card-content>
@@ -135,7 +159,12 @@
             <mat-chip-set aria-label="Participantes da votação">
               @for (voter of currentResults.voters ?? []; track voter.userId) {
                 <mat-chip>
-                  {{ voter.name || voter.preferredUsername || voter.email || voter.userId }}
+                  {{
+                    voter.name ||
+                      voter.preferredUsername ||
+                      voter.email ||
+                      voter.userId
+                  }}
                 </mat-chip>
               }
             </mat-chip-set>
@@ -155,17 +184,25 @@
                 track response.id;
                 let responseIndex = $index
               ) {
-                <mat-card appearance="outlined" class="individual-response-card">
+                <mat-card
+                  appearance="outlined"
+                  class="individual-response-card"
+                >
                   <mat-card-header>
                     <mat-icon mat-card-avatar>article</mat-icon>
                     <mat-card-title>{{
                       responseLabel(response, responseIndex)
                     }}</mat-card-title>
-                    <mat-card-subtitle>{{ responseSubtitle(response) }}</mat-card-subtitle>
+                    <mat-card-subtitle>{{
+                      responseSubtitle(response)
+                    }}</mat-card-subtitle>
                   </mat-card-header>
                   <mat-card-content>
                     <dl>
-                      @for (row of responseAnswerRows(response); track row.question) {
+                      @for (
+                        row of responseAnswerRows(response);
+                        track row.question
+                      ) {
                         <div>
                           <dt>{{ row.question }}</dt>
                           <dd>{{ row.value }}</dd>

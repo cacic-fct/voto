@@ -51,7 +51,10 @@ import { PollBuilderDraftService } from './poll-builder-draft.service';
   templateUrl: './admin-poll-builder-page.component.html',
   styleUrl: './admin-poll-builder-page.component.scss',
 })
-export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates implements OnDestroy {
+export class AdminPollBuilderPageComponent
+  extends AdminPollBuilderPageSlates
+  implements OnDestroy
+{
   constructor() {
     super();
     void this.loadPolls();
@@ -88,7 +91,9 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
       await this.loadResults(false, selectionGeneration);
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration)) {
-        this.snackBar.open('Não foi possível abrir a votação.', 'OK', { duration: 3000 });
+        this.snackBar.open('Não foi possível abrir a votação.', 'OK', {
+          duration: 3000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration)) {
@@ -103,7 +108,9 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
     }
 
     if (!this.builder.canSave()) {
-      this.snackBar.open('Informe o título da votação.', 'OK', { duration: 3000 });
+      this.snackBar.open('Informe o título da votação.', 'OK', {
+        duration: 3000,
+      });
       return;
     }
 
@@ -121,7 +128,11 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
       await this.loadPolls(false);
       this.snackBar.open('Votação salva.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível salvar. Confira os itens e opções.', 'OK', { duration: 4000 });
+      this.snackBar.open(
+        'Não foi possível salvar. Confira os itens e opções.',
+        'OK',
+        { duration: 4000 },
+      );
     } finally {
       this.saving.set(false);
     }
@@ -147,7 +158,9 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
       await this.loadPolls(false);
       this.snackBar.open('Status atualizado.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível atualizar o status.', 'OK', { duration: 3000 });
+      this.snackBar.open('Não foi possível atualizar o status.', 'OK', {
+        duration: 3000,
+      });
     } finally {
       this.saving.set(false);
     }
@@ -159,7 +172,10 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
     }
 
     const id = this.builder.draft().id;
-    if (!id || !globalThis.confirm('Excluir esta votação e todas as respostas?')) {
+    if (
+      !id ||
+      !globalThis.confirm('Excluir esta votação e todas as respostas?')
+    ) {
       return;
     }
 
@@ -171,7 +187,9 @@ export class AdminPollBuilderPageComponent extends AdminPollBuilderPageSlates im
       await this.loadPolls(false);
       this.snackBar.open('Votação excluída.', 'OK', { duration: 3000 });
     } catch {
-      this.snackBar.open('Não foi possível excluir a votação.', 'OK', { duration: 3000 });
+      this.snackBar.open('Não foi possível excluir a votação.', 'OK', {
+        duration: 3000,
+      });
     } finally {
       this.saving.set(false);
     }

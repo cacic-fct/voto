@@ -28,11 +28,27 @@ export const ELEMENT_TYPE_OPTIONS: ElementTypeOption[] = [
   { type: 'statement', label: 'Texto informativo', icon: 'notes' },
   { type: 'shortText', label: 'Resposta curta', icon: 'short_text' },
   { type: 'longText', label: 'Resposta longa', icon: 'subject' },
-  { type: 'singleChoice', label: 'Escolha única', icon: 'radio_button_checked' },
+  {
+    type: 'singleChoice',
+    label: 'Escolha única',
+    icon: 'radio_button_checked',
+  },
   { type: 'multipleChoice', label: 'Múltipla escolha', icon: 'check_box' },
-  { type: 'selectionDropdown', label: 'Lista suspensa', icon: 'arrow_drop_down_circle' },
-  { type: 'singleSelectionGrid', label: 'Grade de seleção única', icon: 'table_rows' },
-  { type: 'multipleSelectionGrid', label: 'Grade de seleção múltipla', icon: 'checklist' },
+  {
+    type: 'selectionDropdown',
+    label: 'Lista suspensa',
+    icon: 'arrow_drop_down_circle',
+  },
+  {
+    type: 'singleSelectionGrid',
+    label: 'Grade de seleção única',
+    icon: 'table_rows',
+  },
+  {
+    type: 'multipleSelectionGrid',
+    label: 'Grade de seleção múltipla',
+    icon: 'checklist',
+  },
   { type: 'linearScale', label: 'Escala linear', icon: 'linear_scale' },
   { type: 'starRating', label: 'Avaliação por estrelas', icon: 'star' },
   { type: 'date', label: 'Data', icon: 'calendar_today' },
@@ -43,11 +59,20 @@ export const ELEMENT_TYPE_OPTIONS: ElementTypeOption[] = [
 export const SCALE_MINIMUM_OPTIONS = [0, 1] as const;
 export const SCALE_MAXIMUM_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export const STAR_RATING_MAXIMUM_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10] as const;
-export const SCHEDULING_DURATION_OPTIONS = [15, 20, 30, 45, 60, 90, 120] as const;
-export const SCHEDULING_SLOT_INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60] as const;
+export const SCHEDULING_DURATION_OPTIONS = [
+  15, 20, 30, 45, 60, 90, 120,
+] as const;
+export const SCHEDULING_SLOT_INTERVAL_OPTIONS = [
+  5, 10, 15, 20, 30, 45, 60,
+] as const;
 export const SCHEDULING_BUFFER_OPTIONS = [0, 5, 10, 15, 30, 45, 60] as const;
-export const SCHEDULING_INVITEE_LIMIT_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20] as const;
-export const SCHEDULING_INVITEE_MODE_OPTIONS: { mode: PollSchedulingInviteeMode; label: string }[] = [
+export const SCHEDULING_INVITEE_LIMIT_OPTIONS = [
+  1, 2, 3, 4, 5, 10, 15, 20,
+] as const;
+export const SCHEDULING_INVITEE_MODE_OPTIONS: {
+  mode: PollSchedulingInviteeMode;
+  label: string;
+}[] = [
   { mode: 'none', label: 'Não coletar convidados' },
   { mode: 'optional', label: 'Convidados opcionais' },
   { mode: 'required', label: 'Exigir pelo menos um convidado' },
@@ -56,13 +81,20 @@ export const POLL_MODE_OPTIONS: { mode: PollMode; label: string }[] = [
   { mode: 'regular', label: 'Votação regular' },
   { mode: 'cacicElection', label: 'Eleições do CACiC' },
 ];
-export const CACIC_ELECTION_PHASE_OPTIONS: { phase: CacicElectionPhase; label: string }[] = [
+export const CACIC_ELECTION_PHASE_OPTIONS: {
+  phase: CacicElectionPhase;
+  label: string;
+}[] = [
   { phase: 'slateSubmission', label: 'Submissão de chapas' },
   { phase: 'election', label: 'Eleição' },
 ];
 
 export function isOptionChoiceElement(type: PollElementType): boolean {
-  return type === 'singleChoice' || type === 'multipleChoice' || type === 'selectionDropdown';
+  return (
+    type === 'singleChoice' ||
+    type === 'multipleChoice' ||
+    type === 'selectionDropdown'
+  );
 }
 
 export function isGridElement(type: PollElementType): boolean {
@@ -74,7 +106,13 @@ export function isAnswerElement(type: PollElementType): boolean {
 }
 
 export function elementTypeOption(type: PollElementType): ElementTypeOption {
-  return ELEMENT_TYPE_OPTIONS.find((option) => option.type === type) ?? { type, label: type, icon: 'help' };
+  return (
+    ELEMENT_TYPE_OPTIONS.find((option) => option.type === type) ?? {
+      type,
+      label: type,
+      icon: 'help',
+    }
+  );
 }
 
 export function elementTypeLabel(type: PollElementType): string {
@@ -107,14 +145,19 @@ export function createBlankPoll(): Poll {
 }
 
 export function isCacicElectionGeneratedElementId(elementId: string): boolean {
-  return elementId === CACIC_ELECTION_SLATE_FORM_ELEMENT_ID || elementId === CACIC_ELECTION_VOTE_ELEMENT_ID;
+  return (
+    elementId === CACIC_ELECTION_SLATE_FORM_ELEMENT_ID ||
+    elementId === CACIC_ELECTION_VOTE_ELEMENT_ID
+  );
 }
 
 export function isCacicElectionGeneratedElement(element: PollElement): boolean {
   return isCacicElectionGeneratedElementId(element.id);
 }
 
-export function generatedCacicElectionElementFields(element: PollElement): string[] {
+export function generatedCacicElectionElementFields(
+  element: PollElement,
+): string[] {
   if (element.id === CACIC_ELECTION_SLATE_FORM_ELEMENT_ID) {
     return [
       'Nome da chapa',
@@ -144,7 +187,8 @@ export function createCacicElectionSlateFormPreviewElement(): PollElement {
     id: CACIC_ELECTION_SLATE_FORM_ELEMENT_ID,
     type: 'statement',
     title: 'Submissão de chapa',
-    description: 'Formulário gerado automaticamente para coletar dados da chapa e de seus integrantes.',
+    description:
+      'Formulário gerado automaticamente para coletar dados da chapa e de seus integrantes.',
     required: false,
     options: [],
   };
@@ -155,13 +199,15 @@ export function createCacicElectionVotePreviewElement(): PollElement {
     id: CACIC_ELECTION_VOTE_ELEMENT_ID,
     type: 'singleChoice',
     title: 'Voto para chapa',
-    description: 'As opções serão geradas automaticamente com as chapas aprovadas e habilitadas.',
+    description:
+      'As opções serão geradas automaticamente com as chapas aprovadas e habilitadas.',
     required: true,
     options: [
       {
         id: 'preview-approved-slates',
         label: 'Chapas aprovadas',
-        description: 'Substituído pelas chapas habilitadas no momento da eleição.',
+        description:
+          'Substituído pelas chapas habilitadas no momento da eleição.',
       },
       {
         id: 'cacic-election-blank',
@@ -181,8 +227,13 @@ export function ensureCacicElectionGeneratedElement(
   elements: readonly PollElement[],
   generatedElement: PollElement,
 ): PollElement[] {
-  const generatedIds = new Set([CACIC_ELECTION_SLATE_FORM_ELEMENT_ID, CACIC_ELECTION_VOTE_ELEMENT_ID]);
-  const customElements = elements.filter((element) => !generatedIds.has(element.id));
+  const generatedIds = new Set([
+    CACIC_ELECTION_SLATE_FORM_ELEMENT_ID,
+    CACIC_ELECTION_VOTE_ELEMENT_ID,
+  ]);
+  const customElements = elements.filter(
+    (element) => !generatedIds.has(element.id),
+  );
   return [generatedElement, ...customElements];
 }
 
@@ -194,7 +245,9 @@ export function createElement(type: PollElementType): PollElement {
     description: '',
     descriptionImages: [],
     required: isAnswerElement(type),
-    options: isOptionChoiceElement(type) ? [createOption(1), createOption(2)] : [],
+    options: isOptionChoiceElement(type)
+      ? [createOption(1), createOption(2)]
+      : [],
     settings: createSettingsForType(type),
   };
 }
@@ -220,7 +273,9 @@ export function createSchedulingAvailability(
   };
 }
 
-export function ensureChoiceOptions(options: PollChoiceOption[]): PollChoiceOption[] {
+export function ensureChoiceOptions(
+  options: PollChoiceOption[],
+): PollChoiceOption[] {
   return options.length >= 2 ? options : [createOption(1), createOption(2)];
 }
 
@@ -258,7 +313,9 @@ export function createSettingsForType(
 export function ensureGridSettings(grid?: PollGridSettings): PollGridSettings {
   return {
     rows: grid?.rows.length ? grid.rows : [createOption(1), createOption(2)],
-    columns: grid?.columns.length ? grid.columns : [createOption(1), createOption(2)],
+    columns: grid?.columns.length
+      ? grid.columns
+      : [createOption(1), createOption(2)],
   };
 }
 
@@ -283,21 +340,43 @@ export function ensureStarRatingSettings(
   };
 }
 
-export function ensureSchedulingSettings(settings?: PollElementSettings['scheduling']): PollSchedulingSettings {
+export function ensureSchedulingSettings(
+  settings?: PollElementSettings['scheduling'],
+): PollSchedulingSettings {
   const inviteeMode = settings?.inviteeMode ?? 'optional';
   return {
     hostName: settings?.hostName ?? '',
     location: settings?.location ?? '',
     timezone: settings?.timezone ?? 'America/Sao_Paulo',
-    durationMinutes: clampSchedulingOption(settings?.durationMinutes, SCHEDULING_DURATION_OPTIONS, 30),
-    slotIntervalMinutes: clampSchedulingOption(settings?.slotIntervalMinutes, SCHEDULING_SLOT_INTERVAL_OPTIONS, 30),
-    bufferBeforeMinutes: clampSchedulingOption(settings?.bufferBeforeMinutes, SCHEDULING_BUFFER_OPTIONS, 0),
-    bufferAfterMinutes: clampSchedulingOption(settings?.bufferAfterMinutes, SCHEDULING_BUFFER_OPTIONS, 0),
+    durationMinutes: clampSchedulingOption(
+      settings?.durationMinutes,
+      SCHEDULING_DURATION_OPTIONS,
+      30,
+    ),
+    slotIntervalMinutes: clampSchedulingOption(
+      settings?.slotIntervalMinutes,
+      SCHEDULING_SLOT_INTERVAL_OPTIONS,
+      30,
+    ),
+    bufferBeforeMinutes: clampSchedulingOption(
+      settings?.bufferBeforeMinutes,
+      SCHEDULING_BUFFER_OPTIONS,
+      0,
+    ),
+    bufferAfterMinutes: clampSchedulingOption(
+      settings?.bufferAfterMinutes,
+      SCHEDULING_BUFFER_OPTIONS,
+      0,
+    ),
     inviteeMode,
     maxInvitees:
       inviteeMode === 'none'
         ? 0
-        : clampSchedulingOption(settings?.maxInvitees, SCHEDULING_INVITEE_LIMIT_OPTIONS, 3),
+        : clampSchedulingOption(
+            settings?.maxInvitees,
+            SCHEDULING_INVITEE_LIMIT_OPTIONS,
+            3,
+          ),
     availability: settings?.availability.length
       ? settings.availability
       : [createSchedulingAvailability(1), createSchedulingAvailability(2, 1)],
@@ -317,18 +396,22 @@ export function createSchedulingTimezoneOptions(): string[] {
   const intlWithTimezones = Intl as typeof Intl & {
     supportedValuesOf?: (key: 'timeZone') => string[];
   };
-  const supportedOptions = intlWithTimezones.supportedValuesOf?.('timeZone') ?? fallbackOptions;
+  const supportedOptions =
+    intlWithTimezones.supportedValuesOf?.('timeZone') ?? fallbackOptions;
 
-  return [...new Set(['America/Sao_Paulo', ...supportedOptions])].sort((left, right) =>
-    left === 'America/Sao_Paulo'
-      ? -1
-      : right === 'America/Sao_Paulo'
-        ? 1
-        : left.localeCompare(right),
+  return [...new Set(['America/Sao_Paulo', ...supportedOptions])].sort(
+    (left, right) =>
+      left === 'America/Sao_Paulo'
+        ? -1
+        : right === 'America/Sao_Paulo'
+          ? 1
+          : left.localeCompare(right),
   );
 }
 
-export function toImageReferences(images: readonly PollImage[] | undefined): PollImageReference[] | undefined {
+export function toImageReferences(
+  images: readonly PollImage[] | undefined,
+): PollImageReference[] | undefined {
   if (!images?.length) {
     return undefined;
   }
@@ -340,7 +423,11 @@ export function toImageReferences(images: readonly PollImage[] | undefined): Pol
   }));
 }
 
-function clampSchedulingOption<T extends number>(value: number | undefined, options: readonly T[], fallback: T): T {
+function clampSchedulingOption<T extends number>(
+  value: number | undefined,
+  options: readonly T[],
+  fallback: T,
+): T {
   return options.includes(value as T) ? (value as T) : fallback;
 }
 
@@ -355,6 +442,7 @@ function defaultAvailabilityDate(dayOffset: number): string {
 }
 
 function createId(prefix: string): string {
-  const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+  const random =
+    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
   return `${prefix}-${random}`;
 }

@@ -24,8 +24,7 @@ export function isPollVotingOpen(poll: Poll, now = new Date()): boolean {
     poll.status === 'published' &&
     readInstantTime(poll.visibleFrom) <= now.getTime() &&
     readInstantTime(poll.votingStartsAt) <= now.getTime() &&
-    readInstantTime(poll.votingEndsAt, Number.POSITIVE_INFINITY) >
-      now.getTime()
+    readInstantTime(poll.votingEndsAt, Number.POSITIVE_INFINITY) > now.getTime()
   );
 }
 
@@ -49,11 +48,19 @@ export function canVoteInPoll(
   );
 }
 
-export function canSubmitSlateInPoll(poll: Poll | null, now = new Date()): boolean {
-  return Boolean(poll && isSlateSubmissionPoll(poll) && isPollVotingOpen(poll, now));
+export function canSubmitSlateInPoll(
+  poll: Poll | null,
+  now = new Date(),
+): boolean {
+  return Boolean(
+    poll && isSlateSubmissionPoll(poll) && isPollVotingOpen(poll, now),
+  );
 }
 
-export function votingUnavailableTitle(poll: Poll | null, now = new Date()): string {
+export function votingUnavailableTitle(
+  poll: Poll | null,
+  now = new Date(),
+): string {
   if (!poll || poll.status !== 'published') {
     return 'Votação encerrada';
   }

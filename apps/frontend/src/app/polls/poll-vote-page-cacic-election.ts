@@ -158,7 +158,9 @@ export abstract class PollVotePageCacicElection extends PollVotePageScheduling {
 
     this.loadingSlates.set(true);
     try {
-      const slate = await firstValueFrom(this.api.getMyCacicElectionSlate(poll.id));
+      const slate = await firstValueFrom(
+        this.api.getMyCacicElectionSlate(poll.id),
+      );
       if (!this.isPollLoadCurrent(generation)) {
         return;
       }

@@ -11,8 +11,11 @@ describe('PollImagesService', () => {
   const prisma = {
     $transaction: jest.fn(),
     pollObjectDeletion: {
-      create: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn(),
-      updateMany: jest.fn(), findMany: jest.fn(),
+      create: jest.fn(),
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+      updateMany: jest.fn(),
+      findMany: jest.fn(),
     },
     poll: {
       findUnique: jest.fn(),
@@ -64,19 +67,29 @@ describe('PollImagesService', () => {
     prisma.pollImage.findFirst.mockResolvedValue(null);
     prisma.pollImage.findMany.mockResolvedValue([]);
     prisma.pollObjectDeletion.updateMany.mockResolvedValue({ count: 1 });
-    service = new PollImagesService(prisma as unknown as PrismaService, s3 as unknown as S3Service);
+    service = new PollImagesService(
+      prisma as unknown as PrismaService,
+      s3 as unknown as S3Service,
+    );
   });
 
   it('converts uploads to AVIF, stores metadata, and maps the image URL', async () => {
     prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
-    s3.uploadFile.mockImplementation(async (key: string) => ({ key, size: 321 }));
-    prisma.pollImage.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-      ...data,
-      altText: null,
-      caption: null,
+    s3.uploadFile.mockImplementation(async (key: string) => ({
+      key,
+      size: 321,
     }));
+    prisma.pollImage.create.mockImplementation(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        ...data,
+        altText: null,
+        caption: null,
+      }),
+    );
 
-    await expect(service.uploadPollImage('poll-1', validFile, user)).resolves.toEqual(
+    await expect(
+      service.uploadPollImage('poll-1', validFile, user),
+    ).resolves.toEqual(
       expect.objectContaining({
         url: expect.stringMatching(/^\/api\/polls\/poll-1\/images\//),
         width: 2,
@@ -120,17 +133,26 @@ describe('PollImagesService', () => {
 
     prisma.poll.findUnique.mockResolvedValue(null);
 
-    await expect(service.uploadPollImage('missing-poll', validFile, user)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.uploadPollImage('missing-poll', validFile, user),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(s3.uploadFile).not.toHaveBeenCalled();
   });
 
   it('deletes the uploaded object when database persistence fails', async () => {
     prisma.poll.findUnique.mockResolvedValue({ id: 'poll-1' });
-    s3.uploadFile.mockImplementation(async (key: string) => ({ key, size: 321 }));
+    s3.uploadFile.mockImplementation(async (key: string) => ({
+      key,
+      size: 321,
+    }));
     prisma.pollImage.create.mockRejectedValue(new Error('db failed'));
 
-    await expect(service.uploadPollImage('poll-1', validFile, user)).rejects.toThrow('db failed');
-    expect(s3.deleteFile).toHaveBeenCalledWith(expect.stringMatching(/^polls\/poll-1\/images\/.+\.avif$/));
+    await expect(
+      service.uploadPollImage('poll-1', validFile, user),
+    ).rejects.toThrow('db failed');
+    expect(s3.deleteFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^polls\/poll-1\/images\/.+\.avif$/),
+    );
   });
 
   it('serves eligible published images and blocks reads without access', async () => {
@@ -144,17 +166,28 @@ describe('PollImagesService', () => {
         visibleFrom: null,
       },
     });
-    s3.downloadFile.mockResolvedValue({ stream, contentType: undefined, contentLength: 5 });
+    s3.downloadFile.mockResolvedValue({
+      stream,
+      contentType: undefined,
+      contentLength: 5,
+    });
 
-    await expect(service.getPollImage('poll-1', 'image-1', user, { allowPublishedRead: true })).resolves.toEqual({
+    await expect(
+      service.getPollImage('poll-1', 'image-1', user, {
+        allowPublishedRead: true,
+      }),
+    ).resolves.toEqual({
       stream,
       contentType: 'image/avif',
       contentLength: 5,
     });
 
-    await expect(service.getPollImage('poll-1', 'image-1', { permissions: [], permissionSet: new Set() } as never)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.getPollImage('poll-1', 'image-1', {
+        permissions: [],
+        permissionSet: new Set(),
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
     prisma.pollImage.findFirst.mockResolvedValue({
       objectKey: 'polls/poll-1/images/image-1.avif',
@@ -165,9 +198,12 @@ describe('PollImagesService', () => {
         visibleFrom: null,
       },
     });
-    await expect(service.getPollImage('poll-1', 'image-1', { permissions: [], permissionSet: new Set() } as never)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.getPollImage('poll-1', 'image-1', {
+        permissions: [],
+        permissionSet: new Set(),
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('allows public reads for closed result-public images and blocks future visibility windows', async () => {
@@ -181,9 +217,17 @@ describe('PollImagesService', () => {
         visibleFrom: new Date(Date.now() - 1_000),
       },
     });
-    s3.downloadFile.mockResolvedValue({ stream, contentType: 'image/custom-avif', contentLength: undefined });
+    s3.downloadFile.mockResolvedValue({
+      stream,
+      contentType: 'image/custom-avif',
+      contentLength: undefined,
+    });
 
-    await expect(service.getPollImage('poll-1', 'image-1', undefined, { allowPublishedRead: true })).resolves.toEqual({
+    await expect(
+      service.getPollImage('poll-1', 'image-1', undefined, {
+        allowPublishedRead: true,
+      }),
+    ).resolves.toEqual({
       stream,
       contentType: 'image/custom-avif',
       contentLength: undefined,
@@ -199,33 +243,51 @@ describe('PollImagesService', () => {
       },
     });
 
-    await expect(service.getPollImage('poll-1', 'image-1', undefined, { allowPublishedRead: true })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.getPollImage('poll-1', 'image-1', undefined, {
+        allowPublishedRead: true,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects image reads when the database row is missing', async () => {
     prisma.pollImage.findFirst.mockResolvedValue(null);
 
-    await expect(service.getPollImage('poll-1', 'missing-image', user)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.getPollImage('poll-1', 'missing-image', user),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('deletes image rows and storage objects', async () => {
-    prisma.pollImage.findFirst.mockResolvedValueOnce({ objectKey: 'polls/poll-1/images/image-1.avif' }).mockResolvedValue(null);
+    prisma.pollImage.findFirst
+      .mockResolvedValueOnce({ objectKey: 'polls/poll-1/images/image-1.avif' })
+      .mockResolvedValue(null);
     prisma.pollImage.delete.mockResolvedValue({});
 
-    await expect(service.deletePollImage('poll-1', 'image-1')).resolves.toBeUndefined();
-    expect(prisma.pollImage.delete).toHaveBeenCalledWith({ where: { id: 'image-1' } });
-    expect(s3.deleteFile).toHaveBeenCalledWith('polls/poll-1/images/image-1.avif');
+    await expect(
+      service.deletePollImage('poll-1', 'image-1'),
+    ).resolves.toBeUndefined();
+    expect(prisma.pollImage.delete).toHaveBeenCalledWith({
+      where: { id: 'image-1' },
+    });
+    expect(s3.deleteFile).toHaveBeenCalledWith(
+      'polls/poll-1/images/image-1.avif',
+    );
 
     prisma.pollImage.findFirst.mockResolvedValue(null);
-    await expect(service.deletePollImage('poll-1', 'missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.deletePollImage('poll-1', 'missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('deduplicates best-effort object deletion and swallows storage failures', async () => {
-    s3.deleteFile.mockRejectedValueOnce(new Error('storage offline')).mockResolvedValue(undefined);
+    s3.deleteFile
+      .mockRejectedValueOnce(new Error('storage offline'))
+      .mockResolvedValue(undefined);
 
-    await expect(service.deleteObjectKeysBestEffort(['same-key', 'same-key', 'other-key'])).resolves.toBeUndefined();
+    await expect(
+      service.deleteObjectKeysBestEffort(['same-key', 'same-key', 'other-key']),
+    ).resolves.toBeUndefined();
 
     expect(s3.deleteFile).toHaveBeenCalledTimes(3);
     expect(s3.deleteFile).toHaveBeenNthCalledWith(1, 'same-key');
@@ -234,18 +296,29 @@ describe('PollImagesService', () => {
   });
 
   it('retains failed cleanup for another service instance and deletes the intent only after recovery', async () => {
-    const pending = { objectKey: 'orphan.avif', nextAttemptAt: new Date(0), attempts: 0 };
+    const pending = {
+      objectKey: 'orphan.avif',
+      nextAttemptAt: new Date(0),
+      attempts: 0,
+    };
     prisma.pollObjectDeletion.findMany.mockResolvedValue([pending]);
     s3.deleteFile.mockRejectedValue(new Error('S3 unavailable'));
     await service.retryPendingObjectDeletions();
     expect(prisma.pollObjectDeletion.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.pollObjectDeletion.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: { attempts: { increment: 1 }, nextAttemptAt: expect.any(Date) },
-    }));
+    expect(prisma.pollObjectDeletion.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { attempts: { increment: 1 }, nextAttemptAt: expect.any(Date) },
+      }),
+    );
     s3.deleteFile.mockResolvedValue(undefined);
-    const restarted = new PollImagesService(prisma as unknown as PrismaService, s3 as unknown as S3Service);
+    const restarted = new PollImagesService(
+      prisma as unknown as PrismaService,
+      s3 as unknown as S3Service,
+    );
     await restarted.retryPendingObjectDeletions();
-    expect(prisma.pollObjectDeletion.deleteMany).toHaveBeenCalledWith({ where: { objectKey: pending.objectKey } });
+    expect(prisma.pollObjectDeletion.deleteMany).toHaveBeenCalledWith({
+      where: { objectKey: pending.objectKey },
+    });
   });
 
   it('expires abandoned staging with a placement recheck and preserves a concurrently attached image', async () => {
@@ -253,20 +326,30 @@ describe('PollImagesService', () => {
       { id: 'expired', objectKey: 'expired.avif' },
       { id: 'attached-by-save', objectKey: 'keep.avif' },
     ]);
-    prisma.pollImage.deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    prisma.pollImage.deleteMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
     prisma.pollObjectDeletion.findMany.mockResolvedValue([]);
     await service.retryPendingObjectDeletions();
     expect(prisma.pollObjectDeletion.upsert).toHaveBeenCalledTimes(1);
     expect(prisma.pollObjectDeletion.upsert).toHaveBeenCalledWith({
-      where: { objectKey: 'expired.avif' }, create: { objectKey: 'expired.avif' }, update: {},
+      where: { objectKey: 'expired.avif' },
+      create: { objectKey: 'expired.avif' },
+      update: {},
     });
     expect(prisma.pollImage.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'attached-by-save', placement: 'UNUSED', createdAt: { lt: expect.any(Date) } },
+      where: {
+        id: 'attached-by-save',
+        placement: 'UNUSED',
+        createdAt: { lt: expect.any(Date) },
+      },
     });
   });
 
   it('does not delete an object retained by a current image or claimed by another worker', async () => {
-    prisma.pollObjectDeletion.findMany.mockResolvedValue([{ objectKey: 'retained.avif', nextAttemptAt: new Date(0) }]);
+    prisma.pollObjectDeletion.findMany.mockResolvedValue([
+      { objectKey: 'retained.avif', nextAttemptAt: new Date(0) },
+    ]);
     prisma.pollImage.findFirst.mockResolvedValue({ id: 'retained' });
     await service.retryPendingObjectDeletions();
     expect(s3.deleteFile).not.toHaveBeenCalled();

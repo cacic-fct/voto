@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import {
   FormArray,
   FormControl,
@@ -87,7 +95,11 @@ const requiredRoles = [
 
       <div class="member-list" formArrayName="members">
         @for (member of members.controls; track member; let index = $index) {
-          <mat-card appearance="outlined" class="member-card" [formGroupName]="index">
+          <mat-card
+            appearance="outlined"
+            class="member-card"
+            [formGroupName]="index"
+          >
             <mat-card-header>
               <mat-icon mat-card-avatar>badge</mat-icon>
               <mat-card-title>Integrante {{ index + 1 }}</mat-card-title>
@@ -97,7 +109,8 @@ const requiredRoles = [
                 matTooltip="Remover integrante"
                 aria-label="Remover integrante"
                 [disabled]="members.controls.length <= 6"
-                (click)="removeMember(index)">
+                (click)="removeMember(index)"
+              >
                 <mat-icon>delete</mat-icon>
               </button>
             </mat-card-header>
@@ -110,14 +123,20 @@ const requiredRoles = [
 
                 <mat-form-field appearance="outline">
                   <mat-label>Matrícula</mat-label>
-                  <input matInput formControlName="enrollmentNumber" maxlength="64" />
+                  <input
+                    matInput
+                    formControlName="enrollmentNumber"
+                    maxlength="64"
+                  />
                 </mat-form-field>
 
                 <mat-form-field appearance="outline">
                   <mat-label>Cargo</mat-label>
                   <mat-select formControlName="role">
                     @for (role of roleOptions; track role) {
-                      <mat-option [value]="role">{{ roleLabel(role) }}</mat-option>
+                      <mat-option [value]="role">{{
+                        roleLabel(role)
+                      }}</mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
@@ -125,7 +144,11 @@ const requiredRoles = [
                 @if (member.controls.role.value === 'other') {
                   <mat-form-field appearance="outline">
                     <mat-label>Cargo adicional</mat-label>
-                    <input matInput formControlName="customRole" maxlength="120" />
+                    <input
+                      matInput
+                      formControlName="customRole"
+                      maxlength="120"
+                    />
                   </mat-form-field>
                 }
 
@@ -133,20 +156,27 @@ const requiredRoles = [
                   <mat-label>Documento de identificação</mat-label>
                   <mat-select formControlName="identifierType">
                     @for (type of identifierTypeOptions; track type) {
-                      <mat-option [value]="type">{{ identifierTypeLabel(type) }}</mat-option>
+                      <mat-option [value]="type">{{
+                        identifierTypeLabel(type)
+                      }}</mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
 
                 <mat-form-field appearance="outline">
                   <mat-label>Identificador</mat-label>
-                  <input matInput formControlName="identifierValue" maxlength="255" />
+                  <input
+                    matInput
+                    formControlName="identifierValue"
+                    maxlength="255"
+                  />
                 </mat-form-field>
 
                 <mat-checkbox
                   class="representative-check"
                   [checked]="member.controls.isRepresentative.value"
-                  (change)="setRepresentative(index, $event.checked)">
+                  (change)="setRepresentative(index, $event.checked)"
+                >
                   Representante da chapa
                 </mat-checkbox>
               </div>
@@ -170,10 +200,13 @@ const requiredRoles = [
         <mat-divider></mat-divider>
         <div class="agreement-list">
           <mat-checkbox formControlName="noOnlineAccountsAgreement">
-            Concordo em não criar contas em serviços on-line para a chapa, incluindo Instagram e Google (Drive e Gmail).
+            Concordo em não criar contas em serviços on-line para a chapa,
+            incluindo Instagram e Google (Drive e Gmail).
           </mat-checkbox>
           <mat-checkbox formControlName="electionDocumentationAgreement">
-            O representante da chapa leu o estatuto do CACiC, está ciente das disposições contidas nele e concorda com as diretrizes da documentação de eleições no site do CACiC.
+            O representante da chapa leu o estatuto do CACiC, está ciente das
+            disposições contidas nele e concorda com as diretrizes da
+            documentação de eleições no site do CACiC.
           </mat-checkbox>
         </div>
       }
@@ -286,10 +319,13 @@ export class CacicElectionSlateFormComponent {
   readonly busy = input(false);
   readonly submitLabel = input('Enviar chapa');
   readonly showAgreements = input(true);
-  readonly submitted = output<SubmitCacicElectionSlateRequest | UpdateCacicElectionSlateRequest>();
+  readonly submitted = output<
+    SubmitCacicElectionSlateRequest | UpdateCacicElectionSlateRequest
+  >();
 
   protected readonly roleOptions = CACIC_ELECTION_SLATE_MEMBER_ROLES;
-  protected readonly identifierTypeOptions = CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES;
+  protected readonly identifierTypeOptions =
+    CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES;
   protected readonly formError = signal<string | null>(null);
   protected readonly form: SlateForm = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(240)]],
@@ -322,7 +358,9 @@ export class CacicElectionSlateFormComponent {
 
   protected setRepresentative(index: number, checked: boolean): void {
     this.members.controls.forEach((member, memberIndex) => {
-      member.controls.isRepresentative.setValue(checked && memberIndex === index);
+      member.controls.isRepresentative.setValue(
+        checked && memberIndex === index,
+      );
     });
   }
 
@@ -371,7 +409,9 @@ export class CacicElectionSlateFormComponent {
     }
   }
 
-  protected identifierTypeLabel(type: CacicElectionSlateMemberIdentifierType): string {
+  protected identifierTypeLabel(
+    type: CacicElectionSlateMemberIdentifierType,
+  ): string {
     switch (type) {
       case 'cpf':
         return 'CPF';
@@ -405,15 +445,26 @@ export class CacicElectionSlateFormComponent {
     }
   }
 
-  private createMemberForm(member: Partial<SubmitCacicElectionSlateRequest['members'][number]>): SlateMemberForm {
+  private createMemberForm(
+    member: Partial<SubmitCacicElectionSlateRequest['members'][number]>,
+  ): SlateMemberForm {
     return this.fb.group({
-      fullName: [member.fullName ?? '', [Validators.required, Validators.maxLength(240)]],
-      enrollmentNumber: [member.enrollmentNumber ?? '', [Validators.required, Validators.maxLength(64)]],
+      fullName: [
+        member.fullName ?? '',
+        [Validators.required, Validators.maxLength(240)],
+      ],
+      enrollmentNumber: [
+        member.enrollmentNumber ?? '',
+        [Validators.required, Validators.maxLength(64)],
+      ],
       role: member.role ?? 'other',
       customRole: [member.customRole ?? '', [Validators.maxLength(120)]],
       isRepresentative: member.isRepresentative ?? false,
       identifierType: member.identifierType ?? 'email',
-      identifierValue: [member.identifierValue ?? '', [Validators.required, Validators.maxLength(255)]],
+      identifierValue: [
+        member.identifierValue ?? '',
+        [Validators.required, Validators.maxLength(255)],
+      ],
     });
   }
 
@@ -426,15 +477,27 @@ export class CacicElectionSlateFormComponent {
       return 'A chapa deve conter no mínimo 6 membros.';
     }
 
-    if (this.members.controls.some((member) => !member.controls.fullName.value.trim())) {
+    if (
+      this.members.controls.some(
+        (member) => !member.controls.fullName.value.trim(),
+      )
+    ) {
       return 'Informe o nome completo de todos os integrantes.';
     }
 
-    if (this.members.controls.some((member) => !member.controls.enrollmentNumber.value.trim())) {
+    if (
+      this.members.controls.some(
+        (member) => !member.controls.enrollmentNumber.value.trim(),
+      )
+    ) {
       return 'Informe a matrícula de todos os integrantes.';
     }
 
-    if (this.members.controls.some((member) => !member.controls.identifierValue.value.trim())) {
+    if (
+      this.members.controls.some(
+        (member) => !member.controls.identifierValue.value.trim(),
+      )
+    ) {
       return 'Informe CPF, telefone ou e-mail para todos os integrantes.';
     }
 
@@ -451,11 +514,18 @@ export class CacicElectionSlateFormComponent {
       return 'A chapa deve contemplar todos os cargos obrigatórios.';
     }
 
-    if ((roleCounts.get('president') ?? 0) !== 1 || (roleCounts.get('vicePresident') ?? 0) !== 1) {
+    if (
+      (roleCounts.get('president') ?? 0) !== 1 ||
+      (roleCounts.get('vicePresident') ?? 0) !== 1
+    ) {
       return 'A chapa deve ter exatamente um Presidente e um Vice-Presidente.';
     }
 
-    if (this.members.controls.filter((member) => member.controls.isRepresentative.value).length !== 1) {
+    if (
+      this.members.controls.filter(
+        (member) => member.controls.isRepresentative.value,
+      ).length !== 1
+    ) {
       return 'Indique exatamente um representante da chapa.';
     }
 

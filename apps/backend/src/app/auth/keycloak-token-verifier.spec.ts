@@ -1,11 +1,28 @@
-import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import axios from 'axios';
-import { generateKeyPairSync, sign as signToken, type JsonWebKey, type KeyObject } from 'node:crypto';
-import { KeycloakTokenVerifier, KeycloakTokenVerifierOptions } from './keycloak-token-verifier';
+import {
+  generateKeyPairSync,
+  sign as signToken,
+  type JsonWebKey,
+  type KeyObject,
+} from 'node:crypto';
+import {
+  KeycloakTokenVerifier,
+  KeycloakTokenVerifierOptions,
+} from './keycloak-token-verifier';
 
 type TestKeyPair = {
   privateKey: KeyObject;
-  publicJwk: JsonWebKey & { kid: string; alg: string; use: string; kty: string };
+  publicJwk: JsonWebKey & {
+    kid: string;
+    alg: string;
+    use: string;
+    kty: string;
+  };
 };
 
 const TEST_ISSUER = 'https://sso.example/realms/cacic';
@@ -54,7 +71,11 @@ function tokenWithClaims(
       exp: Math.floor(Date.now() / 1000) + 120,
       ...claims,
     });
-  const signature = signToken('RSA-SHA256', Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'), keyPair.privateKey);
+  const signature = signToken(
+    'RSA-SHA256',
+    Buffer.from(`${encodedHeader}.${encodedPayload}`, 'utf8'),
+    keyPair.privateKey,
+  );
   return `${encodedHeader}.${encodedPayload}.${signature.toString('base64url')}`;
 }
 
@@ -97,7 +118,9 @@ describe('KeycloakTokenVerifier', () => {
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-21T12:00:00.000Z'));
     axiosGet = jest.spyOn(axios, 'get');
-    axiosGet.mockResolvedValue(jwksResponse({ keys: [validKeys.publicJwk] }) as never);
+    axiosGet.mockResolvedValue(
+      jwksResponse({ keys: [validKeys.publicJwk] }) as never,
+    );
   });
 
   afterEach(() => {
@@ -108,12 +131,16 @@ describe('KeycloakTokenVerifier', () => {
   it('verifies RS256 access tokens and caches JWKS keys', async () => {
     const { verifier } = createVerifier();
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ scope: 'openid' }))).resolves.toMatchObject({
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims({ scope: 'openid' })),
+    ).resolves.toMatchObject({
       active: true,
       sub: 'user-1',
       scope: 'openid',
     });
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ sub: 'user-2' }))).resolves.toMatchObject({
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims({ sub: 'user-2' })),
+    ).resolves.toMatchObject({
       active: true,
       sub: 'user-2',
     });
@@ -132,44 +159,69 @@ describe('KeycloakTokenVerifier', () => {
   it('rejects malformed token structure and decoded JSON', async () => {
     const { verifier } = createVerifier();
 
-    await expect(verifier.verifyAccessTokenClaims('one.two')).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(verifier.verifyAccessTokenClaims('one..three')).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(verifier.verifyAccessTokenClaims(`${encodeJson('bad')}.${encodeJson({})}.sig`)).rejects.toThrow(
-      'Invalid token header.',
-    );
     await expect(
-      verifier.verifyAccessTokenClaims(`${encodeJson({ alg: 'RS256', kid: 'key-1' })}.${encodeJson('bad')}.sig`),
+      verifier.verifyAccessTokenClaims('one.two'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      verifier.verifyAccessTokenClaims('one..three'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        `${encodeJson('bad')}.${encodeJson({})}.sig`,
+      ),
+    ).rejects.toThrow('Invalid token header.');
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        `${encodeJson({ alg: 'RS256', kid: 'key-1' })}.${encodeJson('bad')}.sig`,
+      ),
     ).rejects.toThrow('Invalid token payload.');
   });
 
   it('rejects unsupported algorithms and missing key ids', async () => {
     const { verifier } = createVerifier();
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({}, { alg: 'HS256' }))).rejects.toThrow(
-      'Unsupported token signature algorithm.',
-    );
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({}, { kid: '' }))).rejects.toThrow(
-      'Token signing key id is missing.',
-    );
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims({}, { alg: 'HS256' })),
+    ).rejects.toThrow('Unsupported token signature algorithm.');
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims({}, { kid: '' })),
+    ).rejects.toThrow('Token signing key id is missing.');
   });
 
   it('refreshes JWKS keys for unknown key ids and failed signature checks', async () => {
-    const unknownKidToken = tokenWithClaims({}, { kid: 'key-2', keys: otherKeys });
-    axiosGet.mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] }) as never).mockResolvedValueOnce(
-      jwksResponse({ keys: [otherKeys.publicJwk] }) as never,
+    const unknownKidToken = tokenWithClaims(
+      {},
+      { kid: 'key-2', keys: otherKeys },
     );
+    axiosGet
+      .mockResolvedValueOnce(
+        jwksResponse({ keys: [validKeys.publicJwk] }) as never,
+      )
+      .mockResolvedValueOnce(
+        jwksResponse({ keys: [otherKeys.publicJwk] }) as never,
+      );
 
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(unknownKidToken)).resolves.toMatchObject({
+    await expect(
+      createVerifier().verifier.verifyAccessTokenClaims(unknownKidToken),
+    ).resolves.toMatchObject({
       active: true,
     });
     expect(axiosGet).toHaveBeenCalledTimes(2);
 
     axiosGet.mockReset();
     axiosGet
-      .mockResolvedValueOnce(jwksResponse({ keys: [validKeys.publicJwk] }) as never)
-      .mockResolvedValueOnce(jwksResponse({ keys: [rotatedKeys.publicJwk] }) as never);
+      .mockResolvedValueOnce(
+        jwksResponse({ keys: [validKeys.publicJwk] }) as never,
+      )
+      .mockResolvedValueOnce(
+        jwksResponse({ keys: [rotatedKeys.publicJwk] }) as never,
+      );
 
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims({}, { keys: rotatedKeys }))).resolves.toMatchObject({
+    await expect(
+      createVerifier().verifier.verifyAccessTokenClaims(
+        tokenWithClaims({}, { keys: rotatedKeys }),
+      ),
+    ).resolves.toMatchObject({
       active: true,
     });
     expect(axiosGet).toHaveBeenCalledTimes(2);
@@ -178,69 +230,99 @@ describe('KeycloakTokenVerifier', () => {
   it('rejects invalid signatures after forced refresh', async () => {
     const { verifier } = createVerifier();
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({}, { keys: otherKeys, kid: 'key-1' }))).rejects.toThrow(
-      'Invalid token signature.',
-    );
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        tokenWithClaims({}, { keys: otherKeys, kid: 'key-1' }),
+      ),
+    ).rejects.toThrow('Invalid token signature.');
   });
 
   it('rejects invalid issuer and time claims', async () => {
     const { verifier } = createVerifier();
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ iss: 'https://evil.example' }))).rejects.toThrow(
-      'Invalid token issuer.',
-    );
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ exp: undefined }))).rejects.toThrow(
-      'Token missing expiration.',
-    );
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ exp: Math.floor(Date.now() / 1000) - 31 }))).rejects.toThrow(
-      'Token expired.',
-    );
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ nbf: Math.floor(Date.now() / 1000) + 31 }))).rejects.toThrow(
-      'Token is not active yet.',
-    );
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims({ iat: Math.floor(Date.now() / 1000) + 31 }))).rejects.toThrow(
-      'Token issued in the future.',
-    );
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        tokenWithClaims({ iss: 'https://evil.example' }),
+      ),
+    ).rejects.toThrow('Invalid token issuer.');
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims({ exp: undefined })),
+    ).rejects.toThrow('Token missing expiration.');
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        tokenWithClaims({ exp: Math.floor(Date.now() / 1000) - 31 }),
+      ),
+    ).rejects.toThrow('Token expired.');
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        tokenWithClaims({ nbf: Math.floor(Date.now() / 1000) + 31 }),
+      ),
+    ).rejects.toThrow('Token is not active yet.');
+    await expect(
+      verifier.verifyAccessTokenClaims(
+        tokenWithClaims({ iat: Math.floor(Date.now() / 1000) + 31 }),
+      ),
+    ).rejects.toThrow('Token issued in the future.');
   });
 
   it('rejects unusable JWKS responses', async () => {
     const { verifier, logger } = createVerifier();
-    axiosGet.mockResolvedValueOnce(jwksResponse({}, { status: 503, statusText: 'Unavailable' }) as never);
+    axiosGet.mockResolvedValueOnce(
+      jwksResponse({}, { status: 503, statusText: 'Unavailable' }) as never,
+    );
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('status=503 Unavailable'));
-
-    axiosGet.mockResolvedValueOnce(jwksResponse({ keys: [{ kid: 'bad', kty: 'oct' }, 'not-record'] }) as never);
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('status=503 Unavailable'),
     );
 
     axiosGet.mockResolvedValueOnce(
-      jwksResponse({ keys: [{ kid: 'broken', kty: 'RSA', use: 'sig', alg: 'RS256' }] }) as never,
+      jwksResponse({
+        keys: [{ kid: 'bad', kty: 'oct' }, 'not-record'],
+      }) as never,
     );
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+    await expect(
+      createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    axiosGet.mockResolvedValueOnce(
+      jwksResponse({
+        keys: [{ kid: 'broken', kty: 'RSA', use: 'sig', alg: 'RS256' }],
+      }) as never,
     );
+    await expect(
+      createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('logs network errors during JWKS lookup', async () => {
     const { verifier, logger } = createVerifier();
     axiosGet.mockRejectedValueOnce(new Error('offline'));
 
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('message=offline'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('message=offline'),
+    );
   });
 
   it('handles non-record JWKS bodies and non-Error lookup failures', async () => {
     axiosGet.mockResolvedValueOnce(jwksResponse(null) as never);
-    await expect(createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      createVerifier().verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     const { verifier, logger } = createVerifier();
     axiosGet.mockRejectedValueOnce('offline');
-    await expect(verifier.verifyAccessTokenClaims(tokenWithClaims())).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
+    await expect(
+      verifier.verifyAccessTokenClaims(tokenWithClaims()),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('unknown error'),
+    );
   });
 });

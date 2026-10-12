@@ -1,4 +1,9 @@
-import { Metadata, status, type Client, type ServiceDefinition } from '@grpc/grpc-js';
+import {
+  Metadata,
+  status,
+  type Client,
+  type ServiceDefinition,
+} from '@grpc/grpc-js';
 import { GrpcUnaryClient } from './grpc-runtime';
 
 describe('GrpcUnaryClient', () => {
@@ -17,10 +22,14 @@ describe('GrpcUnaryClient', () => {
       },
     } as unknown as ServiceDefinition);
     const grpcClient = (client as unknown as { client: Client }).client;
-    const unavailable = Object.assign(new Error('unavailable'), { code: status.UNAVAILABLE });
-    const waitForReady = jest.spyOn(grpcClient, 'waitForReady').mockImplementation((_deadline, callback) => {
-      callback(unavailable);
+    const unavailable = Object.assign(new Error('unavailable'), {
+      code: status.UNAVAILABLE,
     });
+    const waitForReady = jest
+      .spyOn(grpcClient, 'waitForReady')
+      .mockImplementation((_deadline, callback) => {
+        callback(unavailable);
+      });
 
     const call = client.call('Test', {}, new Metadata(), {
       idempotent: true,

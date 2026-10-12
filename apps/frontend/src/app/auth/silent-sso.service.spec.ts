@@ -28,9 +28,14 @@ describe('SilentSsoService', () => {
     expect(iframe.hidden).toBe(true);
     expect(authorizationUrl.pathname).toBe('/api/auth/login/redirect');
     expect(authorizationUrl.searchParams.get('prompt')).toBe('none');
-    expect(authorizationUrl.searchParams.get('returnTo')).toBe('/silent-check-sso.html');
+    expect(authorizationUrl.searchParams.get('returnTo')).toBe(
+      '/silent-check-sso.html',
+    );
 
-    dispatchCompletionMessage(iframe, 'http://localhost:3000/silent-check-sso.html');
+    dispatchCompletionMessage(
+      iframe,
+      'http://localhost:3000/silent-check-sso.html',
+    );
 
     await expect(result).resolves.toBe('authenticated');
     expect(document.querySelector('iframe')).toBeNull();
@@ -40,7 +45,10 @@ describe('SilentSsoService', () => {
     const result = service.check();
     const iframe = requireIframe();
 
-    dispatchCompletionMessage(iframe, 'http://localhost:3000/silent-check-sso.html?sso=none');
+    dispatchCompletionMessage(
+      iframe,
+      'http://localhost:3000/silent-check-sso.html?sso=none',
+    );
 
     await expect(result).resolves.toBe('unauthenticated');
   });
@@ -60,7 +68,9 @@ describe('SilentSsoService', () => {
         source: window,
       }),
     );
-    const rejection = expect(result).rejects.toThrow('Silent SSO check timed out.');
+    const rejection = expect(result).rejects.toThrow(
+      'Silent SSO check timed out.',
+    );
     await vi.advanceTimersByTimeAsync(15_000);
 
     await rejection;
@@ -71,9 +81,14 @@ describe('SilentSsoService', () => {
     const result = service.check();
     const iframe = requireIframe();
 
-    dispatchCompletionMessage(iframe, 'http://localhost:3000/not-the-sso-callback.html');
+    dispatchCompletionMessage(
+      iframe,
+      'http://localhost:3000/not-the-sso-callback.html',
+    );
 
-    await expect(result).rejects.toThrow('Silent SSO returned an unexpected completion URL.');
+    await expect(result).rejects.toThrow(
+      'Silent SSO returned an unexpected completion URL.',
+    );
   });
 
   function requireIframe(): HTMLIFrameElement {
@@ -82,7 +97,10 @@ describe('SilentSsoService', () => {
     return iframe as HTMLIFrameElement;
   }
 
-  function dispatchCompletionMessage(iframe: HTMLIFrameElement, href: string): void {
+  function dispatchCompletionMessage(
+    iframe: HTMLIFrameElement,
+    href: string,
+  ): void {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: {

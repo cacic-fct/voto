@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   EventManagerEvent,
   Poll,
@@ -19,7 +23,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { recordPollAdminAudit } from './poll-admin-audit';
 import { SavePollDto } from './dto/poll.dto';
 import { PollCacicElectionService } from './poll-cacic-election.service';
-import { cleanOptionalText, toContractPoll, toDbStatus } from './poll-contract.mapper';
+import {
+  cleanOptionalText,
+  toContractPoll,
+  toDbStatus,
+} from './poll-contract.mapper';
 import { PollElementMutationsService } from './poll-element-mutations.service';
 import { PollImageMutationsService } from './poll-image-mutations.service';
 import { PollImagesService } from './poll-images.service';
@@ -51,16 +59,36 @@ export class PollMutationsService {
     return this.eventManager.listLinkableEvents();
   }
 
-  async createPoll(input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {
+  async createPoll(
+    input: SavePollDto,
+    user: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     this.validatePollInput(input);
     if (this.readSubmittedStatus(input) !== undefined) {
-      throw new ConflictException('Poll status changes must use the publish endpoint.');
+      throw new ConflictException(
+        'Poll status changes must use the publish endpoint.',
+      );
     }
     const metadata = await this.resolvePollMetadata(input);
-    const resultVisibility = this.resolvePollResultVisibility(input, undefined, metadata);
-    const responseOptions = this.resolvePollResponseOptions(input, undefined, metadata);
-    const directLink = this.options.resolvePollDirectLink(input, undefined, metadata);
-    const publicationSchedule = this.resolvePollPublicationSchedule(input, undefined);
+    const resultVisibility = this.resolvePollResultVisibility(
+      input,
+      undefined,
+      metadata,
+    );
+    const responseOptions = this.resolvePollResponseOptions(
+      input,
+      undefined,
+      metadata,
+    );
+    const directLink = this.options.resolvePollDirectLink(
+      input,
+      undefined,
+      metadata,
+    );
+    const publicationSchedule = this.resolvePollPublicationSchedule(
+      input,
+      undefined,
+    );
     this.validatePollPublicationSchedule(publicationSchedule);
     const status = DbPollStatus.DRAFT;
 
@@ -86,12 +114,31 @@ export class PollMutationsService {
       await this.elementMutations.syncElements(
         tx,
         created.id,
-        await this.cacicElection.resolvePollElementsForSave(tx, created.id, input, metadata),
+        await this.cacicElection.resolvePollElementsForSave(
+          tx,
+          created.id,
+          input,
+          metadata,
+        ),
       );
-      removedImageObjectKeys.push(...(await this.imageMutations.reconcilePollImages(tx, created.id, input)));
+      removedImageObjectKeys.push(
+        ...(await this.imageMutations.reconcilePollImages(
+          tx,
+          created.id,
+          input,
+        )),
+      );
 
-      const saved = await tx.poll.findUniqueOrThrow({ where: { id: created.id }, include: pollInclude });
-      await recordPollAdminAudit(tx, { pollId: created.id, actorId: user.sub, action: 'poll.created', afterVersion: saved.updatedAt });
+      const saved = await tx.poll.findUniqueOrThrow({
+        where: { id: created.id },
+        include: pollInclude,
+      });
+      await recordPollAdminAudit(tx, {
+        pollId: created.id,
+        actorId: user.sub,
+        action: 'poll.created',
+        afterVersion: saved.updatedAt,
+      });
       return saved;
     });
 
@@ -99,12 +146,20 @@ export class PollMutationsService {
     return toContractPoll(poll, { includeDirectLinkToken: true });
   }
 
-  async updatePoll(id: string, input: SavePollDto, user: AuthenticatedPrincipal): Promise<Poll> {
+  async updatePoll(
+    id: string,
+    input: SavePollDto,
+    user: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     this.validatePollInput(input);
     if (this.readSubmittedStatus(input) !== undefined) {
-      throw new ConflictException('Poll status changes must use the publish endpoint.');
+      throw new ConflictException(
+        'Poll status changes must use the publish endpoint.',
+      );
     }
-    const expectedUpdatedAt = this.parseExpectedUpdatedAt(input.expectedUpdatedAt);
+    const expectedUpdatedAt = this.parseExpectedUpdatedAt(
+      input.expectedUpdatedAt,
+    );
     const existing = await this.prisma.poll.findUnique({
       where: { id },
       include: {
@@ -120,12 +175,32 @@ export class PollMutationsService {
     }
 
     const metadata = await this.resolvePollMetadata(input, existing);
-    const resultVisibility = this.resolvePollResultVisibility(input, existing, metadata);
-    const responseOptions = this.resolvePollResponseOptions(input, existing, metadata);
-    const directLink = this.options.resolvePollDirectLink(input, existing, metadata);
-    const publicationSchedule = this.resolvePollPublicationSchedule(input, existing);
+    const resultVisibility = this.resolvePollResultVisibility(
+      input,
+      existing,
+      metadata,
+    );
+    const responseOptions = this.resolvePollResponseOptions(
+      input,
+      existing,
+      metadata,
+    );
+    const directLink = this.options.resolvePollDirectLink(
+      input,
+      existing,
+      metadata,
+    );
+    const publicationSchedule = this.resolvePollPublicationSchedule(
+      input,
+      existing,
+    );
     this.validatePollPublicationSchedule(publicationSchedule);
-    this.assertPollPolicyTransition(existing, metadata, responseOptions, directLink);
+    this.assertPollPolicyTransition(
+      existing,
+      metadata,
+      responseOptions,
+      directLink,
+    );
     const removedImageObjectKeys: string[] = [];
     const poll = await this.runSerializableTransaction(async (tx) => {
       const current = await tx.poll.findUnique({
@@ -138,40 +213,73 @@ export class PollMutationsService {
           },
         },
       });
-      if (!current || current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
-        throw new ConflictException('Poll was changed by another administrator. Reload before saving.');
+      if (
+        !current ||
+        current.updatedAt.getTime() !== expectedUpdatedAt.getTime()
+      ) {
+        throw new ConflictException(
+          'Poll was changed by another administrator. Reload before saving.',
+        );
       }
       // Recheck the response count in the same serializable transaction. A vote
       // can be committed after the initial read without changing poll.updatedAt.
-      this.assertPollPolicyTransition(current, metadata, responseOptions, directLink);
+      this.assertPollPolicyTransition(
+        current,
+        metadata,
+        responseOptions,
+        directLink,
+      );
       await this.assertElectionTransitionReady(tx, id, current, metadata);
-      const updated = await this.updatePollWithVersion(tx, id, expectedUpdatedAt, {
-        title: input.title.trim(),
-        description: cleanOptionalText(input.description),
-        status: existing.status,
-        ...metadata,
-        ...resultVisibility,
-        ...responseOptions,
-        ...directLink,
-        ...publicationSchedule,
-        publishedAt: existing.publishedAt,
-        closedAt: existing.closedAt,
-        updatedById: user.sub,
-      });
+      const updated = await this.updatePollWithVersion(
+        tx,
+        id,
+        expectedUpdatedAt,
+        {
+          title: input.title.trim(),
+          description: cleanOptionalText(input.description),
+          status: existing.status,
+          ...metadata,
+          ...resultVisibility,
+          ...responseOptions,
+          ...directLink,
+          ...publicationSchedule,
+          publishedAt: existing.publishedAt,
+          closedAt: existing.closedAt,
+          updatedById: user.sub,
+        },
+      );
       if (!updated) {
-        throw new ConflictException('Poll was changed by another administrator. Reload before saving.');
+        throw new ConflictException(
+          'Poll was changed by another administrator. Reload before saving.',
+        );
       }
 
       await this.elementMutations.backfillAnswerElementSnapshots(tx, id);
       await this.elementMutations.syncElements(
         tx,
         id,
-        await this.cacicElection.resolvePollElementsForSave(tx, id, input, metadata),
+        await this.cacicElection.resolvePollElementsForSave(
+          tx,
+          id,
+          input,
+          metadata,
+        ),
       );
-      removedImageObjectKeys.push(...(await this.imageMutations.reconcilePollImages(tx, id, input)));
+      removedImageObjectKeys.push(
+        ...(await this.imageMutations.reconcilePollImages(tx, id, input)),
+      );
 
-      const saved = await tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
-      await recordPollAdminAudit(tx, { pollId: id, actorId: user.sub, action: 'poll.updated', beforeVersion: expectedUpdatedAt, afterVersion: saved.updatedAt });
+      const saved = await tx.poll.findUniqueOrThrow({
+        where: { id },
+        include: pollInclude,
+      });
+      await recordPollAdminAudit(tx, {
+        pollId: id,
+        actorId: user.sub,
+        action: 'poll.updated',
+        beforeVersion: expectedUpdatedAt,
+        afterVersion: saved.updatedAt,
+      });
       return saved;
     });
 
@@ -195,17 +303,36 @@ export class PollMutationsService {
     const expectedVersion = this.parseExpectedUpdatedAt(expectedUpdatedAt);
     const now = new Date();
     const poll = await this.prisma.$transaction(async (tx) => {
-      const updated = await this.updatePollWithVersion(tx, id, expectedVersion, {
-        status: dbStatus,
-        publishedAt: dbStatus === DbPollStatus.PUBLISHED ? existing.publishedAt ?? now : existing.publishedAt,
-        closedAt: dbStatus === DbPollStatus.CLOSED ? now : null,
-        updatedById: user.sub,
-      });
+      const updated = await this.updatePollWithVersion(
+        tx,
+        id,
+        expectedVersion,
+        {
+          status: dbStatus,
+          publishedAt:
+            dbStatus === DbPollStatus.PUBLISHED
+              ? (existing.publishedAt ?? now)
+              : existing.publishedAt,
+          closedAt: dbStatus === DbPollStatus.CLOSED ? now : null,
+          updatedById: user.sub,
+        },
+      );
       if (!updated) {
-        throw new ConflictException('Poll was changed by another administrator. Reload before updating status.');
+        throw new ConflictException(
+          'Poll was changed by another administrator. Reload before updating status.',
+        );
       }
-      const saved = await tx.poll.findUniqueOrThrow({ where: { id }, include: pollInclude });
-      await recordPollAdminAudit(tx, { pollId: id, actorId: user.sub, action: `poll.${status}`, beforeVersion: expectedVersion, afterVersion: saved.updatedAt });
+      const saved = await tx.poll.findUniqueOrThrow({
+        where: { id },
+        include: pollInclude,
+      });
+      await recordPollAdminAudit(tx, {
+        pollId: id,
+        actorId: user.sub,
+        action: `poll.${status}`,
+        beforeVersion: expectedVersion,
+        afterVersion: saved.updatedAt,
+      });
       return saved;
     });
 
@@ -214,12 +341,16 @@ export class PollMutationsService {
 
   private parseExpectedUpdatedAt(value: string | undefined): Date {
     if (!value) {
-      throw new ConflictException('A current poll version is required for this mutation.');
+      throw new ConflictException(
+        'A current poll version is required for this mutation.',
+      );
     }
 
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-      throw new ConflictException('The poll version is invalid. Reload before retrying.');
+      throw new ConflictException(
+        'The poll version is invalid. Reload before retrying.',
+      );
     }
     return date;
   }
@@ -243,23 +374,32 @@ export class PollMutationsService {
     directLink: { directLinkEnabled: boolean; directLinkToken: string | null },
   ): void {
     const hasPublishedOrCollectedBallots =
-      existing.status !== DbPollStatus.DRAFT || (existing._count?.responses ?? 0) > 0;
+      existing.status !== DbPollStatus.DRAFT ||
+      (existing._count?.responses ?? 0) > 0;
     if (!hasPublishedOrCollectedBallots) {
       return;
     }
 
     if (existing.mode !== metadata.mode) {
-      throw new ConflictException('A published poll cannot change its voting mode.');
+      throw new ConflictException(
+        'A published poll cannot change its voting mode.',
+      );
     }
 
     const isSubmissionToElection =
       existing.mode === DbPollMode.CACIC_ELECTION &&
       existing.cacicElectionPhase === DbCacicElectionPhase.SLATE_SUBMISSION &&
       metadata.cacicElectionPhase === DbCacicElectionPhase.ELECTION &&
-      (existing.status === DbPollStatus.DRAFT || existing.status === DbPollStatus.PUBLISHED) &&
+      (existing.status === DbPollStatus.DRAFT ||
+        existing.status === DbPollStatus.PUBLISHED) &&
       (existing._count?.responses ?? 0) === 0;
-    if (existing.cacicElectionPhase !== metadata.cacicElectionPhase && !isSubmissionToElection) {
-      throw new ConflictException('A published poll cannot change its election phase.');
+    if (
+      existing.cacicElectionPhase !== metadata.cacicElectionPhase &&
+      !isSubmissionToElection
+    ) {
+      throw new ConflictException(
+        'A published poll cannot change its election phase.',
+      );
     }
 
     if (isSubmissionToElection) {
@@ -271,19 +411,27 @@ export class PollMutationsService {
       existing.requireVerifiedUnespRole !== metadata.requireVerifiedUnespRole ||
       existing.linkedEventId !== metadata.linkedEventId
     ) {
-      throw new ConflictException('A published poll cannot change its voter eligibility policy.');
+      throw new ConflictException(
+        'A published poll cannot change its voter eligibility policy.',
+      );
     }
 
     if ((existing._count?.responses ?? 0) > 0) {
       if (existing.votingStyle !== metadata.votingStyle) {
-        throw new ConflictException('A poll with responses cannot change its voting privacy policy.');
+        throw new ConflictException(
+          'A poll with responses cannot change its voting privacy policy.',
+        );
       }
       if (
         existing.directLinkEnabled !== directLink.directLinkEnabled ||
-        existing.allowResponseEditing !== responseOptions.allowResponseEditing ||
-        existing.allowMultipleResponses !== responseOptions.allowMultipleResponses
+        existing.allowResponseEditing !==
+          responseOptions.allowResponseEditing ||
+        existing.allowMultipleResponses !==
+          responseOptions.allowMultipleResponses
       ) {
-        throw new ConflictException('A poll with responses cannot change its response policy.');
+        throw new ConflictException(
+          'A poll with responses cannot change its response policy.',
+        );
       }
     }
   }
@@ -300,7 +448,8 @@ export class PollMutationsService {
     if (
       metadata.mode !== DbPollMode.CACIC_ELECTION ||
       metadata.cacicElectionPhase !== DbCacicElectionPhase.ELECTION ||
-      (existing.mode === DbPollMode.CACIC_ELECTION && existing.cacicElectionPhase === DbCacicElectionPhase.ELECTION)
+      (existing.mode === DbPollMode.CACIC_ELECTION &&
+        existing.cacicElectionPhase === DbCacicElectionPhase.ELECTION)
     ) {
       return;
     }
@@ -314,7 +463,9 @@ export class PollMutationsService {
       select: { id: true },
     });
     if (!approvedSlate) {
-      throw new ConflictException('At least one approved and enabled slate is required before the election starts.');
+      throw new ConflictException(
+        'At least one approved and enabled slate is required before the election starts.',
+      );
     }
 
     const enrollment = await tx.pollEligibilityEnrollment.findFirst({
@@ -322,7 +473,9 @@ export class PollMutationsService {
       select: { enrollmentNumber: true },
     });
     if (!enrollment) {
-      throw new ConflictException('At least one eligible enrollment is required before the election starts.');
+      throw new ConflictException(
+        'At least one eligible enrollment is required before the election starts.',
+      );
     }
   }
 
@@ -335,19 +488,26 @@ export class PollMutationsService {
       });
     } catch (error: unknown) {
       if (isSerializationConflictError(error)) {
-        throw new ConflictException('The poll changed concurrently. Reload and retry.');
+        throw new ConflictException(
+          'The poll changed concurrently. Reload and retry.',
+        );
       }
       throw error;
     }
   }
 
-  private assertValidStatusTransition(current: DbPollStatus, next: DbPollStatus): void {
+  private assertValidStatusTransition(
+    current: DbPollStatus,
+    next: DbPollStatus,
+  ): void {
     const allowed =
       (current === DbPollStatus.DRAFT && next === DbPollStatus.PUBLISHED) ||
       (current === DbPollStatus.PUBLISHED && next === DbPollStatus.CLOSED) ||
       (current === DbPollStatus.CLOSED && next === DbPollStatus.PUBLISHED);
     if (!allowed) {
-      throw new ConflictException(`Poll cannot transition from ${current.toLowerCase()} to ${next.toLowerCase()}.`);
+      throw new ConflictException(
+        `Poll cannot transition from ${current.toLowerCase()} to ${next.toLowerCase()}.`,
+      );
     }
   }
 
@@ -371,14 +531,28 @@ export class PollMutationsService {
 
   async deletePoll(id: string, user?: AuthenticatedPrincipal): Promise<void> {
     const objectKeys = await this.runSerializableTransaction(async (tx) => {
-      const poll = await tx.poll.findUnique({ where: { id }, select: { updatedAt: true } });
+      const poll = await tx.poll.findUnique({
+        where: { id },
+        select: { updatedAt: true },
+      });
       if (!poll) return [];
-      const images = await tx.pollImage.findMany({ where: { pollId: id }, select: { objectKey: true } });
+      const images = await tx.pollImage.findMany({
+        where: { pollId: id },
+        select: { objectKey: true },
+      });
       if (images.length) {
-        await tx.pollObjectDeletion.createMany({ data: images, skipDuplicates: true });
+        await tx.pollObjectDeletion.createMany({
+          data: images,
+          skipDuplicates: true,
+        });
       }
       await tx.poll.deleteMany({ where: { id } });
-      await recordPollAdminAudit(tx, { pollId: id, actorId: user?.sub, action: 'poll.deleted', beforeVersion: poll.updatedAt });
+      await recordPollAdminAudit(tx, {
+        pollId: id,
+        actorId: user?.sub,
+        action: 'poll.deleted',
+        beforeVersion: poll.updatedAt,
+      });
       return images.map((image) => image.objectKey);
     });
     await this.pollImages.deleteObjectKeysBestEffort(objectKeys);
@@ -392,11 +566,16 @@ export class PollMutationsService {
     return this.validation.validatePollPublicationSchedule(schedule);
   }
 
-  normalizeElementSettings(element: SavePollDto['elements'][number]): PollElementSettings | undefined {
+  normalizeElementSettings(
+    element: SavePollDto['elements'][number],
+  ): PollElementSettings | undefined {
     return this.options.normalizeElementSettings(element);
   }
 
-  resolvePollMetadata(input: SavePollDto, existing?: PollMetadataData): Promise<PollMetadataData> {
+  resolvePollMetadata(
+    input: SavePollDto,
+    existing?: PollMetadataData,
+  ): Promise<PollMetadataData> {
     return this.options.resolvePollMetadata(input, existing);
   }
 
@@ -418,7 +597,10 @@ export class PollMutationsService {
   resolvePollResponseOptions(
     input: SavePollDto,
     existing: PollResponseOptionsData | undefined,
-    metadata: Pick<PollMetadataData, 'mode' | 'cacicElectionPhase' | 'votingStyle'>,
+    metadata: Pick<
+      PollMetadataData,
+      'mode' | 'cacicElectionPhase' | 'votingStyle'
+    >,
   ): PollResponseOptionsData {
     return this.options.resolvePollResponseOptions(input, existing, metadata);
   }

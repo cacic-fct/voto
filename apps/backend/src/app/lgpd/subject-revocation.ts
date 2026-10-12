@@ -6,7 +6,10 @@ export function revokedSubjectHash(userId: string): string {
   if (!secret && process.env.NODE_ENV === 'production') {
     throw new Error('LGPD_ANONYMIZATION_SECRET is required in production.');
   }
-  return createHmac('sha256', secret || 'local-development-lgpd-anonymization-secret')
+  return createHmac(
+    'sha256',
+    secret || 'local-development-lgpd-anonymization-secret',
+  )
     .update(`voto:revoked-subject:v1\0${userId}`)
     .digest('hex');
 }

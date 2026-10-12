@@ -25,12 +25,16 @@
           role="listitem"
           [class.selected-list-item]="builder.draft().id === poll.id"
           [disabled]="saving()"
-          (click)="selectPoll(poll.id)">
+          (click)="selectPoll(poll.id)"
+        >
           <span class="list-title">
             <mat-icon>ballot</mat-icon>
             <span>{{ poll.title }}</span>
           </span>
-          <span class="list-line">{{ builder.statusLabel(poll.status) }} · {{ poll.responseCount }} respostas</span>
+          <span class="list-line"
+            >{{ builder.statusLabel(poll.status) }} ·
+            {{ poll.responseCount }} respostas</span
+          >
         </button>
       } @empty {
         <div class="poll-list-item empty-list-item" role="listitem">
@@ -51,23 +55,53 @@
 
     <header class="panel builder-header">
       <div class="builder-title">
-        <span class="eyebrow">{{ isReadOnlyAdmin() ? 'Visualização' : 'Editor' }}</span>
-        <h2>{{ isReadOnlyAdmin() ? 'Informações da eleição' : builder.draft().id ? 'Editar votação' : 'Nova votação' }}</h2>
+        <span class="eyebrow">{{
+          isReadOnlyAdmin() ? 'Visualização' : 'Editor'
+        }}</span>
+        <h2>
+          {{
+            isReadOnlyAdmin()
+              ? 'Informações da eleição'
+              : builder.draft().id
+                ? 'Editar votação'
+                : 'Nova votação'
+          }}
+        </h2>
         <div class="status-row" aria-label="Resumo da votação">
-          <span class="status-pill">{{ builder.statusLabel(builder.draft().status) }}</span>
+          <span class="status-pill">{{
+            builder.statusLabel(builder.draft().status)
+          }}</span>
           <span>{{ builder.draft().elements.length }} itens</span>
         </div>
       </div>
 
       <div class="builder-actions">
-        @if (!isReadOnlyAdmin() && builder.draft().id && builder.draft().status !== 'published') {
-          <button mat-stroked-button type="button" [disabled]="saving()" (click)="setStatus('published')">
+        @if (
+          !isReadOnlyAdmin() &&
+          builder.draft().id &&
+          builder.draft().status !== 'published'
+        ) {
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="saving()"
+            (click)="setStatus('published')"
+          >
             <mat-icon>publish</mat-icon>
             Publicar
           </button>
         }
-        @if (!isReadOnlyAdmin() && builder.draft().id && builder.draft().status === 'published') {
-          <button mat-stroked-button type="button" [disabled]="saving()" (click)="setStatus('closed')">
+        @if (
+          !isReadOnlyAdmin() &&
+          builder.draft().id &&
+          builder.draft().status === 'published'
+        ) {
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="saving()"
+            (click)="setStatus('closed')"
+          >
             <mat-icon>lock</mat-icon>
             Encerrar
           </button>
@@ -84,19 +118,35 @@
               Abrir quiosque
             </a>
           }
-          <button mat-stroked-button type="button" [disabled]="saving()" (click)="copyPollLink()">
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="saving()"
+            (click)="copyPollLink()"
+          >
             <mat-icon>content_copy</mat-icon>
             Copiar link
           </button>
           @if (!isReadOnlyAdmin()) {
-            <button mat-button type="button" color="warn" [disabled]="saving()" (click)="deletePoll()">
+            <button
+              mat-button
+              type="button"
+              color="warn"
+              [disabled]="saving()"
+              (click)="deletePoll()"
+            >
               <mat-icon>delete</mat-icon>
               Excluir
             </button>
           }
         }
         @if (!isReadOnlyAdmin()) {
-          <button mat-flat-button type="button" [disabled]="saving()" (click)="save()">
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="saving()"
+            (click)="save()"
+          >
             <mat-icon>save</mat-icon>
             Salvar
           </button>
@@ -107,514 +157,744 @@
     <mat-tab-group class="builder-tabs" animationDuration="0ms">
       <mat-tab label="Editor">
         <div class="tab-content">
-    <section class="surface field-group" aria-labelledby="poll-data-title">
-      <div class="surface-heading">
-        <div>
-          <h3 id="poll-data-title">Dados da votação</h3>
-          <p>Defina identidade, vínculo com evento e regras de participação.</p>
-        </div>
-      </div>
-
-      <div class="field-grid">
-        <mat-form-field appearance="outline">
-          <mat-label>Título da votação</mat-label>
-          <input
-            matInput
-            [readonly]="isReadOnlyAdmin()"
-            [value]="builder.draft().title"
-            (input)="builder.updatePollTitle($event)" />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline" class="span-2">
-          <mat-label>Descrição</mat-label>
-          <textarea
-            matInput
-            rows="3"
-            [readonly]="isReadOnlyAdmin()"
-            [value]="builder.draft().description || ''"
-            (input)="builder.updatePollDescription($event)"></textarea>
-        </mat-form-field>
-
-        <section class="publication-schedule span-2" aria-labelledby="publication-schedule-title">
-          <div class="surface-heading compact-heading">
-            <div>
-              <h4 id="publication-schedule-title">Publicação</h4>
-              <p>Defina quando a votação aparece e quando aceita votos.</p>
-            </div>
-          </div>
-
-          <div class="field-grid schedule-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Visível a partir de — data</mat-label>
-              <input
-                matInput
-                [matDatepicker]="visibleFromDatePicker"
-                [value]="builder.dateTimeDateInputValue(builder.draft().visibleFrom)"
-                (dateChange)="builder.updateVisibleFromDate($event.value)" />
-              <mat-datepicker-toggle matIconSuffix [for]="visibleFromDatePicker" />
-              <mat-datepicker #visibleFromDatePicker />
-              <mat-hint>Antes deste horário, o link público não abre a votação.</mat-hint>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Visível a partir de — horário</mat-label>
-              <input
-                matInput
-                type="time"
-                [value]="builder.dateTimeTimeInputValue(builder.draft().visibleFrom)"
-                (input)="builder.updateVisibleFromTime($event)" />
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar a partir de — data</mat-label>
-              <input
-                matInput
-                [matDatepicker]="votingStartsAtDatePicker"
-                [value]="builder.dateTimeDateInputValue(builder.draft().votingStartsAt)"
-                (dateChange)="builder.updateVotingStartsAtDate($event.value)" />
-              <mat-datepicker-toggle matIconSuffix [for]="votingStartsAtDatePicker" />
-              <mat-datepicker #votingStartsAtDatePicker />
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar a partir de — horário</mat-label>
-              <input
-                matInput
-                type="time"
-                [value]="builder.dateTimeTimeInputValue(builder.draft().votingStartsAt)"
-                (input)="builder.updateVotingStartsAtTime($event)" />
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar até — data</mat-label>
-              <input
-                matInput
-                [matDatepicker]="votingEndsAtDatePicker"
-                [value]="builder.dateTimeDateInputValue(builder.draft().votingEndsAt)"
-                (dateChange)="builder.updateVotingEndsAtDate($event.value)" />
-              <mat-datepicker-toggle matIconSuffix [for]="votingEndsAtDatePicker" />
-              <mat-datepicker #votingEndsAtDatePicker />
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Aberta para votar até — horário</mat-label>
-              <input
-                matInput
-                type="time"
-                [value]="builder.dateTimeTimeInputValue(builder.draft().votingEndsAt)"
-                (input)="builder.updateVotingEndsAtTime($event)" />
-            </mat-form-field>
-          </div>
-        </section>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Modo da votação</mat-label>
-          <mat-select [value]="builder.draft().mode" (selectionChange)="builder.updatePollMode($event)">
-            @for (option of builder.pollModeOptions; track option.mode) {
-              <mat-option [value]="option.mode">{{ option.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-
-        @if (builder.isCacicElection()) {
-          <mat-form-field appearance="outline">
-            <mat-label>Etapa</mat-label>
-            <mat-select
-              [value]="builder.draft().cacicElectionPhase ?? 'slateSubmission'"
-              (selectionChange)="builder.updateCacicElectionPhase($event)">
-              @for (option of builder.cacicElectionPhaseOptions; track option.phase) {
-                <mat-option [value]="option.phase">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-
-          <div class="election-rule-panel span-2">
-            <mat-icon>how_to_vote</mat-icon>
-            <div>
-              @if (builder.isCacicElectionVoting()) {
-                <strong>Eleição anônima com lista de matrículas</strong>
-                <p>As opções vêm das chapas aprovadas e habilitadas. Resultados ficam privados até o encerramento.</p>
-              } @else {
-                <strong>Submissão pública de chapas</strong>
-                <p>Pessoas autenticadas podem submeter uma única chapa. Aprovação, rejeição e desclassificação ficam na aba Chapas.</p>
-              }
-            </div>
-          </div>
-        }
-
-        <div class="description-media span-2">
-          <div class="surface-heading compact-heading">
-            <div>
-              <h4>Imagens da descrição</h4>
-              <p>Insira imagens no cabeçalho da votação.</p>
-            </div>
-            <input
-              #pollImageInput
-              hidden
-              type="file"
-              [accept]="imageAccept"
-              (change)="
-                uploadPollDescriptionImage($any($event.target).files?.[0] ?? null);
-                pollImageInput.value = ''
-              " />
-            <button
-              mat-stroked-button
-              type="button"
-              [disabled]="saving() || isUploadingImage('poll')"
-              (click)="pollImageInput.click()">
-              <mat-icon>add_photo_alternate</mat-icon>
-              Imagem
-            </button>
-          </div>
-
-          @if (isUploadingImage('poll')) {
-            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-          }
-
-          @for (image of builder.draft().descriptionImages ?? []; track image.id) {
-            <div class="image-editor-row">
-              <app-poll-description-content [images]="[image]"></app-poll-description-content>
-              <div class="image-editor-fields">
-                <mat-form-field appearance="outline">
-                  <mat-label>Texto alternativo</mat-label>
-                  <input
-                    matInput
-                    [value]="image.altText || ''"
-                    (input)="builder.updatePollDescriptionImageText(image.id, 'altText', $event)" />
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Legenda</mat-label>
-                  <input
-                    matInput
-                    [value]="image.caption || ''"
-                    (input)="builder.updatePollDescriptionImageText(image.id, 'caption', $event)" />
-                </mat-form-field>
-                <button
-                  matIconButton
-                  type="button"
-                  matTooltip="Remover imagem"
-                  aria-label="Remover imagem"
-                  [disabled]="isUploadingImage('poll')"
-                  (click)="removePollDescriptionImage(image)">
-                  <mat-icon>delete</mat-icon>
-                </button>
+          <section
+            class="surface field-group"
+            aria-labelledby="poll-data-title"
+          >
+            <div class="surface-heading">
+              <div>
+                <h3 id="poll-data-title">Dados da votação</h3>
+                <p>
+                  Defina identidade, vínculo com evento e regras de
+                  participação.
+                </p>
               </div>
             </div>
-          } @empty {
-            <p class="empty-note">Nenhuma imagem adicionada à descrição.</p>
-          }
-        </div>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Vincular votação a um evento</mat-label>
-          <mat-select
-            [disabled]="loadingEvents() || builder.isCacicElection()"
-            [value]="builder.draft().linkedEvent?.id || ''"
-            (selectionChange)="updateLinkedEvent($event)">
-            <mat-select-trigger>
-              {{ builder.draft().linkedEvent?.name || 'Sem evento vinculado' }}
-            </mat-select-trigger>
-            <mat-option value="">Sem evento vinculado</mat-option>
-            @for (event of eventOptions(); track event.id) {
-              <mat-option [value]="event.id">
-                <span class="event-option">
-                  <span>{{ event.name }}</span>
-                  <small>{{ eventDateLabel(event) }}</small>
-                </span>
-              </mat-option>
-            }
-          </mat-select>
-          @if (!loadingEvents() && eventOptions().length === 0) {
-            <mat-hint>Nenhum evento disponível para vincular.</mat-hint>
-          }
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Habilitados a votar</mat-label>
-          <mat-select
-            [disabled]="builder.isCacicElectionVoting()"
-            [value]="builder.draft().voterEligibilitySource"
-            (selectionChange)="updateVoterEligibilitySource($event)">
-            <mat-select-trigger>{{ selectedVoterEligibility().label }}</mat-select-trigger>
-            @for (option of builder.voterEligibilityOptions; track option.source) {
-              <mat-option [value]="option.source" [disabled]="option.requiresLinkedEvent && !builder.draft().linkedEvent">
-                <span class="metadata-option">
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.description }}</small>
-                </span>
-              </mat-option>
-            }
-          </mat-select>
-          <mat-hint>{{ selectedVoterEligibility().description }}</mat-hint>
-        </mat-form-field>
-
-        @if (shouldShowVerifiedUnespRoleRequirement()) {
-          <div class="verified-role-option">
-            <mat-checkbox
-              [checked]="builder.draft().requireVerifiedUnespRole"
-              (change)="builder.updateRequireVerifiedUnespRole($event)">
-              Exigir vínculo Unesp verificado por documento
-            </mat-checkbox>
-            <p>A verificação é feita pelo envio de documento no Account Manager.</p>
-          </div>
-        }
-
-        <div class="verified-role-option">
-          <mat-checkbox
-            [checked]="builder.draft().directLinkEnabled"
-            [disabled]="builder.isCacicElection()"
-            (change)="builder.updateDirectLinkEnabled($event)">
-            Permitir voto por link direto
-          </mat-checkbox>
-          @if (builder.isCacicElection()) {
-            <p>Indisponível para Eleições do CACiC.</p>
-          } @else {
-            <p>Pessoas autenticadas com este link também poderão votar nesta votação.</p>
-          }
-          @if (builder.draft().directLinkEnabled) {
-            @if (directLinkUrl()) {
-              <div class="manual-enrollment-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Link direto</mat-label>
-                  <input matInput readonly [value]="directLinkUrl()" />
-                </mat-form-field>
-                <button
-                  matIconButton
-                  type="button"
-                  matTooltip="Copiar link direto"
-                  aria-label="Copiar link direto"
-                  (click)="copyDirectLink()">
-                  <mat-icon>content_copy</mat-icon>
-                </button>
-              </div>
-            } @else {
-              <p>Salve a votação para gerar o link direto.</p>
-            }
-          }
-        </div>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Estilo da votação</mat-label>
-          <mat-select
-            [disabled]="builder.isCacicElectionVoting()"
-            [value]="builder.draft().votingStyle"
-            (selectionChange)="builder.updateVotingStyle($event)">
-            <mat-select-trigger>{{ selectedVotingStyle().label }}</mat-select-trigger>
-            @for (option of builder.votingStyleOptions; track option.style) {
-              <mat-option [value]="option.style">
-                <span class="metadata-option">
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.adminDescription }}</small>
-                </span>
-              </mat-option>
-            }
-          </mat-select>
-          <mat-hint>{{ selectedVotingStyle().adminDescription }}</mat-hint>
-        </mat-form-field>
-
-        <div class="verified-role-option">
-          <mat-checkbox
-            [checked]="builder.draft().allowResponseEditing"
-            [disabled]="builder.isCacicElectionVoting() || builder.draft().votingStyle === 'anonymous' || builder.draft().allowMultipleResponses"
-            (change)="builder.updateAllowResponseEditing($event)">
-            Permitir edição de resposta
-          </mat-checkbox>
-          @if (builder.draft().votingStyle === 'anonymous') {
-            <p>Indisponível para votações anônimas, porque as respostas não ficam vinculadas ao usuário.</p>
-          } @else if (builder.draft().allowMultipleResponses) {
-            <p>Indisponível enquanto múltiplas respostas estiverem habilitadas.</p>
-          } @else {
-            <p>Permite que a pessoa altere a resposta já enviada enquanto a votação estiver aberta.</p>
-          }
-        </div>
-
-        <div class="verified-role-option">
-          <mat-checkbox
-            [checked]="builder.draft().allowMultipleResponses"
-            [disabled]="builder.isCacicElectionVoting() || builder.draft().allowResponseEditing"
-            (change)="builder.updateAllowMultipleResponses($event)">
-            Permitir múltiplas respostas
-          </mat-checkbox>
-          @if (builder.draft().allowResponseEditing) {
-            <p>Indisponível enquanto a edição da resposta única estiver habilitada.</p>
-          } @else {
-            <p>Permite que a mesma pessoa envie novas respostas enquanto a votação estiver aberta.</p>
-          }
-        </div>
-
-        <div class="verified-role-option">
-          <mat-checkbox
-            [checked]="builder.draft().resultsPublic"
-            [disabled]="builder.isCacicElection()"
-            (change)="builder.updateResultsPublic($event)">
-            Resultados públicos
-          </mat-checkbox>
-          <p>Permite que participantes vejam os resultados desta votação.</p>
-        </div>
-
-        <div class="verified-role-option">
-          <mat-checkbox
-            [checked]="builder.draft().resultsLive"
-            [disabled]="builder.isCacicElection() || !builder.draft().resultsPublic"
-            (change)="builder.updateResultsLive($event)">
-            Resultados ao vivo
-          </mat-checkbox>
-          @if (builder.draft().resultsPublic) {
-            <p>Disponibiliza resultados em tempo real antes do encerramento da votação.</p>
-          } @else {
-            <p>Ative resultados públicos antes de liberar atualizações em tempo real.</p>
-          }
-        </div>
-      </div>
-    </section>
-
-    @if (shouldShowEnrollmentListControls()) {
-      <section class="surface field-group" aria-labelledby="eligibility-title">
-        <div class="surface-heading">
-          <div>
-            <h3 id="eligibility-title">Lista de matrículas</h3>
-            <p>{{ eligibilityEntries().length }} matrículas habilitadas</p>
-          </div>
-          @if (builder.draft().id && !isReadOnlyAdmin()) {
-            <div class="panel-actions">
-              <input
-                #appendEligibilityInput
-                hidden
-                type="file"
-                accept=".csv,.txt,text/csv,text/plain"
-                (change)="
-                  importEligibilityFile($any($event.target).files?.[0] ?? null, 'append');
-                  appendEligibilityInput.value = ''
-                " />
-              <input
-                #replaceEligibilityInput
-                hidden
-                type="file"
-                accept=".csv,.txt,text/csv,text/plain"
-                (change)="
-                  importEligibilityFile($any($event.target).files?.[0] ?? null, 'replace');
-                  replaceEligibilityInput.value = ''
-                " />
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="importingEligibility()"
-                (click)="appendEligibilityInput.click()">
-                <mat-icon>upload_file</mat-icon>
-                Adicionar arquivo
-              </button>
-              <button
-                mat-stroked-button
-                type="button"
-                [disabled]="importingEligibility()"
-                (click)="replaceEligibilityInput.click()">
-                <mat-icon>sync</mat-icon>
-                Substituir lista
-              </button>
-              <button
-                mat-button
-                type="button"
-                color="warn"
-                [disabled]="importingEligibility() || eligibilityEntries().length === 0"
-                (click)="clearEligibilityEnrollments()">
-                <mat-icon>delete_sweep</mat-icon>
-                Limpar
-              </button>
-            </div>
-          }
-        </div>
-
-          @if (!builder.draft().id) {
-            <p class="empty-note">Salve a votação para cadastrar matrículas.</p>
-          } @else {
-          @if (loadingEligibility() || importingEligibility()) {
-            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-          }
-
-          @if (!isReadOnlyAdmin()) {
-            <div class="manual-enrollment-row">
+            <div class="field-grid">
               <mat-form-field appearance="outline">
-                <mat-label>Matrículas</mat-label>
+                <mat-label>Título da votação</mat-label>
+                <input
+                  matInput
+                  [readonly]="isReadOnlyAdmin()"
+                  [value]="builder.draft().title"
+                  (input)="builder.updatePollTitle($event)"
+                />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="span-2">
+                <mat-label>Descrição</mat-label>
                 <textarea
                   matInput
-                  rows="2"
-                  [value]="manualEnrollmentNumbers()"
-                  (input)="updateManualEnrollmentNumbers($event)"></textarea>
+                  rows="3"
+                  [readonly]="isReadOnlyAdmin()"
+                  [value]="builder.draft().description || ''"
+                  (input)="builder.updatePollDescription($event)"
+                ></textarea>
               </mat-form-field>
-              <button
-                mat-flat-button
-                type="button"
-                [disabled]="importingEligibility() || !manualEnrollmentNumbers().trim()"
-                (click)="addManualEnrollmentNumbers()">
-                <mat-icon>add</mat-icon>
-                Adicionar
-              </button>
-            </div>
-          }
 
-          <div class="event-manager-source">
-            <mat-icon>badge</mat-icon>
-            <span>Dados de usuários do CACiC Contas</span>
-          </div>
-
-          <div class="eligibility-list">
-            @for (entry of eligibilityEntries(); track entry.enrollmentNumber) {
-              <div class="eligibility-row">
-                <div>
-                  <strong>{{ entry.enrollmentNumber }}</strong>
-                  <span>{{ peopleLabel(entry) }}</span>
+              <section
+                class="publication-schedule span-2"
+                aria-labelledby="publication-schedule-title"
+              >
+                <div class="surface-heading compact-heading">
+                  <div>
+                    <h4 id="publication-schedule-title">Publicação</h4>
+                    <p>
+                      Defina quando a votação aparece e quando aceita votos.
+                    </p>
+                  </div>
                 </div>
-                @if (!isReadOnlyAdmin()) {
+
+                <div class="field-grid schedule-grid">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Visível a partir de — data</mat-label>
+                    <input
+                      matInput
+                      [matDatepicker]="visibleFromDatePicker"
+                      [value]="
+                        builder.dateTimeDateInputValue(
+                          builder.draft().visibleFrom
+                        )
+                      "
+                      (dateChange)="builder.updateVisibleFromDate($event.value)"
+                    />
+                    <mat-datepicker-toggle
+                      matIconSuffix
+                      [for]="visibleFromDatePicker"
+                    />
+                    <mat-datepicker #visibleFromDatePicker />
+                    <mat-hint
+                      >Antes deste horário, o link público não abre a
+                      votação.</mat-hint
+                    >
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Visível a partir de — horário</mat-label>
+                    <input
+                      matInput
+                      type="time"
+                      [value]="
+                        builder.dateTimeTimeInputValue(
+                          builder.draft().visibleFrom
+                        )
+                      "
+                      (input)="builder.updateVisibleFromTime($event)"
+                    />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Aberta para votar a partir de — data</mat-label>
+                    <input
+                      matInput
+                      [matDatepicker]="votingStartsAtDatePicker"
+                      [value]="
+                        builder.dateTimeDateInputValue(
+                          builder.draft().votingStartsAt
+                        )
+                      "
+                      (dateChange)="
+                        builder.updateVotingStartsAtDate($event.value)
+                      "
+                    />
+                    <mat-datepicker-toggle
+                      matIconSuffix
+                      [for]="votingStartsAtDatePicker"
+                    />
+                    <mat-datepicker #votingStartsAtDatePicker />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label
+                      >Aberta para votar a partir de — horário</mat-label
+                    >
+                    <input
+                      matInput
+                      type="time"
+                      [value]="
+                        builder.dateTimeTimeInputValue(
+                          builder.draft().votingStartsAt
+                        )
+                      "
+                      (input)="builder.updateVotingStartsAtTime($event)"
+                    />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Aberta para votar até — data</mat-label>
+                    <input
+                      matInput
+                      [matDatepicker]="votingEndsAtDatePicker"
+                      [value]="
+                        builder.dateTimeDateInputValue(
+                          builder.draft().votingEndsAt
+                        )
+                      "
+                      (dateChange)="
+                        builder.updateVotingEndsAtDate($event.value)
+                      "
+                    />
+                    <mat-datepicker-toggle
+                      matIconSuffix
+                      [for]="votingEndsAtDatePicker"
+                    />
+                    <mat-datepicker #votingEndsAtDatePicker />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Aberta para votar até — horário</mat-label>
+                    <input
+                      matInput
+                      type="time"
+                      [value]="
+                        builder.dateTimeTimeInputValue(
+                          builder.draft().votingEndsAt
+                        )
+                      "
+                      (input)="builder.updateVotingEndsAtTime($event)"
+                    />
+                  </mat-form-field>
+                </div>
+              </section>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Modo da votação</mat-label>
+                <mat-select
+                  [value]="builder.draft().mode"
+                  (selectionChange)="builder.updatePollMode($event)"
+                >
+                  @for (option of builder.pollModeOptions; track option.mode) {
+                    <mat-option [value]="option.mode">{{
+                      option.label
+                    }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+
+              @if (builder.isCacicElection()) {
+                <mat-form-field appearance="outline">
+                  <mat-label>Etapa</mat-label>
+                  <mat-select
+                    [value]="
+                      builder.draft().cacicElectionPhase ?? 'slateSubmission'
+                    "
+                    (selectionChange)="builder.updateCacicElectionPhase($event)"
+                  >
+                    @for (
+                      option of builder.cacicElectionPhaseOptions;
+                      track option.phase
+                    ) {
+                      <mat-option [value]="option.phase">{{
+                        option.label
+                      }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                <div class="election-rule-panel span-2">
+                  <mat-icon>how_to_vote</mat-icon>
+                  <div>
+                    @if (builder.isCacicElectionVoting()) {
+                      <strong>Eleição anônima com lista de matrículas</strong>
+                      <p>
+                        As opções vêm das chapas aprovadas e habilitadas.
+                        Resultados ficam privados até o encerramento.
+                      </p>
+                    } @else {
+                      <strong>Submissão pública de chapas</strong>
+                      <p>
+                        Pessoas autenticadas podem submeter uma única chapa.
+                        Aprovação, rejeição e desclassificação ficam na aba
+                        Chapas.
+                      </p>
+                    }
+                  </div>
+                </div>
+              }
+
+              <div class="description-media span-2">
+                <div class="surface-heading compact-heading">
+                  <div>
+                    <h4>Imagens da descrição</h4>
+                    <p>Insira imagens no cabeçalho da votação.</p>
+                  </div>
+                  <input
+                    #pollImageInput
+                    hidden
+                    type="file"
+                    [accept]="imageAccept"
+                    (change)="
+                      uploadPollDescriptionImage(
+                        $any($event.target).files?.[0] ?? null
+                      );
+                      pollImageInput.value = ''
+                    "
+                  />
                   <button
-                    matIconButton
+                    mat-stroked-button
                     type="button"
-                    matTooltip="Remover matrícula"
-                    aria-label="Remover matrícula"
-                    [disabled]="importingEligibility()"
-                    (click)="deleteEligibilityEnrollment(entry.enrollmentNumber)">
-                    <mat-icon>close</mat-icon>
+                    [disabled]="saving() || isUploadingImage('poll')"
+                    (click)="pollImageInput.click()"
+                  >
+                    <mat-icon>add_photo_alternate</mat-icon>
+                    Imagem
                   </button>
+                </div>
+
+                @if (isUploadingImage('poll')) {
+                  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                }
+
+                @for (
+                  image of builder.draft().descriptionImages ?? [];
+                  track image.id
+                ) {
+                  <div class="image-editor-row">
+                    <app-poll-description-content
+                      [images]="[image]"
+                    ></app-poll-description-content>
+                    <div class="image-editor-fields">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Texto alternativo</mat-label>
+                        <input
+                          matInput
+                          [value]="image.altText || ''"
+                          (input)="
+                            builder.updatePollDescriptionImageText(
+                              image.id,
+                              'altText',
+                              $event
+                            )
+                          "
+                        />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Legenda</mat-label>
+                        <input
+                          matInput
+                          [value]="image.caption || ''"
+                          (input)="
+                            builder.updatePollDescriptionImageText(
+                              image.id,
+                              'caption',
+                              $event
+                            )
+                          "
+                        />
+                      </mat-form-field>
+                      <button
+                        matIconButton
+                        type="button"
+                        matTooltip="Remover imagem"
+                        aria-label="Remover imagem"
+                        [disabled]="isUploadingImage('poll')"
+                        (click)="removePollDescriptionImage(image)"
+                      >
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </div>
+                  </div>
+                } @empty {
+                  <p class="empty-note">
+                    Nenhuma imagem adicionada à descrição.
+                  </p>
                 }
               </div>
-            } @empty {
-              <p class="empty-note">Nenhuma matrícula cadastrada.</p>
-            }
-          </div>
-        }
-      </section>
-    }
 
-    @if (isReadOnlyAdmin()) {
-      <section class="surface field-group" aria-labelledby="elements-title">
-        <div class="surface-heading">
-          <div>
-            <h3 id="elements-title">Itens da votação</h3>
-            <p>{{ builder.draft().elements.length }} itens cadastrados.</p>
-          </div>
-        </div>
+              <mat-form-field appearance="outline">
+                <mat-label>Vincular votação a um evento</mat-label>
+                <mat-select
+                  [disabled]="loadingEvents() || builder.isCacicElection()"
+                  [value]="builder.draft().linkedEvent?.id || ''"
+                  (selectionChange)="updateLinkedEvent($event)"
+                >
+                  <mat-select-trigger>
+                    {{
+                      builder.draft().linkedEvent?.name ||
+                        'Sem evento vinculado'
+                    }}
+                  </mat-select-trigger>
+                  <mat-option value="">Sem evento vinculado</mat-option>
+                  @for (event of eventOptions(); track event.id) {
+                    <mat-option [value]="event.id">
+                      <span class="event-option">
+                        <span>{{ event.name }}</span>
+                        <small>{{ eventDateLabel(event) }}</small>
+                      </span>
+                    </mat-option>
+                  }
+                </mat-select>
+                @if (!loadingEvents() && eventOptions().length === 0) {
+                  <mat-hint>Nenhum evento disponível para vincular.</mat-hint>
+                }
+              </mat-form-field>
 
-        <div class="eligibility-list">
-          @for (element of builder.draft().elements; track element.id; let index = $index) {
-            <div class="eligibility-row">
-              <div>
-                <strong>{{ index + 1 }}. {{ element.title || builder.elementTypeLabel(element.type) }}</strong>
-                <span>{{ builder.elementTypeLabel(element.type) }}</span>
+              <mat-form-field appearance="outline">
+                <mat-label>Habilitados a votar</mat-label>
+                <mat-select
+                  [disabled]="builder.isCacicElectionVoting()"
+                  [value]="builder.draft().voterEligibilitySource"
+                  (selectionChange)="updateVoterEligibilitySource($event)"
+                >
+                  <mat-select-trigger>{{
+                    selectedVoterEligibility().label
+                  }}</mat-select-trigger>
+                  @for (
+                    option of builder.voterEligibilityOptions;
+                    track option.source
+                  ) {
+                    <mat-option
+                      [value]="option.source"
+                      [disabled]="
+                        option.requiresLinkedEvent &&
+                        !builder.draft().linkedEvent
+                      "
+                    >
+                      <span class="metadata-option">
+                        <span>{{ option.label }}</span>
+                        <small>{{ option.description }}</small>
+                      </span>
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-hint>{{
+                  selectedVoterEligibility().description
+                }}</mat-hint>
+              </mat-form-field>
+
+              @if (shouldShowVerifiedUnespRoleRequirement()) {
+                <div class="verified-role-option">
+                  <mat-checkbox
+                    [checked]="builder.draft().requireVerifiedUnespRole"
+                    (change)="builder.updateRequireVerifiedUnespRole($event)"
+                  >
+                    Exigir vínculo Unesp verificado por documento
+                  </mat-checkbox>
+                  <p>
+                    A verificação é feita pelo envio de documento no Account
+                    Manager.
+                  </p>
+                </div>
+              }
+
+              <div class="verified-role-option">
+                <mat-checkbox
+                  [checked]="builder.draft().directLinkEnabled"
+                  [disabled]="builder.isCacicElection()"
+                  (change)="builder.updateDirectLinkEnabled($event)"
+                >
+                  Permitir voto por link direto
+                </mat-checkbox>
+                @if (builder.isCacicElection()) {
+                  <p>Indisponível para Eleições do CACiC.</p>
+                } @else {
+                  <p>
+                    Pessoas autenticadas com este link também poderão votar
+                    nesta votação.
+                  </p>
+                }
+                @if (builder.draft().directLinkEnabled) {
+                  @if (directLinkUrl()) {
+                    <div class="manual-enrollment-row">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Link direto</mat-label>
+                        <input matInput readonly [value]="directLinkUrl()" />
+                      </mat-form-field>
+                      <button
+                        matIconButton
+                        type="button"
+                        matTooltip="Copiar link direto"
+                        aria-label="Copiar link direto"
+                        (click)="copyDirectLink()"
+                      >
+                        <mat-icon>content_copy</mat-icon>
+                      </button>
+                    </div>
+                  } @else {
+                    <p>Salve a votação para gerar o link direto.</p>
+                  }
+                }
+              </div>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Estilo da votação</mat-label>
+                <mat-select
+                  [disabled]="builder.isCacicElectionVoting()"
+                  [value]="builder.draft().votingStyle"
+                  (selectionChange)="builder.updateVotingStyle($event)"
+                >
+                  <mat-select-trigger>{{
+                    selectedVotingStyle().label
+                  }}</mat-select-trigger>
+                  @for (
+                    option of builder.votingStyleOptions;
+                    track option.style
+                  ) {
+                    <mat-option [value]="option.style">
+                      <span class="metadata-option">
+                        <span>{{ option.label }}</span>
+                        <small>{{ option.adminDescription }}</small>
+                      </span>
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-hint>{{
+                  selectedVotingStyle().adminDescription
+                }}</mat-hint>
+              </mat-form-field>
+
+              <div class="verified-role-option">
+                <mat-checkbox
+                  [checked]="builder.draft().allowResponseEditing"
+                  [disabled]="
+                    builder.isCacicElectionVoting() ||
+                    builder.draft().votingStyle === 'anonymous' ||
+                    builder.draft().allowMultipleResponses
+                  "
+                  (change)="builder.updateAllowResponseEditing($event)"
+                >
+                  Permitir edição de resposta
+                </mat-checkbox>
+                @if (builder.draft().votingStyle === 'anonymous') {
+                  <p>
+                    Indisponível para votações anônimas, porque as respostas não
+                    ficam vinculadas ao usuário.
+                  </p>
+                } @else if (builder.draft().allowMultipleResponses) {
+                  <p>
+                    Indisponível enquanto múltiplas respostas estiverem
+                    habilitadas.
+                  </p>
+                } @else {
+                  <p>
+                    Permite que a pessoa altere a resposta já enviada enquanto a
+                    votação estiver aberta.
+                  </p>
+                }
+              </div>
+
+              <div class="verified-role-option">
+                <mat-checkbox
+                  [checked]="builder.draft().allowMultipleResponses"
+                  [disabled]="
+                    builder.isCacicElectionVoting() ||
+                    builder.draft().allowResponseEditing
+                  "
+                  (change)="builder.updateAllowMultipleResponses($event)"
+                >
+                  Permitir múltiplas respostas
+                </mat-checkbox>
+                @if (builder.draft().allowResponseEditing) {
+                  <p>
+                    Indisponível enquanto a edição da resposta única estiver
+                    habilitada.
+                  </p>
+                } @else {
+                  <p>
+                    Permite que a mesma pessoa envie novas respostas enquanto a
+                    votação estiver aberta.
+                  </p>
+                }
+              </div>
+
+              <div class="verified-role-option">
+                <mat-checkbox
+                  [checked]="builder.draft().resultsPublic"
+                  [disabled]="builder.isCacicElection()"
+                  (change)="builder.updateResultsPublic($event)"
+                >
+                  Resultados públicos
+                </mat-checkbox>
+                <p>
+                  Permite que participantes vejam os resultados desta votação.
+                </p>
+              </div>
+
+              <div class="verified-role-option">
+                <mat-checkbox
+                  [checked]="builder.draft().resultsLive"
+                  [disabled]="
+                    builder.isCacicElection() || !builder.draft().resultsPublic
+                  "
+                  (change)="builder.updateResultsLive($event)"
+                >
+                  Resultados ao vivo
+                </mat-checkbox>
+                @if (builder.draft().resultsPublic) {
+                  <p>
+                    Disponibiliza resultados em tempo real antes do encerramento
+                    da votação.
+                  </p>
+                } @else {
+                  <p>
+                    Ative resultados públicos antes de liberar atualizações em
+                    tempo real.
+                  </p>
+                }
               </div>
             </div>
-          } @empty {
-            <p class="empty-note">Nenhum item cadastrado.</p>
+          </section>
+
+          @if (shouldShowEnrollmentListControls()) {
+            <section
+              class="surface field-group"
+              aria-labelledby="eligibility-title"
+            >
+              <div class="surface-heading">
+                <div>
+                  <h3 id="eligibility-title">Lista de matrículas</h3>
+                  <p>
+                    {{ eligibilityEntries().length }} matrículas habilitadas
+                  </p>
+                </div>
+                @if (builder.draft().id && !isReadOnlyAdmin()) {
+                  <div class="panel-actions">
+                    <input
+                      #appendEligibilityInput
+                      hidden
+                      type="file"
+                      accept=".csv,.txt,text/csv,text/plain"
+                      (change)="
+                        importEligibilityFile(
+                          $any($event.target).files?.[0] ?? null,
+                          'append'
+                        );
+                        appendEligibilityInput.value = ''
+                      "
+                    />
+                    <input
+                      #replaceEligibilityInput
+                      hidden
+                      type="file"
+                      accept=".csv,.txt,text/csv,text/plain"
+                      (change)="
+                        importEligibilityFile(
+                          $any($event.target).files?.[0] ?? null,
+                          'replace'
+                        );
+                        replaceEligibilityInput.value = ''
+                      "
+                    />
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="importingEligibility()"
+                      (click)="appendEligibilityInput.click()"
+                    >
+                      <mat-icon>upload_file</mat-icon>
+                      Adicionar arquivo
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="importingEligibility()"
+                      (click)="replaceEligibilityInput.click()"
+                    >
+                      <mat-icon>sync</mat-icon>
+                      Substituir lista
+                    </button>
+                    <button
+                      mat-button
+                      type="button"
+                      color="warn"
+                      [disabled]="
+                        importingEligibility() ||
+                        eligibilityEntries().length === 0
+                      "
+                      (click)="clearEligibilityEnrollments()"
+                    >
+                      <mat-icon>delete_sweep</mat-icon>
+                      Limpar
+                    </button>
+                  </div>
+                }
+              </div>
+
+              @if (!builder.draft().id) {
+                <p class="empty-note">
+                  Salve a votação para cadastrar matrículas.
+                </p>
+              } @else {
+                @if (loadingEligibility() || importingEligibility()) {
+                  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                }
+
+                @if (!isReadOnlyAdmin()) {
+                  <div class="manual-enrollment-row">
+                    <mat-form-field appearance="outline">
+                      <mat-label>Matrículas</mat-label>
+                      <textarea
+                        matInput
+                        rows="2"
+                        [value]="manualEnrollmentNumbers()"
+                        (input)="updateManualEnrollmentNumbers($event)"
+                      ></textarea>
+                    </mat-form-field>
+                    <button
+                      mat-flat-button
+                      type="button"
+                      [disabled]="
+                        importingEligibility() ||
+                        !manualEnrollmentNumbers().trim()
+                      "
+                      (click)="addManualEnrollmentNumbers()"
+                    >
+                      <mat-icon>add</mat-icon>
+                      Adicionar
+                    </button>
+                  </div>
+                }
+
+                <div class="event-manager-source">
+                  <mat-icon>badge</mat-icon>
+                  <span>Dados de usuários do CACiC Contas</span>
+                </div>
+
+                <div class="eligibility-list">
+                  @for (
+                    entry of eligibilityEntries();
+                    track entry.enrollmentNumber
+                  ) {
+                    <div class="eligibility-row">
+                      <div>
+                        <strong>{{ entry.enrollmentNumber }}</strong>
+                        <span>{{ peopleLabel(entry) }}</span>
+                      </div>
+                      @if (!isReadOnlyAdmin()) {
+                        <button
+                          matIconButton
+                          type="button"
+                          matTooltip="Remover matrícula"
+                          aria-label="Remover matrícula"
+                          [disabled]="importingEligibility()"
+                          (click)="
+                            deleteEligibilityEnrollment(entry.enrollmentNumber)
+                          "
+                        >
+                          <mat-icon>close</mat-icon>
+                        </button>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="empty-note">Nenhuma matrícula cadastrada.</p>
+                  }
+                </div>
+              }
+            </section>
           }
-        </div>
-      </section>
-    } @else {
-      <app-admin-poll-elements-editor
-        [builder]="builder"
-        [imageAccept]="imageAccept"
-        [saving]="saving()"
-        [uploadingImageTarget]="uploadingImageTarget()"
-        (uploadImage)="uploadElementDescriptionImage($event.elementId, $event.file)"
-        (removeImage)="removeElementDescriptionImage($event.elementId, $event.image)" />
-    }
+
+          @if (isReadOnlyAdmin()) {
+            <section
+              class="surface field-group"
+              aria-labelledby="elements-title"
+            >
+              <div class="surface-heading">
+                <div>
+                  <h3 id="elements-title">Itens da votação</h3>
+                  <p>
+                    {{ builder.draft().elements.length }} itens cadastrados.
+                  </p>
+                </div>
+              </div>
+
+              <div class="eligibility-list">
+                @for (
+                  element of builder.draft().elements;
+                  track element.id;
+                  let index = $index
+                ) {
+                  <div class="eligibility-row">
+                    <div>
+                      <strong
+                        >{{ index + 1 }}.
+                        {{
+                          element.title ||
+                            builder.elementTypeLabel(element.type)
+                        }}</strong
+                      >
+                      <span>{{ builder.elementTypeLabel(element.type) }}</span>
+                    </div>
+                  </div>
+                } @empty {
+                  <p class="empty-note">Nenhum item cadastrado.</p>
+                }
+              </div>
+            </section>
+          } @else {
+            <app-admin-poll-elements-editor
+              [builder]="builder"
+              [imageAccept]="imageAccept"
+              [saving]="saving()"
+              [uploadingImageTarget]="uploadingImageTarget()"
+              (uploadImage)="
+                uploadElementDescriptionImage($event.elementId, $event.file)
+              "
+              (removeImage)="
+                removeElementDescriptionImage($event.elementId, $event.image)
+              "
+            />
+          }
         </div>
       </mat-tab>
 
@@ -636,27 +916,43 @@
               }
 
               @if (!isReadOnlyAdmin()) {
-              <section class="surface field-group">
-                <div class="surface-heading">
-                  <div>
-                    <h3>{{ editingSlate() ? 'Editar chapa' : 'Cadastrar chapa manualmente' }}</h3>
-                    <p>Cadastros manuais entram como chapas administrativas e podem ser usados na etapa de eleição.</p>
+                <section class="surface field-group">
+                  <div class="surface-heading">
+                    <div>
+                      <h3>
+                        {{
+                          editingSlate()
+                            ? 'Editar chapa'
+                            : 'Cadastrar chapa manualmente'
+                        }}
+                      </h3>
+                      <p>
+                        Cadastros manuais entram como chapas administrativas e
+                        podem ser usados na etapa de eleição.
+                      </p>
+                    </div>
+                    @if (editingSlate()) {
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        (click)="cancelSlateEdit()"
+                      >
+                        <mat-icon>close</mat-icon>
+                        Cancelar edição
+                      </button>
+                    }
                   </div>
-                  @if (editingSlate()) {
-                    <button mat-stroked-button type="button" (click)="cancelSlateEdit()">
-                      <mat-icon>close</mat-icon>
-                      Cancelar edição
-                    </button>
-                  }
-                </div>
 
-                <app-cacic-election-slate-form
-                  [slate]="editingSlate()"
-                  [busy]="savingSlate()"
-                  [showAgreements]="false"
-                  [submitLabel]="editingSlate() ? 'Salvar chapa' : 'Cadastrar chapa'"
-                  (submitted)="saveSlate($event)" />
-              </section>
+                  <app-cacic-election-slate-form
+                    [slate]="editingSlate()"
+                    [busy]="savingSlate()"
+                    [showAgreements]="false"
+                    [submitLabel]="
+                      editingSlate() ? 'Salvar chapa' : 'Cadastrar chapa'
+                    "
+                    (submitted)="saveSlate($event)"
+                  />
+                </section>
               }
 
               <section class="surface field-group">
@@ -674,22 +970,40 @@
                         <mat-icon mat-card-avatar>groups</mat-icon>
                         <mat-card-title>{{ slate.name }}</mat-card-title>
                         <mat-card-subtitle>
-                          {{ slateStatusLabel(slate.status) }} · {{ slate.submissionSource === 'public' ? 'Submissão pública' : 'Cadastro administrativo' }}
+                          {{ slateStatusLabel(slate.status) }} ·
+                          {{
+                            slate.submissionSource === 'public'
+                              ? 'Submissão pública'
+                              : 'Cadastro administrativo'
+                          }}
                         </mat-card-subtitle>
                       </mat-card-header>
                       <mat-card-content>
                         <div class="slate-meta-row">
                           <mat-chip-set aria-label="Status da chapa">
-                            <mat-chip>{{ slateStatusLabel(slate.status) }}</mat-chip>
-                            <mat-chip>{{ slate.enabled ? 'Habilitada' : 'Desabilitada' }}</mat-chip>
+                            <mat-chip>{{
+                              slateStatusLabel(slate.status)
+                            }}</mat-chip>
+                            <mat-chip>{{
+                              slate.enabled ? 'Habilitada' : 'Desabilitada'
+                            }}</mat-chip>
                             @if (slate.submittedBy) {
-                              <mat-chip>Representante: {{ slate.submittedBy.name || slate.submittedBy.email || slate.submittedBy.userId }}</mat-chip>
+                              <mat-chip
+                                >Representante:
+                                {{
+                                  slate.submittedBy.name ||
+                                    slate.submittedBy.email ||
+                                    slate.submittedBy.userId
+                                }}</mat-chip
+                              >
                             }
                           </mat-chip-set>
                         </div>
 
                         @if (slate.rejectionReason) {
-                          <p class="rejection-reason">{{ slate.rejectionReason }}</p>
+                          <p class="rejection-reason">
+                            {{ slate.rejectionReason }}
+                          </p>
                         }
 
                         <div class="slate-member-list">
@@ -697,7 +1011,9 @@
                             <div class="slate-member-row">
                               <div>
                                 <strong>{{ member.fullName }}</strong>
-                                <span>{{ slateRoleLabel(member.role, member.customRole) }}</span>
+                                <span>{{
+                                  slateRoleLabel(member.role, member.customRole)
+                                }}</span>
                               </div>
                               <div>
                                 <span>{{ slateIdentifierLabel(member) }}</span>
@@ -710,44 +1026,76 @@
                         </div>
                       </mat-card-content>
                       @if (!isReadOnlyAdmin()) {
-                      <mat-card-actions align="end">
-                        <button mat-button type="button" [disabled]="savingSlate()" (click)="editSlate(slate)">
-                          <mat-icon>edit</mat-icon>
-                          Editar
-                        </button>
-                        @if (slate.status !== 'approved') {
-                          <button mat-button type="button" [disabled]="savingSlate()" (click)="approveSlate(slate)">
-                            <mat-icon>check_circle</mat-icon>
-                            Aprovar
+                        <mat-card-actions align="end">
+                          <button
+                            mat-button
+                            type="button"
+                            [disabled]="savingSlate()"
+                            (click)="editSlate(slate)"
+                          >
+                            <mat-icon>edit</mat-icon>
+                            Editar
                           </button>
-                        }
-                        @if (slate.status !== 'rejected') {
-                          <button mat-button type="button" color="warn" [disabled]="savingSlate()" (click)="rejectSlate(slate)">
-                            <mat-icon>cancel</mat-icon>
-                            Rejeitar
+                          @if (slate.status !== 'approved') {
+                            <button
+                              mat-button
+                              type="button"
+                              [disabled]="savingSlate()"
+                              (click)="approveSlate(slate)"
+                            >
+                              <mat-icon>check_circle</mat-icon>
+                              Aprovar
+                            </button>
+                          }
+                          @if (slate.status !== 'rejected') {
+                            <button
+                              mat-button
+                              type="button"
+                              color="warn"
+                              [disabled]="savingSlate()"
+                              (click)="rejectSlate(slate)"
+                            >
+                              <mat-icon>cancel</mat-icon>
+                              Rejeitar
+                            </button>
+                          }
+                          <button
+                            mat-button
+                            type="button"
+                            [disabled]="
+                              savingSlate() || slate.status !== 'approved'
+                            "
+                            (click)="updateSlateEnabled(slate, !slate.enabled)"
+                          >
+                            <mat-icon>{{
+                              slate.enabled ? 'block' : 'verified'
+                            }}</mat-icon>
+                            {{ slate.enabled ? 'Desabilitar' : 'Habilitar' }}
                           </button>
-                        }
-                        <button
-                          mat-button
-                          type="button"
-                          [disabled]="savingSlate() || slate.status !== 'approved'"
-                          (click)="updateSlateEnabled(slate, !slate.enabled)">
-                          <mat-icon>{{ slate.enabled ? 'block' : 'verified' }}</mat-icon>
-                          {{ slate.enabled ? 'Desabilitar' : 'Habilitar' }}
-                        </button>
-                        <button mat-button type="button" color="warn" [disabled]="savingSlate()" (click)="deleteSlate(slate)">
-                          <mat-icon>delete</mat-icon>
-                          Excluir
-                        </button>
-                      </mat-card-actions>
+                          <button
+                            mat-button
+                            type="button"
+                            color="warn"
+                            [disabled]="savingSlate()"
+                            (click)="deleteSlate(slate)"
+                          >
+                            <mat-icon>delete</mat-icon>
+                            Excluir
+                          </button>
+                        </mat-card-actions>
                       }
                     </mat-card>
                   } @empty {
                     <mat-card appearance="outlined" class="empty-card">
                       <mat-card-header>
                         <mat-icon mat-card-avatar>inbox</mat-icon>
-                        <mat-card-title>Nenhuma chapa registrada</mat-card-title>
-                        <mat-card-subtitle>Submissões públicas aparecerão aqui para revisão.</mat-card-subtitle>
+                        <mat-card-title
+                          >Nenhuma chapa registrada</mat-card-title
+                        >
+                        <mat-card-subtitle
+                          >Submissões públicas aparecerão aqui para
+                          revisão.</mat-card-subtitle
+                        >
                       </mat-card-header>
                     </mat-card>
                   }
@@ -762,10 +1110,20 @@
         @if (resultsFinalizationState() === 'pending') {
           <p aria-live="polite">Carregando os resultados finais…</p>
         } @else if (resultsFinalizationState() === 'failed') {
-          <mat-card appearance="outlined" class="notice-card" aria-live="polite">
-            <mat-card-content>{{ resultsFinalizationError() }}</mat-card-content>
+          <mat-card
+            appearance="outlined"
+            class="notice-card"
+            aria-live="polite"
+          >
+            <mat-card-content>{{
+              resultsFinalizationError()
+            }}</mat-card-content>
             <mat-card-actions>
-              <button mat-stroked-button type="button" (click)="retryFinalResults()">
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="retryFinalResults()"
+              >
                 <mat-icon>refresh</mat-icon>
                 Tentar novamente
               </button>
@@ -778,13 +1136,17 @@
               <div class="surface-heading">
                 <div>
                   <h3>Pessoas que votaram</h3>
-                  <p>Baixe as matrículas disponíveis para participantes que registraram voto.</p>
+                  <p>
+                    Baixe as matrículas disponíveis para participantes que
+                    registraram voto.
+                  </p>
                 </div>
                 <button
                   mat-stroked-button
                   type="button"
                   [disabled]="exportingCacicElectionVoters()"
-                  (click)="exportCacicElectionVoterEnrollments()">
+                  (click)="exportCacicElectionVoterEnrollments()"
+                >
                   <mat-icon>download</mat-icon>
                   Baixar matrículas
                 </button>
@@ -807,7 +1169,10 @@
           [selectedIndividualResponse]="selectedIndividualResponse()"
           [selectedIndividualAnswers]="selectedIndividualAnswers()"
           (selectedResultsElementChange)="updateSelectedResultsElement($event)"
-          (selectedIndividualResponseChange)="updateSelectedIndividualResponse($event)" />
+          (selectedIndividualResponseChange)="
+            updateSelectedIndividualResponse($event)
+          "
+        />
       </mat-tab>
     </mat-tab-group>
   </section>

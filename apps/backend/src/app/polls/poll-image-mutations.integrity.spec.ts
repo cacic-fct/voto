@@ -30,13 +30,16 @@ describe('PollImageMutationsService staging boundaries', () => {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    const service = new PollImageMutationsService(new PollMutationValidationService());
+    const service = new PollImageMutationsService(
+      new PollMutationValidationService(),
+    );
 
-    await expect(service.reconcilePollImages(
-      tx as never,
-      'poll-1',
-      { title: 'Poll', elements: [] } as never,
-    )).resolves.toEqual(['polls/poll-1/images/attached.avif']);
+    await expect(
+      service.reconcilePollImages(tx as never, 'poll-1', {
+        title: 'Poll',
+        elements: [],
+      } as never),
+    ).resolves.toEqual(['polls/poll-1/images/attached.avif']);
 
     expect(tx.pollImage.deleteMany).toHaveBeenCalledWith({
       where: { pollId: 'poll-1', id: { in: ['attached-by-editor-a'] } },

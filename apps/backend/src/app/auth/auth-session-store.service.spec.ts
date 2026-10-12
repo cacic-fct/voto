@@ -100,9 +100,17 @@ describe('AuthSessionStoreService', () => {
     };
 
     await service.set('session-1', session);
-    expect(redis.set).toHaveBeenCalledWith('test:session:session-1', JSON.stringify(session), 'EX', 2);
+    expect(redis.set).toHaveBeenCalledWith(
+      'test:session:session-1',
+      JSON.stringify(session),
+      'EX',
+      2,
+    );
 
-    await service.set('expired', { ...session, sessionExpiresAt: Date.now() - 100 });
+    await service.set('expired', {
+      ...session,
+      sessionExpiresAt: Date.now() - 100,
+    });
     expect(redis.del).toHaveBeenCalledWith('test:session:expired');
   });
 
@@ -115,7 +123,9 @@ describe('AuthSessionStoreService', () => {
     };
     redis.eval.mockResolvedValue(1);
 
-    await expect(service.commitRefreshedSession('session-1', 2, 'owner-1', session)).resolves.toBe(true);
+    await expect(
+      service.commitRefreshedSession('session-1', 2, 'owner-1', session),
+    ).resolves.toBe(true);
 
     expect(redis.eval).toHaveBeenCalledWith(
       expect.stringContaining('local lockOwner'),
@@ -156,16 +166,11 @@ describe('AuthSessionStoreService', () => {
 
   it('does not issue a write when the refreshed session is already expired', async () => {
     await expect(
-      service.commitRefreshedSession(
-        'session-1',
-        0,
-        'owner-1',
-        {
-          accessToken: 'new-access',
-          accessTokenExpiresAt: Date.now() - 1,
-          sessionExpiresAt: Date.now() - 1,
-        },
-      ),
+      service.commitRefreshedSession('session-1', 0, 'owner-1', {
+        accessToken: 'new-access',
+        accessTokenExpiresAt: Date.now() - 1,
+        sessionExpiresAt: Date.now() - 1,
+      }),
     ).resolves.toBe(false);
     expect(redis.eval).not.toHaveBeenCalled();
   });
@@ -183,9 +188,15 @@ describe('AuthSessionStoreService', () => {
       accessTokenExpiresAt: Date.now() + 1000,
       sessionExpiresAt: Date.now() + 2000,
     };
-    const storedSessions = new Map([['test:session:session-1', JSON.stringify(session)]]);
-    redis.get.mockImplementation(async (key) => storedSessions.get(key) ?? null);
-    redis.del.mockImplementation(async (key) => Number(storedSessions.delete(key)));
+    const storedSessions = new Map([
+      ['test:session:session-1', JSON.stringify(session)],
+    ]);
+    redis.get.mockImplementation(
+      async (key) => storedSessions.get(key) ?? null,
+    );
+    redis.del.mockImplementation(async (key) =>
+      Number(storedSessions.delete(key)),
+    );
 
     await expect(service.get('session-1')).resolves.toEqual(session);
     await service.delete('session-1');
@@ -197,14 +208,31 @@ describe('AuthSessionStoreService', () => {
     redis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
     redis.eval.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
-    await expect(service.acquireRefreshLock('session-1', 'owner')).resolves.toBe(true);
-    await expect(service.acquireRefreshLock('session-1', 'owner')).resolves.toBe(false);
+    await expect(
+      service.acquireRefreshLock('session-1', 'owner'),
+    ).resolves.toBe(true);
+    await expect(
+      service.acquireRefreshLock('session-1', 'owner'),
+    ).resolves.toBe(false);
 
-    await expect(service.renewRefreshLock('session-1', 'owner')).resolves.toBe(true);
-    expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining('pexpire'), 1, 'test:session:session-1:refresh-lock', 'owner', '5');
+    await expect(service.renewRefreshLock('session-1', 'owner')).resolves.toBe(
+      true,
+    );
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('pexpire'),
+      1,
+      'test:session:session-1:refresh-lock',
+      'owner',
+      '5',
+    );
 
     await service.releaseRefreshLock('session-1', 'owner');
-    expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining('redis.call("get"'), 1, 'test:session:session-1:refresh-lock', 'owner');
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("get"'),
+      1,
+      'test:session:session-1:refresh-lock',
+      'owner',
+    );
   });
 
   it('waits until the refresh lock is released or times out', async () => {
@@ -227,7 +255,13 @@ describe('AuthSessionStoreService', () => {
 
     await service.acquireRefreshLock('session-1', 'owner');
 
-    expect(redis.set).toHaveBeenCalledWith('test:session:session-1:refresh-lock', 'owner', 'PX', 5000, 'NX');
+    expect(redis.set).toHaveBeenCalledWith(
+      'test:session:session-1:refresh-lock',
+      'owner',
+      'PX',
+      5000,
+      'NX',
+    );
   });
 
   it('falls back to the default session key prefix', async () => {

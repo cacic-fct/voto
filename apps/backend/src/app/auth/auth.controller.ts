@@ -24,7 +24,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import type { Request, Response } from 'express';
 import type { PermissionEvaluationResponse } from '@org/voting-contracts';
 import {
@@ -98,13 +104,15 @@ class LogoutResponseDto {
   success!: boolean;
 
   @ApiProperty({
-    description: 'Whether Keycloak confirmed global logout using the stored refresh token.',
+    description:
+      'Whether Keycloak confirmed global logout using the stored refresh token.',
     example: true,
   })
   globalLogoutComplete!: boolean;
 
   @ApiProperty({
-    description: 'Token-free Keycloak URL for completing browser global logout when needed.',
+    description:
+      'Token-free Keycloak URL for completing browser global logout when needed.',
     example:
       'https://sso.cacic.com.br/realms/cacic-sso/protocol/openid-connect/logout?client_id=cacic-voto&post_logout_redirect_uri=https%3A%2F%2Fvoto.cacic.com.br%2F',
   })
@@ -292,9 +300,12 @@ export class AuthController {
     let refreshToken: string | undefined;
     if (sessionId) {
       try {
-        refreshToken = (await this.auth.getSessionLogoutInput(sessionId))?.refreshToken;
+        refreshToken = (await this.auth.getSessionLogoutInput(sessionId))
+          ?.refreshToken;
       } catch {
-        this.logger.warn('Could not read the stored refresh token for global logout.');
+        this.logger.warn(
+          'Could not read the stored refresh token for global logout.',
+        );
       }
     }
 
@@ -305,7 +316,9 @@ export class AuthController {
       }
     } catch {
       localSessionCleared = false;
-      this.logger.error('Could not delete the local auth session during logout.');
+      this.logger.error(
+        'Could not delete the local auth session during logout.',
+      );
     } finally {
       response.clearCookie(getAuthSessionCookieName(), {
         httpOnly: true,
@@ -328,7 +341,8 @@ export class AuthController {
         cookieExpired: true,
         globalLogoutComplete: logoutResult.globalLogoutComplete,
         logoutUrl: logoutResult.logoutUrl,
-        message: 'The browser cookie was cleared, but the local session could not be confirmed as deleted.',
+        message:
+          'The browser cookie was cleared, but the local session could not be confirmed as deleted.',
       });
     }
 
@@ -447,9 +461,15 @@ export class AuthController {
 
   private getCallbackRedirectUri(request: Request): string {
     const canonicalOrigin = this.readCanonicalOrigin();
-    const forwardedProtocol = this.isProduction() ? undefined : this.readForwardedHeader(request, 'x-forwarded-proto');
-    const forwardedHost = this.isProduction() ? undefined : this.readForwardedHeader(request, 'x-forwarded-host');
-    const origin = canonicalOrigin ?? `${forwardedProtocol ?? request.protocol}://${forwardedHost ?? request.get('host')}`;
+    const forwardedProtocol = this.isProduction()
+      ? undefined
+      : this.readForwardedHeader(request, 'x-forwarded-proto');
+    const forwardedHost = this.isProduction()
+      ? undefined
+      : this.readForwardedHeader(request, 'x-forwarded-host');
+    const origin =
+      canonicalOrigin ??
+      `${forwardedProtocol ?? request.protocol}://${forwardedHost ?? request.get('host')}`;
     return new URL('/api/auth/callback', origin).toString();
   }
 
@@ -474,8 +494,14 @@ export class AuthController {
       );
     }
     const canonicalOrigin = this.readCanonicalOrigin();
-    if (this.isProduction() && canonicalOrigin && url.origin !== canonicalOrigin) {
-      throw new BadRequestException('Callback redirect URI must use the canonical origin.');
+    if (
+      this.isProduction() &&
+      canonicalOrigin &&
+      url.origin !== canonicalOrigin
+    ) {
+      throw new BadRequestException(
+        'Callback redirect URI must use the canonical origin.',
+      );
     }
 
     url.username = '';
@@ -496,9 +522,7 @@ export class AuthController {
         this.readCanonicalOrigin() ?? DEFAULT_POST_LOGIN_APPLICATION_ORIGIN,
     });
     if (!normalized) {
-      throw new BadRequestException(
-        'Invalid post-login redirect URI.',
-      );
+      throw new BadRequestException('Invalid post-login redirect URI.');
     }
 
     return normalized;
@@ -548,21 +572,29 @@ export class AuthController {
       'KEYCLOAK_ALLOWED_CALLBACK_REDIRECT_ORIGINS',
       this.isProduction()
         ? ['https://voto.cacic.com.br']
-        : ['http://localhost:3000', 'http://localhost:4200', 'https://voto.cacic.com.br'],
+        : [
+            'http://localhost:3000',
+            'http://localhost:4200',
+            'https://voto.cacic.com.br',
+          ],
     );
   }
 
   private readAllowedPostLoginRedirectOrigins(): Set<string> {
     return this.readAllowedOrigins(
       'KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS',
-      this.isProduction() ? ['https://voto.cacic.com.br'] : ['http://localhost:4200', 'https://voto.cacic.com.br'],
+      this.isProduction()
+        ? ['https://voto.cacic.com.br']
+        : ['http://localhost:4200', 'https://voto.cacic.com.br'],
     );
   }
 
   private readAllowedPostLogoutRedirectOrigins(): Set<string> {
     return this.readAllowedOrigins(
       'KEYCLOAK_ALLOWED_POST_LOGOUT_REDIRECT_ORIGINS',
-      this.isProduction() ? ['https://voto.cacic.com.br'] : ['http://localhost:4200', 'https://voto.cacic.com.br'],
+      this.isProduction()
+        ? ['https://voto.cacic.com.br']
+        : ['http://localhost:4200', 'https://voto.cacic.com.br'],
     );
   }
 
@@ -637,35 +669,53 @@ export class AuthController {
     if (this.isProduction()) {
       return false;
     }
-    const forwardedProto = this.readForwardedHeader(request, 'x-forwarded-proto');
+    const forwardedProto = this.readForwardedHeader(
+      request,
+      'x-forwarded-proto',
+    );
     return forwardedProto === 'https';
   }
 
-  private readForwardedHeader(request: Request, headerName: string): string | undefined {
+  private readForwardedHeader(
+    request: Request,
+    headerName: string,
+  ): string | undefined {
     const value = request.headers[headerName];
     return (Array.isArray(value) ? value[0] : value)?.split(',')[0]?.trim();
   }
 
   private assertSecureRequest(request: Request): void {
-    if (process.env.NODE_ENV === 'production' && !this.isSecureRequest(request)) {
-      throw new BadRequestException('HTTPS is required for authentication cookies.');
+    if (
+      process.env.NODE_ENV === 'production' &&
+      !this.isSecureRequest(request)
+    ) {
+      throw new BadRequestException(
+        'HTTPS is required for authentication cookies.',
+      );
     }
   }
 
   private readCanonicalOrigin(): string | undefined {
-    const rawOrigin = process.env.PUBLIC_ORIGIN?.trim() ?? process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
+    const rawOrigin =
+      process.env.PUBLIC_ORIGIN?.trim() ??
+      process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
     if (!rawOrigin) {
       return undefined;
     }
 
     try {
       const url = new URL(rawOrigin);
-      if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && url.protocol === 'http:')) {
+      if (
+        url.protocol !== 'https:' &&
+        !(process.env.NODE_ENV !== 'production' && url.protocol === 'http:')
+      ) {
         return undefined;
       }
       return url.origin;
     } catch {
-      this.logger.warn('Ignoring invalid PUBLIC_ORIGIN/KEYCLOAK_CANONICAL_ORIGIN value.');
+      this.logger.warn(
+        'Ignoring invalid PUBLIC_ORIGIN/KEYCLOAK_CANONICAL_ORIGIN value.',
+      );
       return undefined;
     }
   }

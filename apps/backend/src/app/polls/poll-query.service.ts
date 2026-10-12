@@ -1,4 +1,11 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { EventManagerEvent, Poll, PollSummary } from '@org/voting-contracts';
 import { AuthenticatedPrincipal } from '../auth/auth.types';
 import { EventManagerIntegrationService } from '../event-manager/event-manager-integration.service';
@@ -21,7 +28,10 @@ import {
 import { PollEligibilityService } from './poll-eligibility.service';
 import { normalizeDirectLinkToken } from './poll-identifiers';
 import { PollContractOptions, PollRecord, pollInclude } from './poll-records';
-import { publicReadablePollWhere, shouldRequireVotingEligibilityForRead } from './poll-visibility';
+import {
+  publicReadablePollWhere,
+  shouldRequireVotingEligibilityForRead,
+} from './poll-visibility';
 
 @Injectable()
 export class PollQueryService {
@@ -54,7 +64,9 @@ export class PollQueryService {
     return polls.map((poll) => this.toPollSummary(poll));
   }
 
-  async listPublicPolls(user?: AuthenticatedPrincipal | null): Promise<PollSummary[]> {
+  async listPublicPolls(
+    user?: AuthenticatedPrincipal | null,
+  ): Promise<PollSummary[]> {
     const now = new Date();
     const polls = await this.prisma.poll.findMany({
       where: publicReadablePollWhere(now),
@@ -81,32 +93,55 @@ export class PollQueryService {
     let unavailableCount = 0;
     // Bound fan-out, and share equivalent attendance checks for this user/request.
     for (let offset = 0; offset < polls.length; offset += 4) {
-      const batch = await Promise.all(polls.slice(offset, offset + 4).map(async (poll) => {
-        try {
-          const voter = requireAuthenticatedVoter(user ?? undefined);
-          const key = poll.voterEligibilitySource.startsWith('EVENT_ATTENDANCE')
-            ? JSON.stringify([poll.voterEligibilitySource, poll.linkedEventId, poll.requireVerifiedUnespRole])
-            : undefined;
-          let check = key ? attendanceChecks.get(key) : undefined;
-          if (!check) {
-            check = this.eligibility.ensureVotingAllowed(poll, voter, this.prisma, { remoteTimeoutMs: 2_000 });
-            if (key) attendanceChecks.set(key, check);
+      const batch = await Promise.all(
+        polls.slice(offset, offset + 4).map(async (poll) => {
+          try {
+            const voter = requireAuthenticatedVoter(user ?? undefined);
+            const key = poll.voterEligibilitySource.startsWith(
+              'EVENT_ATTENDANCE',
+            )
+              ? JSON.stringify([
+                  poll.voterEligibilitySource,
+                  poll.linkedEventId,
+                  poll.requireVerifiedUnespRole,
+                ])
+              : undefined;
+            let check = key ? attendanceChecks.get(key) : undefined;
+            if (!check) {
+              check = this.eligibility.ensureVotingAllowed(
+                poll,
+                voter,
+                this.prisma,
+                { remoteTimeoutMs: 2_000 },
+              );
+              if (key) attendanceChecks.set(key, check);
+            }
+            await check;
+            return poll;
+          } catch (error: unknown) {
+            if (
+              error instanceof ForbiddenException ||
+              error instanceof UnauthorizedException
+            )
+              return null;
+            if (error instanceof ServiceUnavailableException) {
+              unavailableCount += 1;
+              return null;
+            }
+            throw error;
           }
-          await check;
-          return poll;
-        } catch (error: unknown) {
-          if (error instanceof ForbiddenException || error instanceof UnauthorizedException) return null;
-          if (error instanceof ServiceUnavailableException) {
-            unavailableCount += 1;
-            return null;
-          }
-          throw error;
-        }
-      }));
-      readablePolls.push(...batch.filter((poll): poll is (typeof polls)[number] => poll !== null));
+        }),
+      );
+      readablePolls.push(
+        ...batch.filter(
+          (poll): poll is (typeof polls)[number] => poll !== null,
+        ),
+      );
     }
     if (unavailableCount) {
-      this.logger.warn(`Omitted ${unavailableCount} catalog entries because eligibility verification was unavailable.`);
+      this.logger.warn(
+        `Omitted ${unavailableCount} catalog entries because eligibility verification was unavailable.`,
+      );
     }
     return readablePolls.map((poll) => this.toPollSummary(poll));
   }
@@ -129,11 +164,17 @@ export class PollQueryService {
     return toContractPoll(poll, { includeDirectLinkToken: true });
   }
 
-  async getPublishedPoll(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+  async getPublishedPoll(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     return this.getPublishedPollWithOptions(id, user);
   }
 
-  async getPublishedPollForKiosk(id: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+  async getPublishedPollForKiosk(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     return this.getPublishedPollWithOptions(id, user, {
       imageBasePath: `/api/admin/polls/${encodeURIComponent(id)}/kiosk/images`,
     });
@@ -165,7 +206,10 @@ export class PollQueryService {
     return toContractPoll(poll, contractOptions);
   }
 
-  async getPublishedPollByDirectLink(directLinkToken: string, user?: AuthenticatedPrincipal): Promise<Poll> {
+  async getPublishedPollByDirectLink(
+    directLinkToken: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<Poll> {
     const normalizedToken = normalizeDirectLinkToken(directLinkToken);
     const now = new Date();
     const poll = await this.prisma.poll.findFirst({
@@ -185,7 +229,10 @@ export class PollQueryService {
     return toContractPoll(poll, { imageDirectLinkToken: normalizedToken });
   }
 
-  async assertPublishedPollReadable(id: string, user?: AuthenticatedPrincipal): Promise<void> {
+  async assertPublishedPollReadable(
+    id: string,
+    user?: AuthenticatedPrincipal,
+  ): Promise<void> {
     const now = new Date();
     const poll = await this.prisma.poll.findFirst({
       where: {
@@ -253,7 +300,9 @@ export class PollQueryService {
       mode: toContractPollMode(poll.mode),
       cacicElectionPhase: toContractCacicElectionPhase(poll.cacicElectionPhase),
       votingStyle: toContractVotingStyle(poll.votingStyle),
-      voterEligibilitySource: toContractVoterEligibilitySource(poll.voterEligibilitySource),
+      voterEligibilitySource: toContractVoterEligibilitySource(
+        poll.voterEligibilitySource,
+      ),
       requireVerifiedUnespRole: poll.requireVerifiedUnespRole,
       directLinkEnabled: poll.directLinkEnabled,
       resultsPublic: poll.resultsPublic,

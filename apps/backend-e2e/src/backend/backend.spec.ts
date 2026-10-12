@@ -118,59 +118,255 @@ type PollsMock = jest.Mocked<
   >
 >;
 
-type PollImagesMock = jest.Mocked<Pick<PollImagesService, 'deletePollImage' | 'getPollImage' | 'uploadPollImage'>>;
+type PollImagesMock = jest.Mocked<
+  Pick<
+    PollImagesService,
+    'deletePollImage' | 'getPollImage' | 'uploadPollImage'
+  >
+>;
 
 const publicRouteCases = [
   { method: 'get', route: '/api', url: '/api', expectedStatus: 200 },
-  { method: 'get', route: '/api/auth/login', url: '/api/auth/login', expectedStatus: 200 },
-  { method: 'get', route: '/api/auth/login/redirect', url: '/api/auth/login/redirect', expectedStatus: 302 },
-  { method: 'get', route: '/api/auth/callback', url: '/api/auth/callback?code=code-1&state=state-1', expectedStatus: 400 },
-  { method: 'get', route: '/api/auth/me', url: '/api/auth/me', expectedStatus: 200 },
-  { method: 'post', route: '/api/auth/refresh', url: '/api/auth/refresh', expectedStatus: 403 },
-  { method: 'post', route: '/api/auth/logout', url: '/api/auth/logout', expectedStatus: 200 },
+  {
+    method: 'get',
+    route: '/api/auth/login',
+    url: '/api/auth/login',
+    expectedStatus: 200,
+  },
+  {
+    method: 'get',
+    route: '/api/auth/login/redirect',
+    url: '/api/auth/login/redirect',
+    expectedStatus: 302,
+  },
+  {
+    method: 'get',
+    route: '/api/auth/callback',
+    url: '/api/auth/callback?code=code-1&state=state-1',
+    expectedStatus: 400,
+  },
+  {
+    method: 'get',
+    route: '/api/auth/me',
+    url: '/api/auth/me',
+    expectedStatus: 200,
+  },
+  {
+    method: 'post',
+    route: '/api/auth/refresh',
+    url: '/api/auth/refresh',
+    expectedStatus: 403,
+  },
+  {
+    method: 'post',
+    route: '/api/auth/logout',
+    url: '/api/auth/logout',
+    expectedStatus: 200,
+  },
 ] satisfies PublicRouteCase[];
 
 const protectedRouteCases = [
-  { method: 'post', route: '/api/auth/permissions/evaluate', url: '/api/auth/permissions/evaluate', body: { permissions: ['poll#read'] } },
+  {
+    method: 'post',
+    route: '/api/auth/permissions/evaluate',
+    url: '/api/auth/permissions/evaluate',
+    body: { permissions: ['poll#read'] },
+  },
   { method: 'get', route: '/api/polls', url: '/api/polls' },
-  { method: 'get', route: '/api/polls/direct/:directLinkToken', url: '/api/polls/direct/direct-token' },
-  { method: 'get', route: '/api/polls/direct/:directLinkToken/images/:imageId', url: '/api/polls/direct/direct-token/images/image-1' },
-  { method: 'get', route: '/api/polls/direct/:directLinkToken/results', url: '/api/polls/direct/direct-token/results' },
-  { method: 'get', route: '/api/polls/direct/:directLinkToken/responses/me', url: '/api/polls/direct/direct-token/responses/me' },
-  { method: 'get', route: '/api/polls/direct/:directLinkToken/results/events', url: '/api/polls/direct/direct-token/results/events' },
-  { method: 'post', route: '/api/polls/direct/:directLinkToken/responses', url: '/api/polls/direct/direct-token/responses', body: { answers: [] } },
+  {
+    method: 'get',
+    route: '/api/polls/direct/:directLinkToken',
+    url: '/api/polls/direct/direct-token',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/direct/:directLinkToken/images/:imageId',
+    url: '/api/polls/direct/direct-token/images/image-1',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/direct/:directLinkToken/results',
+    url: '/api/polls/direct/direct-token/results',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/direct/:directLinkToken/responses/me',
+    url: '/api/polls/direct/direct-token/responses/me',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/direct/:directLinkToken/results/events',
+    url: '/api/polls/direct/direct-token/results/events',
+  },
+  {
+    method: 'post',
+    route: '/api/polls/direct/:directLinkToken/responses',
+    url: '/api/polls/direct/direct-token/responses',
+    body: { answers: [] },
+  },
   { method: 'get', route: '/api/polls/:id', url: '/api/polls/poll-1' },
-  { method: 'get', route: '/api/polls/:id/images/:imageId', url: '/api/polls/poll-1/images/image-1' },
-  { method: 'get', route: '/api/polls/:id/results', url: '/api/polls/poll-1/results' },
-  { method: 'get', route: '/api/polls/:id/responses/me', url: '/api/polls/poll-1/responses/me' },
-  { method: 'get', route: '/api/polls/:id/results/events', url: '/api/polls/poll-1/results/events' },
-  { method: 'get', route: '/api/polls/:id/cacic-election/slates', url: '/api/polls/poll-1/cacic-election/slates' },
-  { method: 'get', route: '/api/polls/:id/cacic-election/slates/me', url: '/api/polls/poll-1/cacic-election/slates/me' },
-  { method: 'put', route: '/api/polls/:id/cacic-election/slates/me', url: '/api/polls/poll-1/cacic-election/slates/me', body: createSlateRequest() },
-  { method: 'post', route: '/api/polls/:id/responses', url: '/api/polls/poll-1/responses', body: { answers: [] } },
+  {
+    method: 'get',
+    route: '/api/polls/:id/images/:imageId',
+    url: '/api/polls/poll-1/images/image-1',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/:id/results',
+    url: '/api/polls/poll-1/results',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/:id/responses/me',
+    url: '/api/polls/poll-1/responses/me',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/:id/results/events',
+    url: '/api/polls/poll-1/results/events',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/:id/cacic-election/slates',
+    url: '/api/polls/poll-1/cacic-election/slates',
+  },
+  {
+    method: 'get',
+    route: '/api/polls/:id/cacic-election/slates/me',
+    url: '/api/polls/poll-1/cacic-election/slates/me',
+  },
+  {
+    method: 'put',
+    route: '/api/polls/:id/cacic-election/slates/me',
+    url: '/api/polls/poll-1/cacic-election/slates/me',
+    body: createSlateRequest(),
+  },
+  {
+    method: 'post',
+    route: '/api/polls/:id/responses',
+    url: '/api/polls/poll-1/responses',
+    body: { answers: [] },
+  },
   { method: 'get', route: '/api/admin/polls', url: '/api/admin/polls' },
-  { method: 'get', route: '/api/admin/polls/linkable-events', url: '/api/admin/polls/linkable-events' },
-  { method: 'get', route: '/api/admin/polls/:id/eligibility-enrollments', url: '/api/admin/polls/poll-1/eligibility-enrollments' },
-  { method: 'post', route: '/api/admin/polls/:id/eligibility-enrollments', url: '/api/admin/polls/poll-1/eligibility-enrollments', body: { enrollmentNumbers: ['20240001'] } },
-  { method: 'put', route: '/api/admin/polls/:id/eligibility-enrollments/import', url: '/api/admin/polls/poll-1/eligibility-enrollments/import', body: { format: 'txt', content: '20240001' } },
-  { method: 'delete', route: '/api/admin/polls/:id/eligibility-enrollments', url: '/api/admin/polls/poll-1/eligibility-enrollments' },
-  { method: 'delete', route: '/api/admin/polls/:id/eligibility-enrollments/:enrollmentNumber', url: '/api/admin/polls/poll-1/eligibility-enrollments/20240001' },
-  { method: 'get', route: '/api/admin/polls/:id/results', url: '/api/admin/polls/poll-1/results' },
-  { method: 'get', route: '/api/admin/polls/:id/cacic-election/voter-enrollments.txt', url: '/api/admin/polls/poll-1/cacic-election/voter-enrollments.txt' },
-  { method: 'get', route: '/api/admin/polls/:id/results/events', url: '/api/admin/polls/poll-1/results/events' },
-  { method: 'get', route: '/api/admin/polls/:id/cacic-election/slates', url: '/api/admin/polls/poll-1/cacic-election/slates' },
-  { method: 'post', route: '/api/admin/polls/:id/cacic-election/slates', url: '/api/admin/polls/poll-1/cacic-election/slates', body: createSlateRequest() },
-  { method: 'put', route: '/api/admin/polls/:id/cacic-election/slates/:slateId', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1', body: { ...createSlateRequest(), status: 'approved' } },
-  { method: 'patch', route: '/api/admin/polls/:id/cacic-election/slates/:slateId/rejection', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/rejection', body: { reason: 'Documentos incompletos.' } },
-  { method: 'patch', route: '/api/admin/polls/:id/cacic-election/slates/:slateId/enabled', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/enabled', body: { enabled: false } },
-  { method: 'delete', route: '/api/admin/polls/:id/cacic-election/slates/:slateId', url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1' },
-  { method: 'get', route: '/api/admin/polls/:id', url: '/api/admin/polls/poll-1' },
-  { method: 'post', route: '/api/admin/polls/:id/images', url: '/api/admin/polls/poll-1/images' },
-  { method: 'delete', route: '/api/admin/polls/:id/images/:imageId', url: '/api/admin/polls/poll-1/images/image-1' },
-  { method: 'post', route: '/api/admin/polls', url: '/api/admin/polls', body: { title: 'Votação de integração', elements: [] } },
-  { method: 'put', route: '/api/admin/polls/:id', url: '/api/admin/polls/poll-1', body: { title: 'Votação de integração', elements: [] } },
-  { method: 'patch', route: '/api/admin/polls/:id/status', url: '/api/admin/polls/poll-1/status', body: { status: 'published' } },
-  { method: 'delete', route: '/api/admin/polls/:id', url: '/api/admin/polls/poll-1' },
+  {
+    method: 'get',
+    route: '/api/admin/polls/linkable-events',
+    url: '/api/admin/polls/linkable-events',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id/eligibility-enrollments',
+    url: '/api/admin/polls/poll-1/eligibility-enrollments',
+  },
+  {
+    method: 'post',
+    route: '/api/admin/polls/:id/eligibility-enrollments',
+    url: '/api/admin/polls/poll-1/eligibility-enrollments',
+    body: { enrollmentNumbers: ['20240001'] },
+  },
+  {
+    method: 'put',
+    route: '/api/admin/polls/:id/eligibility-enrollments/import',
+    url: '/api/admin/polls/poll-1/eligibility-enrollments/import',
+    body: { format: 'txt', content: '20240001' },
+  },
+  {
+    method: 'delete',
+    route: '/api/admin/polls/:id/eligibility-enrollments',
+    url: '/api/admin/polls/poll-1/eligibility-enrollments',
+  },
+  {
+    method: 'delete',
+    route: '/api/admin/polls/:id/eligibility-enrollments/:enrollmentNumber',
+    url: '/api/admin/polls/poll-1/eligibility-enrollments/20240001',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id/results',
+    url: '/api/admin/polls/poll-1/results',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id/cacic-election/voter-enrollments.txt',
+    url: '/api/admin/polls/poll-1/cacic-election/voter-enrollments.txt',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id/results/events',
+    url: '/api/admin/polls/poll-1/results/events',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id/cacic-election/slates',
+    url: '/api/admin/polls/poll-1/cacic-election/slates',
+  },
+  {
+    method: 'post',
+    route: '/api/admin/polls/:id/cacic-election/slates',
+    url: '/api/admin/polls/poll-1/cacic-election/slates',
+    body: createSlateRequest(),
+  },
+  {
+    method: 'put',
+    route: '/api/admin/polls/:id/cacic-election/slates/:slateId',
+    url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1',
+    body: { ...createSlateRequest(), status: 'approved' },
+  },
+  {
+    method: 'patch',
+    route: '/api/admin/polls/:id/cacic-election/slates/:slateId/rejection',
+    url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/rejection',
+    body: { reason: 'Documentos incompletos.' },
+  },
+  {
+    method: 'patch',
+    route: '/api/admin/polls/:id/cacic-election/slates/:slateId/enabled',
+    url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1/enabled',
+    body: { enabled: false },
+  },
+  {
+    method: 'delete',
+    route: '/api/admin/polls/:id/cacic-election/slates/:slateId',
+    url: '/api/admin/polls/poll-1/cacic-election/slates/slate-1',
+  },
+  {
+    method: 'get',
+    route: '/api/admin/polls/:id',
+    url: '/api/admin/polls/poll-1',
+  },
+  {
+    method: 'post',
+    route: '/api/admin/polls/:id/images',
+    url: '/api/admin/polls/poll-1/images',
+  },
+  {
+    method: 'delete',
+    route: '/api/admin/polls/:id/images/:imageId',
+    url: '/api/admin/polls/poll-1/images/image-1',
+  },
+  {
+    method: 'post',
+    route: '/api/admin/polls',
+    url: '/api/admin/polls',
+    body: { title: 'Votação de integração', elements: [] },
+  },
+  {
+    method: 'put',
+    route: '/api/admin/polls/:id',
+    url: '/api/admin/polls/poll-1',
+    body: { title: 'Votação de integração', elements: [] },
+  },
+  {
+    method: 'patch',
+    route: '/api/admin/polls/:id/status',
+    url: '/api/admin/polls/poll-1/status',
+    body: { status: 'published' },
+  },
+  {
+    method: 'delete',
+    route: '/api/admin/polls/:id',
+    url: '/api/admin/polls/poll-1',
+  },
 ] satisfies RouteCase[];
 
 describe('API integration coverage', () => {
@@ -194,7 +390,12 @@ describe('API integration coverage', () => {
     pollImages = createPollImagesMock();
 
     const moduleRef = await Test.createTestingModule({
-      controllers: [AppController, AuthController, PublicPollsController, AdminPollsController],
+      controllers: [
+        AppController,
+        AuthController,
+        PublicPollsController,
+        AdminPollsController,
+      ],
       providers: [
         {
           provide: AppService,
@@ -203,7 +404,10 @@ describe('API integration coverage', () => {
             getLiveness: () => ({ status: 'ok' }),
             getReadiness: async () => ({
               status: 'ok',
-              components: { database: { status: 'ok' }, redis: { status: 'ok' } },
+              components: {
+                database: { status: 'ok' },
+                redis: { status: 'ok' },
+              },
             }),
           },
         },
@@ -228,11 +432,14 @@ describe('API integration coverage', () => {
     process.env = originalEnv;
   });
 
-  it.each(publicRouteCases)('covers public route $method $route', async (route) => {
-    const res = await requestRoute(app, route);
+  it.each(publicRouteCases)(
+    'covers public route $method $route',
+    async (route) => {
+      const res = await requestRoute(app, route);
 
-    expect(res.status).toBe(route.expectedStatus);
-  });
+      expect(res.status).toBe(route.expectedStatus);
+    },
+  );
 
   it('returns the public API status payload', async () => {
     const res = await request(app.getHttpServer()).get('/api');
@@ -242,12 +449,16 @@ describe('API integration coverage', () => {
   });
 
   it('builds login URLs and stores the OAuth state cookie', async () => {
-    const res = await request(app.getHttpServer()).get('/api/auth/login?returnTo=/polls');
+    const res = await request(app.getHttpServer()).get(
+      '/api/auth/login?returnTo=/polls',
+    );
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ authorizationUrl: 'https://sso.example/auth' });
     expect(res.headers['set-cookie']).toEqual(
-      expect.arrayContaining([expect.stringContaining('cacic_voto_oauth_state=state-1')]),
+      expect.arrayContaining([
+        expect.stringContaining('cacic_voto_oauth_state=state-1'),
+      ]),
     );
     expect(auth.buildAuthorizationUrl).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -258,7 +469,9 @@ describe('API integration coverage', () => {
   });
 
   it('redirects browser login requests to Keycloak', async () => {
-    const res = await request(app.getHttpServer()).get('/api/auth/login/redirect');
+    const res = await request(app.getHttpServer()).get(
+      '/api/auth/login/redirect',
+    );
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('https://sso.example/auth');
@@ -283,7 +496,9 @@ describe('API integration coverage', () => {
   });
 
   it('rejects invalid authorization callbacks before touching Keycloak', async () => {
-    const res = await request(app.getHttpServer()).get('/api/auth/callback?code=code-1&state=state-1');
+    const res = await request(app.getHttpServer()).get(
+      '/api/auth/callback?code=code-1&state=state-1',
+    );
 
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({
@@ -291,13 +506,17 @@ describe('API integration coverage', () => {
       message: 'Invalid authorization state.',
     } satisfies ErrorPayload);
     expect(res.headers['set-cookie']).toEqual(
-      expect.arrayContaining([expect.stringContaining('cacic_voto_oauth_state=;')]),
+      expect.arrayContaining([
+        expect.stringContaining('cacic_voto_oauth_state=;'),
+      ]),
     );
     expect(auth.consumeAuthorizationState).not.toHaveBeenCalled();
   });
 
   it('logs out anonymous sessions without touching stored sessions', async () => {
-    const res = await request(app.getHttpServer()).post('/api/auth/logout').send({});
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .send({});
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -309,15 +528,18 @@ describe('API integration coverage', () => {
     expect(auth.clearSession).not.toHaveBeenCalled();
   });
 
-  it.each(protectedRouteCases)('requires authentication for $method $route', async (route) => {
-    const res = await requestRoute(app, route);
+  it.each(protectedRouteCases)(
+    'requires authentication for $method $route',
+    async (route) => {
+      const res = await requestRoute(app, route);
 
-    expect(res.status).toBe(401);
-    expect(res.body).toMatchObject({
-      error: 'Unauthorized',
-      message: 'Missing authenticated session.',
-    } satisfies ErrorPayload);
-  });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatchObject({
+        error: 'Unauthorized',
+        message: 'Missing authenticated session.',
+      } satisfies ErrorPayload);
+    },
+  );
 
   it('evaluates permissions for authenticated sessions', async () => {
     const res = await request(app.getHttpServer())
@@ -328,7 +550,10 @@ describe('API integration coverage', () => {
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ permissions: ['poll#read'] });
     expect(auth.authenticateSession).toHaveBeenCalledWith('session-1', []);
-    expect(auth.evaluateSessionPermissions).toHaveBeenCalledWith('session-1', ['poll#read', 'poll#create']);
+    expect(auth.evaluateSessionPermissions).toHaveBeenCalledWith('session-1', [
+      'poll#read',
+      'poll#create',
+    ]);
   });
 
   it('serves authenticated public poll, admin poll, image, and slate routes through the Nest HTTP boundary', async () => {
@@ -337,32 +562,70 @@ describe('API integration coverage', () => {
       contentLength: 5,
       contentType: 'image/avif',
     });
-    const authenticated = () => request(app.getHttpServer()).get('/api/polls/poll-1').set('Cookie', 'cacic_voto_session=session-1');
+    const authenticated = () =>
+      request(app.getHttpServer())
+        .get('/api/polls/poll-1')
+        .set('Cookie', 'cacic_voto_session=session-1');
 
-    await expect(authenticated()).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ id: 'poll-1' }) });
+    await expect(authenticated()).resolves.toMatchObject({
+      status: 200,
+      body: expect.objectContaining({ id: 'poll-1' }),
+    });
     await expect(
-      request(app.getHttpServer()).get('/api/polls/poll-1/responses/me').set('Cookie', 'cacic_voto_session=session-1'),
-    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ hasSubmitted: false }) });
+      request(app.getHttpServer())
+        .get('/api/polls/poll-1/responses/me')
+        .set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: expect.objectContaining({ hasSubmitted: false }),
+    });
     await expect(
-      request(app.getHttpServer()).get('/api/polls/poll-1/images/image-1').set('Cookie', 'cacic_voto_session=session-1'),
-    ).resolves.toMatchObject({ status: 200, headers: expect.objectContaining({ 'content-type': 'image/avif' }) });
+      request(app.getHttpServer())
+        .get('/api/polls/poll-1/images/image-1')
+        .set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({
+      status: 200,
+      headers: expect.objectContaining({ 'content-type': 'image/avif' }),
+    });
     await expect(
-      request(app.getHttpServer()).get('/api/polls/poll-1/cacic-election/slates').set('Cookie', 'cacic_voto_session=session-1'),
-    ).resolves.toMatchObject({ status: 200, body: [expect.objectContaining({ id: 'slate-1' })] });
+      request(app.getHttpServer())
+        .get('/api/polls/poll-1/cacic-election/slates')
+        .set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: [expect.objectContaining({ id: 'slate-1' })],
+    });
     await expect(
-      request(app.getHttpServer()).put('/api/polls/poll-1/cacic-election/slates/me').set('Cookie', 'cacic_voto_session=session-1').send(createSlateRequest()),
-    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ id: 'slate-1' }) });
+      request(app.getHttpServer())
+        .put('/api/polls/poll-1/cacic-election/slates/me')
+        .set('Cookie', 'cacic_voto_session=session-1')
+        .send(createSlateRequest()),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: expect.objectContaining({ id: 'slate-1' }),
+    });
     await expect(
-      request(app.getHttpServer()).get('/api/admin/polls/poll-1/cacic-election/slates').set('Cookie', 'cacic_voto_session=session-1'),
-    ).resolves.toMatchObject({ status: 200, body: [expect.objectContaining({ id: 'slate-1' })] });
+      request(app.getHttpServer())
+        .get('/api/admin/polls/poll-1/cacic-election/slates')
+        .set('Cookie', 'cacic_voto_session=session-1'),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: [expect.objectContaining({ id: 'slate-1' })],
+    });
     await expect(
       request(app.getHttpServer())
         .patch('/api/admin/polls/poll-1/cacic-election/slates/slate-1/enabled')
         .set('Cookie', 'cacic_voto_session=session-1')
         .send({ enabled: false }),
-    ).resolves.toMatchObject({ status: 200, body: expect.objectContaining({ enabled: false }) });
+    ).resolves.toMatchObject({
+      status: 200,
+      body: expect.objectContaining({ enabled: false }),
+    });
 
-    expect(polls.getPublishedPoll).toHaveBeenCalledWith('poll-1', expect.objectContaining({ sub: 'user-1' }));
+    expect(polls.getPublishedPoll).toHaveBeenCalledWith(
+      'poll-1',
+      expect.objectContaining({ sub: 'user-1' }),
+    );
     expect(polls.submitCacicElectionSlate).toHaveBeenCalledWith(
       'poll-1',
       createSlateRequest(),
@@ -397,10 +660,13 @@ describe('API integration coverage', () => {
     expect(body.paths).toEqual(
       expect.objectContaining({
         '/api/admin/polls': expect.any(Object),
-        '/api/admin/polls/{id}/cacic-election/voter-enrollments.txt': expect.any(Object),
-        '/api/admin/polls/{id}/eligibility-enrollments/import': expect.any(Object),
+        '/api/admin/polls/{id}/cacic-election/voter-enrollments.txt':
+          expect.any(Object),
+        '/api/admin/polls/{id}/eligibility-enrollments/import':
+          expect.any(Object),
         '/api/admin/polls/{id}/cacic-election/slates': expect.any(Object),
-        '/api/admin/polls/{id}/cacic-election/slates/{slateId}/enabled': expect.any(Object),
+        '/api/admin/polls/{id}/cacic-election/slates/{slateId}/enabled':
+          expect.any(Object),
         '/api/admin/polls/{id}/results': expect.any(Object),
         '/api/auth/me': expect.any(Object),
         '/api/auth/permissions/evaluate': expect.any(Object),
@@ -424,7 +690,9 @@ function configureApplication(app: INestApplication): void {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('CACiC Voto API')
-    .setDescription('REST API for authentication, poll management, public polls, and vote submissions.')
+    .setDescription(
+      'REST API for authentication, poll management, public polls, and vote submissions.',
+    )
     .setVersion('1.0')
     .addCookieAuth('cacic_voto_session')
     .build();
@@ -515,7 +783,11 @@ function createPollImagesMock(): PollImagesMock {
   } as PollImagesMock;
 }
 
-function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock): void {
+function resetMocks(
+  auth: AuthMock,
+  polls: PollsMock,
+  pollImages: PollImagesMock,
+): void {
   jest.clearAllMocks();
 
   auth.authenticateSession.mockResolvedValue(createPrincipal());
@@ -531,7 +803,9 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
     sessionId: 'session-1',
   });
   auth.evaluateSessionPermissions.mockResolvedValue(['poll#read']);
-  auth.exchangeCodeForTokens.mockResolvedValue({ access_token: 'access-token' });
+  auth.exchangeCodeForTokens.mockResolvedValue({
+    access_token: 'access-token',
+  });
   auth.getPostLoginRedirectUri.mockReturnValue('/polls');
   auth.getSessionLogoutInput.mockResolvedValue(null);
   auth.logout.mockResolvedValue({
@@ -548,13 +822,17 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   polls.assertPublishedDirectLinkPollReadable.mockResolvedValue('poll-1');
   polls.getDirectLinkPublicPollResults.mockResolvedValue(createPollResults());
   polls.getDirectLinkUserResponseState.mockResolvedValue(createResponseState());
-  polls.streamDirectLinkPublicPollResults.mockReturnValue(of({ data: { pollId: 'poll-1' } }));
+  polls.streamDirectLinkPublicPollResults.mockReturnValue(
+    of({ data: { pollId: 'poll-1' } }),
+  );
   polls.submitDirectLinkResponse.mockResolvedValue(createPollResponse());
   polls.getPublishedPoll.mockResolvedValue(createPoll());
   polls.assertPublishedPollReadable.mockResolvedValue(undefined);
   polls.getPublicPollResults.mockResolvedValue(createPollResults());
   polls.getUserResponseState.mockResolvedValue(createResponseState());
-  polls.streamPublicPollResults.mockReturnValue(of({ data: { pollId: 'poll-1' } }));
+  polls.streamPublicPollResults.mockReturnValue(
+    of({ data: { pollId: 'poll-1' } }),
+  );
   polls.submitResponse.mockResolvedValue(createPollResponse());
   polls.listPublicCacicElectionSlates.mockResolvedValue([createSlate()]);
   polls.getMyCacicElectionSlate.mockResolvedValue(createAdminSlate());
@@ -562,19 +840,31 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   polls.listAdminPolls.mockResolvedValue([]);
   polls.listLinkableEvents.mockResolvedValue([]);
   polls.listEligibilityEnrollments.mockResolvedValue(createEligibilityList());
-  polls.addEligibilityEnrollments.mockResolvedValue(createEligibilityImportResult());
-  polls.importEligibilityEnrollments.mockResolvedValue(createEligibilityImportResult());
+  polls.addEligibilityEnrollments.mockResolvedValue(
+    createEligibilityImportResult(),
+  );
+  polls.importEligibilityEnrollments.mockResolvedValue(
+    createEligibilityImportResult(),
+  );
   polls.clearEligibilityEnrollments.mockResolvedValue(createEligibilityList());
   polls.deleteEligibilityEnrollment.mockResolvedValue(undefined);
   polls.getAdminPollResults.mockResolvedValue(createPollResults());
   polls.exportCacicElectionVoterEnrollments.mockResolvedValue('24123456');
-  polls.streamAdminPollResults.mockReturnValue(of({ data: { pollId: 'poll-1' } }));
+  polls.streamAdminPollResults.mockReturnValue(
+    of({ data: { pollId: 'poll-1' } }),
+  );
   polls.listAdminCacicElectionSlates.mockResolvedValue([createAdminSlate()]);
   polls.createAdminCacicElectionSlate.mockResolvedValue(createAdminSlate());
   polls.updateAdminCacicElectionSlate.mockResolvedValue(createAdminSlate());
-  polls.rejectCacicElectionSlate.mockResolvedValue(createAdminSlate({ status: 'rejected', rejectionReason: 'Documentos incompletos.' }));
-  polls.updateCacicElectionSlateEnabled.mockImplementation(async (_pollId, _slateId, input) =>
-    createAdminSlate({ enabled: input.enabled }),
+  polls.rejectCacicElectionSlate.mockResolvedValue(
+    createAdminSlate({
+      status: 'rejected',
+      rejectionReason: 'Documentos incompletos.',
+    }),
+  );
+  polls.updateCacicElectionSlateEnabled.mockImplementation(
+    async (_pollId, _slateId, input) =>
+      createAdminSlate({ enabled: input.enabled }),
   );
   polls.deleteCacicElectionSlate.mockResolvedValue(undefined);
   polls.getAdminPoll.mockResolvedValue(createPoll());
@@ -583,7 +873,9 @@ function resetMocks(auth: AuthMock, polls: PollsMock, pollImages: PollImagesMock
   polls.updatePollStatus.mockResolvedValue(createPoll());
   polls.deletePoll.mockResolvedValue(undefined);
 
-  pollImages.getPollImage.mockRejectedValue(new Error('Unexpected image read in integration test.'));
+  pollImages.getPollImage.mockRejectedValue(
+    new Error('Unexpected image read in integration test.'),
+  );
   pollImages.uploadPollImage.mockResolvedValue(createPollImage());
   pollImages.deletePollImage.mockResolvedValue(undefined);
 }
@@ -660,7 +952,9 @@ function createSlateRequest(): SubmitCacicElectionSlateRequest {
   };
 }
 
-function createSlate(overrides: Partial<CacicElectionSlate> = {}): CacicElectionSlate {
+function createSlate(
+  overrides: Partial<CacicElectionSlate> = {},
+): CacicElectionSlate {
   return {
     enabled: true,
     id: 'slate-1',
@@ -687,7 +981,9 @@ function createSlate(overrides: Partial<CacicElectionSlate> = {}): CacicElection
   };
 }
 
-function createAdminSlate(overrides: Partial<AdminCacicElectionSlate> = {}): AdminCacicElectionSlate {
+function createAdminSlate(
+  overrides: Partial<AdminCacicElectionSlate> = {},
+): AdminCacicElectionSlate {
   const request = createSlateRequest();
 
   return {
@@ -706,7 +1002,9 @@ function createAdminSlate(overrides: Partial<AdminCacicElectionSlate> = {}): Adm
   };
 }
 
-function readEnrollmentYear(enrollmentNumber: string | undefined): string | undefined {
+function readEnrollmentYear(
+  enrollmentNumber: string | undefined,
+): string | undefined {
   return enrollmentNumber?.slice(0, 2);
 }
 

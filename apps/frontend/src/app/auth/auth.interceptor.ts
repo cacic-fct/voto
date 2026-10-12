@@ -1,8 +1,17 @@
 import { isPlatformBrowser } from '@angular/common';
-import { HttpErrorResponse, HttpEvent, HttpHandlerFn, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
+import {
+  HttpErrorResponse,
+  HttpEvent,
+  HttpHandlerFn,
+  HttpInterceptorFn,
+  HttpRequest,
+} from '@angular/common/http';
 import { PLATFORM_ID, inject } from '@angular/core';
 import { Observable, catchError, switchMap, throwError } from 'rxjs';
-import { AuthService, isTransientIdentityProviderFailure } from './auth.service';
+import {
+  AuthService,
+  isTransientIdentityProviderFailure,
+} from './auth.service';
 
 export const authInterceptor: HttpInterceptorFn = (
   request: HttpRequest<unknown>,
@@ -42,6 +51,7 @@ function shouldSkipRefresh(request: HttpRequest<unknown>): boolean {
     // Kiosk authorization uses 401 for an invalid voter's TOTP. It is a
     // business validation failure and must not refresh the administrator's
     // session or replay the one-time authorization attempt.
-    request.url.includes('/api/admin/polls/') && request.url.includes('/kiosk/authorization')
+    (request.url.includes('/api/admin/polls/') &&
+      request.url.includes('/kiosk/authorization'))
   );
 }

@@ -9,11 +9,15 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
   private resultsRefreshTimer?: ReturnType<typeof setTimeout>;
   private resultsRequestRevision = 0;
   protected updateSelectedResultsElement(event: MatSelectChange): void {
-    this.selectedResultsElementId.set(typeof event.value === 'string' ? event.value : null);
+    this.selectedResultsElementId.set(
+      typeof event.value === 'string' ? event.value : null,
+    );
   }
 
   protected updateSelectedIndividualResponse(event: MatSelectChange): void {
-    this.selectedIndividualResponseId.set(typeof event.value === 'string' ? event.value : null);
+    this.selectedIndividualResponseId.set(
+      typeof event.value === 'string' ? event.value : null,
+    );
   }
 
   protected responseVoterLabel(response: PollResultsResponse): string {
@@ -28,11 +32,19 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
 
     this.exportingCacicElectionVoters.set(true);
     try {
-      const content = await firstValueFrom(this.api.exportCacicElectionVoterEnrollments(pollId));
+      const content = await firstValueFrom(
+        this.api.exportCacicElectionVoterEnrollments(pollId),
+      );
       this.saveTextFile(content, `matriculas-votantes-${pollId}.txt`);
-      this.snackBar.open('Arquivo de matrículas gerado.', 'OK', { duration: 2500 });
+      this.snackBar.open('Arquivo de matrículas gerado.', 'OK', {
+        duration: 2500,
+      });
     } catch {
-      this.snackBar.open('Não foi possível baixar as matrículas dos votantes.', 'OK', { duration: 3500 });
+      this.snackBar.open(
+        'Não foi possível baixar as matrículas dos votantes.',
+        'OK',
+        { duration: 3500 },
+      );
     } finally {
       this.exportingCacicElectionVoters.set(false);
     }
@@ -57,7 +69,9 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     }
 
     try {
-      const results = await firstValueFrom(this.api.getAdminPollResults(pollId));
+      const results = await firstValueFrom(
+        this.api.getAdminPollResults(pollId),
+      );
       if (!this.isPollSelectionCurrent(selectionGeneration, pollId)) {
         return;
       }
@@ -65,12 +79,18 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
       this.resultsFinalizationState.set('idle');
       this.resultsFinalizationError.set(null);
       this.pendingFinalResultsPollId.set(null);
-      this.selectedResultsElementId.set(this.questionSummaries()[0]?.key ?? null);
-      this.selectedIndividualResponseId.set(results.responses.find((response) => response.voter)?.id ?? null);
+      this.selectedResultsElementId.set(
+        this.questionSummaries()[0]?.key ?? null,
+      );
+      this.selectedIndividualResponseId.set(
+        results.responses.find((response) => response.voter)?.id ?? null,
+      );
       this.openAdminResultsEvents(pollId, selectionGeneration);
     } catch {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-        this.snackBar.open('Não foi possível carregar os resultados.', 'OK', { duration: 3000 });
+        this.snackBar.open('Não foi possível carregar os resultados.', 'OK', {
+          duration: 3000,
+        });
       }
     } finally {
       if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
@@ -99,7 +119,10 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
 
     this.resultsFinalizationState.set('pending');
     this.resultsFinalizationError.set(null);
-    void this.reconcileFinalResults(pollId, this.currentPollSelectionGeneration());
+    void this.reconcileFinalResults(
+      pollId,
+      this.currentPollSelectionGeneration(),
+    );
   }
 
   protected closeResultsEvents(): void {
@@ -124,7 +147,10 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     globalThis.URL.revokeObjectURL(url);
   }
 
-  private openAdminResultsEvents(pollId: string, selectionGeneration: number): void {
+  private openAdminResultsEvents(
+    pollId: string,
+    selectionGeneration: number,
+  ): void {
     this.closeResultsEvents();
     if (!this.isBrowser) {
       return;
@@ -163,7 +189,10 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     this.resultsEvents = source;
   }
 
-  private scheduleResultsRefresh(pollId: string, selectionGeneration: number): void {
+  private scheduleResultsRefresh(
+    pollId: string,
+    selectionGeneration: number,
+  ): void {
     if (this.resultsRefreshTimer) {
       return;
     }
@@ -185,7 +214,11 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
         })
         .catch(() => {
           if (this.isPollSelectionCurrent(selectionGeneration, pollId)) {
-            this.snackBar.open('A atualização dos resultados está temporariamente indisponível.', 'OK', { duration: 3000 });
+            this.snackBar.open(
+              'A atualização dos resultados está temporariamente indisponível.',
+              'OK',
+              { duration: 3000 },
+            );
           }
         });
     }, 250);
@@ -209,15 +242,21 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
     });
 
     if (!this.selectedIndividualResponseId()) {
-      this.selectedIndividualResponseId.set(delta.responses.find((response) => response.voter)?.id ?? null);
+      this.selectedIndividualResponseId.set(
+        delta.responses.find((response) => response.voter)?.id ?? null,
+      );
     }
   }
 
-  private async reconcileFinalResults(pollId: string, selectionGeneration: number): Promise<void> {
+  private async reconcileFinalResults(
+    pollId: string,
+    selectionGeneration: number,
+  ): Promise<void> {
     await reconcilePollResults(
       () => firstValueFrom(this.api.getAdminPollResults(pollId)),
       {
-        isCurrent: () => this.isPollSelectionCurrent(selectionGeneration, pollId),
+        isCurrent: () =>
+          this.isPollSelectionCurrent(selectionGeneration, pollId),
         apply: (results) => {
           this.results.set(results);
           this.resultsFinalizationState.set('complete');
@@ -226,7 +265,9 @@ export abstract class AdminPollBuilderPageResults extends AdminPollBuilderPageBa
         },
         fail: () => {
           this.resultsFinalizationState.set('failed');
-          this.resultsFinalizationError.set('Os resultados finais ainda não estão disponíveis. Tente novamente.');
+          this.resultsFinalizationError.set(
+            'Os resultados finais ainda não estão disponíveis. Tente novamente.',
+          );
         },
       },
     );

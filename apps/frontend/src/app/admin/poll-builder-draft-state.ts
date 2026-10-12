@@ -8,7 +8,10 @@ import {
   PollStatus,
   SavePollRequest,
 } from '@org/voting-contracts';
-import { voterEligibilityOptions, votingStyleOptions } from '../polls/poll-metadata';
+import {
+  voterEligibilityOptions,
+  votingStyleOptions,
+} from '../polls/poll-metadata';
 import { parseDateOnly } from '../shared/date-only';
 import {
   CACIC_ELECTION_PHASE_OPTIONS,
@@ -85,11 +88,16 @@ export abstract class PollBuilderDraftState {
   }
 
   isCacicElectionVoting(poll = this.draft()): boolean {
-    return poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election';
+    return (
+      poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election'
+    );
   }
 
   isCacicElectionSlateSubmission(poll = this.draft()): boolean {
-    return poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'slateSubmission';
+    return (
+      poll.mode === 'cacicElection' &&
+      poll.cacicElectionPhase === 'slateSubmission'
+    );
   }
 
   isCacicElectionGeneratedElement(element: PollElement): boolean {
@@ -168,11 +176,16 @@ export abstract class PollBuilderDraftState {
 
   protected readInputValue(event: Event): string {
     const target = event.target;
-    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target.value : '';
+    return target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement
+      ? target.value
+      : '';
   }
 
   protected readNumberValue(event: MatSelectChange): number | null {
-    return typeof event.value === 'number' && Number.isInteger(event.value) ? event.value : null;
+    return typeof event.value === 'number' && Number.isInteger(event.value)
+      ? event.value
+      : null;
   }
 
   protected applyCacicElectionRules(poll: Poll): Poll {
@@ -181,7 +194,9 @@ export abstract class PollBuilderDraftState {
         ...poll,
         mode: 'regular',
         cacicElectionPhase: undefined,
-        elements: poll.elements.filter((element) => !isCacicElectionGeneratedElement(element)),
+        elements: poll.elements.filter(
+          (element) => !isCacicElectionGeneratedElement(element),
+        ),
       };
     }
 

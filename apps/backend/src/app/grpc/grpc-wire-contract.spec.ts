@@ -9,24 +9,25 @@ describe('checked-in gRPC wire contracts', () => {
       'AccountManagerM2M',
     );
     const server = new Server();
-    server.addService(
-      service,
-      {
-        LookupUsersByEnrollment: (
-          _call: unknown,
-          callback: (error: Error | null, response: object) => void,
-        ) => callback(null, {}),
-      } as never,
-    );
+    server.addService(service, {
+      LookupUsersByEnrollment: (
+        _call: unknown,
+        callback: (error: Error | null, response: object) => void,
+      ) => callback(null, {}),
+    } as never);
 
     const target = await new Promise<string>((resolve, reject) => {
-      server.bindAsync('127.0.0.1:0', ServerCredentials.createInsecure(), (error, port) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(`127.0.0.1:${port}`);
-      });
+      server.bindAsync(
+        '127.0.0.1:0',
+        ServerCredentials.createInsecure(),
+        (error, port) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(`127.0.0.1:${port}`);
+        },
+      );
     });
     const client = new GrpcUnaryClient(target, service);
 

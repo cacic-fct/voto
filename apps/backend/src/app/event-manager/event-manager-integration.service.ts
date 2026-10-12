@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { EventManagerEvent } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
-import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
+import {
+  authorizationMetadata,
+  GrpcUnaryClient,
+  loadService,
+} from '../grpc/grpc-runtime';
 
 @Injectable()
 export class EventManagerIntegrationService implements OnModuleDestroy {
@@ -59,7 +63,9 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
 
       return events.map((item) => this.parseEvent(item));
     } catch (error) {
-      this.logger.warn(`Could not list Event Manager events: ${this.describeError(error)}`);
+      this.logger.warn(
+        `Could not list Event Manager events: ${this.describeError(error)}`,
+      );
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
@@ -160,5 +166,4 @@ export class EventManagerIntegrationService implements OnModuleDestroy {
   private describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
-
 }

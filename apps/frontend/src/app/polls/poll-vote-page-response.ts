@@ -1,12 +1,6 @@
-import {
-  Poll,
-  PollResponse,
-  PollResponseAnswer,
-} from '@org/voting-contracts';
+import { Poll, PollResponse, PollResponseAnswer } from '@org/voting-contracts';
 import { firstValueFrom } from 'rxjs';
-import {
-  responseAnswersToAnswerMap,
-} from './poll-vote-answer-state';
+import { responseAnswersToAnswerMap } from './poll-vote-answer-state';
 import { emptyResponseState } from './poll-vote-availability';
 import { PollVotePageCacicElection } from './poll-vote-page-cacic-election';
 import {
@@ -40,10 +34,10 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
       }
       if (this.isKioskMode) {
         this.snackBar.open('Voto registrado.', 'OK', { duration: 3000 });
-        await this.router.navigate(
-          ['/admin/polls', poll.id, 'kiosk'],
-          { replaceUrl: true, queryParams: { registered: '1' } },
-        );
+        await this.router.navigate(['/admin/polls', poll.id, 'kiosk'], {
+          replaceUrl: true,
+          queryParams: { registered: '1' },
+        });
         return;
       }
       this.applySubmittedResponseState(poll, response);
@@ -55,10 +49,10 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
         return;
       }
       if (this.isKioskMode) {
-        await this.router.navigate(
-          ['/admin/polls', poll.id, 'kiosk'],
-          { replaceUrl: true, queryParams: { reason: 'submit' } },
-        );
+        await this.router.navigate(['/admin/polls', poll.id, 'kiosk'], {
+          replaceUrl: true,
+          queryParams: { reason: 'submit' },
+        });
       } else {
         this.error.set(this.submitErrorMessage(error));
       }
@@ -116,8 +110,8 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
     return this.isKioskMode
       ? this.api.submitKioskResponse(poll.id, request)
       : access?.kind === 'directLink'
-      ? this.api.submitDirectLinkResponse(access.value, request)
-      : this.api.submitResponse(poll.id, request);
+        ? this.api.submitDirectLinkResponse(access.value, request)
+        : this.api.submitResponse(poll.id, request);
   }
 
   private getMyPollResponse(pollId: string) {
@@ -125,8 +119,8 @@ export abstract class PollVotePageResponse extends PollVotePageCacicElection {
     return this.isKioskMode
       ? this.api.getKioskVoterResponse(pollId)
       : access?.kind === 'directLink'
-      ? this.api.getMyDirectLinkPollResponse(access.value)
-      : this.api.getMyPollResponse(pollId);
+        ? this.api.getMyDirectLinkPollResponse(access.value)
+        : this.api.getMyPollResponse(pollId);
   }
 
   protected async cancelKioskVote(pollId: string): Promise<void> {

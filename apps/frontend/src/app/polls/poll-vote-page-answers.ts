@@ -40,7 +40,9 @@ export abstract class PollVotePageAnswers extends PollVotePageState {
   }
 
   protected setDateAnswer(elementId: string, value: Date | null): void {
-    this.answers.update((answers) => setAnswerValue(answers, elementId, formatDateOnly(value)));
+    this.answers.update((answers) =>
+      setAnswerValue(answers, elementId, formatDateOnly(value)),
+    );
   }
 
   protected setSingleAnswer(elementId: string, event: MatRadioChange): void {

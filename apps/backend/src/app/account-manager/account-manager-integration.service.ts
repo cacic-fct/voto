@@ -12,7 +12,11 @@ import type {
 } from '@cacic-fct/account-manager-m2m-contracts';
 import { AccountManagerPerson } from '@org/voting-contracts';
 import { KeycloakM2mTokenService } from '../auth/keycloak-m2m-token.service';
-import { authorizationMetadata, GrpcUnaryClient, loadService } from '../grpc/grpc-runtime';
+import {
+  authorizationMetadata,
+  GrpcUnaryClient,
+  loadService,
+} from '../grpc/grpc-runtime';
 
 const ENROLLMENT_LOOKUP_BATCH_SIZE = 500;
 const IDENTIFIER_LOOKUP_BATCH_SIZE = 200;
@@ -211,7 +215,10 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
         throw error;
       }
 
-      this.logger.warn('Could not lookup Account Manager users by enrollment number.', error);
+      this.logger.warn(
+        'Could not lookup Account Manager users by enrollment number.',
+        error,
+      );
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -236,7 +243,10 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
         throw error;
       }
 
-      this.logger.warn('Could not lookup Account Manager users by private identifier.', error);
+      this.logger.warn(
+        'Could not lookup Account Manager users by private identifier.',
+        error,
+      );
       throw new ServiceUnavailableException(
         'Could not lookup Account Manager users.',
       );
@@ -364,8 +374,10 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
     }
 
     const userId = this.readRequiredString(value, 'userId');
-    const primaryEmail = this.readRequiredString(value, 'primaryEmail')
-      .toLowerCase();
+    const primaryEmail = this.readRequiredString(
+      value,
+      'primaryEmail',
+    ).toLowerCase();
     const serverTimeValue = this.readRequiredString(value, 'serverTime');
     const serverTime = new Date(serverTimeValue);
     const matchedStepOffset = value['matchedStepOffset'];
@@ -442,7 +454,6 @@ export class AccountManagerIntegrationService implements OnModuleDestroy {
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
-
 }
 
 function requiredAccountManagerGrpcUrl(): string {

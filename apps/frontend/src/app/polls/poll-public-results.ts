@@ -35,22 +35,34 @@ export function buildPublicQuestionSummaries(
   aggregates: readonly PollResultsAggregate[] = [],
 ): PublicQuestionResultSummary[] {
   if (aggregates.length > 0) {
-    const elementsById = new Map(elements.map((element) => [element.id, element]));
+    const elementsById = new Map(
+      elements.map((element) => [element.id, element]),
+    );
     return aggregates.flatMap((aggregate) => {
-      const element = aggregate.elementSnapshot ?? elementsById.get(aggregate.elementId);
+      const element =
+        aggregate.elementSnapshot ?? elementsById.get(aggregate.elementId);
       if (!element || !isAnswerElement(element)) {
         return [];
       }
 
-      return [{
-        key: aggregate.versionKey ?? resultElementVersionKey(element),
-        element,
-        answeredCount: aggregate.answeredCount,
-        buckets: (aggregate.buckets ?? [])
-          .map((bucket) => ({ label: aggregateBucketLabel(element, bucket), count: bucket.count }))
-          .sort((first, second) => second.count - first.count || first.label.localeCompare(second.label, 'pt-BR')),
-        textAnswers: [],
-      }];
+      return [
+        {
+          key: aggregate.versionKey ?? resultElementVersionKey(element),
+          element,
+          answeredCount: aggregate.answeredCount,
+          buckets: (aggregate.buckets ?? [])
+            .map((bucket) => ({
+              label: aggregateBucketLabel(element, bucket),
+              count: bucket.count,
+            }))
+            .sort(
+              (first, second) =>
+                second.count - first.count ||
+                first.label.localeCompare(second.label, 'pt-BR'),
+            ),
+          textAnswers: [],
+        },
+      ];
     });
   }
 
@@ -60,16 +72,14 @@ export function buildPublicQuestionSummaries(
 }
 
 export function shouldShowPublicResults(poll: Poll): boolean {
-  if (
-    poll.mode === 'cacicElection' &&
-    poll.cacicElectionPhase === 'election'
-  ) {
+  if (poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election') {
     return poll.resultsPublic && poll.status === 'closed';
   }
 
-  return poll.resultsPublic && (
-    poll.status === 'closed' ||
-    (poll.resultsLive && poll.votingStyle === 'public')
+  return (
+    poll.resultsPublic &&
+    (poll.status === 'closed' ||
+      (poll.resultsLive && poll.votingStyle === 'public'))
   );
 }
 
@@ -88,7 +98,11 @@ function buildPublicQuestionSummary(
   responses: PollResultsResponse[],
 ): PublicQuestionResultSummary {
   const element = version.element;
-  const values = collectAnswerEntriesForElementVersion(version.key, currentElements, responses)
+  const values = collectAnswerEntriesForElementVersion(
+    version.key,
+    currentElements,
+    responses,
+  )
     .map((entry) => entry.value)
     .filter((value) => !isEmptyAnswerValue(value));
 
@@ -118,18 +132,31 @@ function buildPublicResultBuckets(
 
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
-    .sort((first, second) => second.count - first.count || first.label.localeCompare(second.label, 'pt-BR'));
+    .sort(
+      (first, second) =>
+        second.count - first.count ||
+        first.label.localeCompare(second.label, 'pt-BR'),
+    );
 }
 
-function buildPublicTextAnswers(element: PollElement, values: (PollAnswerValue | undefined)[]): string[] {
+function buildPublicTextAnswers(
+  element: PollElement,
+  values: (PollAnswerValue | undefined)[],
+): string[] {
   if (element.type !== 'shortText' && element.type !== 'longText') {
     return [];
   }
 
-  return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return values.filter(
+    (value): value is string =>
+      typeof value === 'string' && value.trim().length > 0,
+  );
 }
 
-function aggregateBucketLabel(element: PollElement, bucket: PollResultsAggregateBucket): string {
+function aggregateBucketLabel(
+  element: PollElement,
+  bucket: PollResultsAggregateBucket,
+): string {
   const key = bucket.key;
   const option = element.options.find((item) => item.id === key);
   if (option) {
@@ -137,13 +164,16 @@ function aggregateBucketLabel(element: PollElement, bucket: PollResultsAggregate
   }
 
   if (element.settings?.grid) {
-    const coordinates = bucket.rowId !== undefined && bucket.columnId !== undefined
-      ? { rowId: bucket.rowId, columnId: bucket.columnId }
-      : readGridAggregateCoordinates(key);
+    const coordinates =
+      bucket.rowId !== undefined && bucket.columnId !== undefined
+        ? { rowId: bucket.rowId, columnId: bucket.columnId }
+        : readGridAggregateCoordinates(key);
     if (coordinates) {
       const { rowId, columnId } = coordinates;
       const row = element.settings.grid.rows.find((item) => item.id === rowId);
-      const column = element.settings.grid.columns.find((item) => item.id === columnId);
+      const column = element.settings.grid.columns.find(
+        (item) => item.id === columnId,
+      );
       if (row && column) {
         return `${row.label}: ${column.label}`;
       }
@@ -157,7 +187,9 @@ function aggregateBucketLabel(element: PollElement, bucket: PollResultsAggregate
   return answerValueLabel(element, key);
 }
 
-function readGridAggregateCoordinates(key: string): { rowId: string; columnId: string } | undefined {
+function readGridAggregateCoordinates(
+  key: string,
+): { rowId: string; columnId: string } | undefined {
   try {
     const parsed: unknown = JSON.parse(key);
     if (

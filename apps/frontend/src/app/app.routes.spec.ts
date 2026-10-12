@@ -22,8 +22,14 @@ describe('appRoutes', () => {
       'admin/polls/:id/kiosk',
       'admin',
     ]);
-    expect(children[0]).toMatchObject({ pathMatch: 'full', redirectTo: 'polls' });
-    expect(children[6]).toMatchObject({ canActivate: [pollKioskGuard], data: { mode: 'kiosk' } });
+    expect(children[0]).toMatchObject({
+      pathMatch: 'full',
+      redirectTo: 'polls',
+    });
+    expect(children[6]).toMatchObject({
+      canActivate: [pollKioskGuard],
+      data: { mode: 'kiosk' },
+    });
     expect(children[7]?.canActivate).toEqual([pollKioskGuard]);
     expect(children[8]?.canActivate).toEqual([adminGuard]);
   });

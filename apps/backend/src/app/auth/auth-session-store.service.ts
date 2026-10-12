@@ -5,10 +5,21 @@ import { AuthSession } from './auth.types';
 @Injectable()
 export class AuthSessionStoreService {
   private readonly logger = new Logger(AuthSessionStoreService.name);
-  private readonly keyPrefix = process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ?? 'cacic-voto:auth:session:';
-  private readonly refreshLockTtlMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_TTL_MS, 5_000);
-  private readonly refreshLockWaitMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_WAIT_MS, 15_000);
-  private readonly refreshLockPollMs = this.parseDurationMs(process.env.KEYCLOAK_AUTH_REFRESH_LOCK_POLL_MS, 50);
+  private readonly keyPrefix =
+    process.env.KEYCLOAK_AUTH_SESSION_REDIS_PREFIX ??
+    'cacic-voto:auth:session:';
+  private readonly refreshLockTtlMs = this.parseDurationMs(
+    process.env.KEYCLOAK_AUTH_REFRESH_LOCK_TTL_MS,
+    5_000,
+  );
+  private readonly refreshLockWaitMs = this.parseDurationMs(
+    process.env.KEYCLOAK_AUTH_REFRESH_LOCK_WAIT_MS,
+    15_000,
+  );
+  private readonly refreshLockPollMs = this.parseDurationMs(
+    process.env.KEYCLOAK_AUTH_REFRESH_LOCK_POLL_MS,
+    50,
+  );
 
   constructor(private readonly redis: Redis) {}
 
@@ -20,7 +31,8 @@ export class AuthSessionStoreService {
 
     try {
       const session = JSON.parse(rawSession) as AuthSession;
-      const absoluteDeadline = session.sessionAbsoluteDeadline ?? session.sessionExpiresAt;
+      const absoluteDeadline =
+        session.sessionAbsoluteDeadline ?? session.sessionExpiresAt;
       if (
         !this.isValidSession(session) ||
         session.sessionExpiresAt <= Date.now() ||
@@ -30,7 +42,8 @@ export class AuthSessionStoreService {
         return undefined;
       }
 
-      return session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > absoluteDeadline
+      return session.sessionAbsoluteDeadline !== undefined &&
+        session.sessionExpiresAt > absoluteDeadline
         ? { ...session, sessionExpiresAt: absoluteDeadline }
         : session;
     } catch {
@@ -42,7 +55,8 @@ export class AuthSessionStoreService {
 
   async set(sessionId: string, session: AuthSession): Promise<void> {
     const boundedSession =
-      session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > session.sessionAbsoluteDeadline
+      session.sessionAbsoluteDeadline !== undefined &&
+      session.sessionExpiresAt > session.sessionAbsoluteDeadline
         ? { ...session, sessionExpiresAt: session.sessionAbsoluteDeadline }
         : session;
     const ttlSeconds = this.resolveTtlSeconds(boundedSession.sessionExpiresAt);
@@ -51,7 +65,12 @@ export class AuthSessionStoreService {
       return;
     }
 
-    await this.redis.set(this.getKey(sessionId), JSON.stringify(boundedSession), 'EX', ttlSeconds);
+    await this.redis.set(
+      this.getKey(sessionId),
+      JSON.stringify(boundedSession),
+      'EX',
+      ttlSeconds,
+    );
   }
 
   /**
@@ -67,7 +86,8 @@ export class AuthSessionStoreService {
     session: AuthSession,
   ): Promise<boolean> {
     const boundedSession =
-      session.sessionAbsoluteDeadline !== undefined && session.sessionExpiresAt > session.sessionAbsoluteDeadline
+      session.sessionAbsoluteDeadline !== undefined &&
+      session.sessionExpiresAt > session.sessionAbsoluteDeadline
         ? { ...session, sessionExpiresAt: session.sessionAbsoluteDeadline }
         : session;
     const ttlSeconds = this.resolveTtlSeconds(boundedSession.sessionExpiresAt);
@@ -106,7 +126,13 @@ return 1
   }
 
   async acquireRefreshLock(sessionId: string, owner: string): Promise<boolean> {
-    const result = await this.redis.set(this.getRefreshLockKey(sessionId), owner, 'PX', this.refreshLockTtlMs, 'NX');
+    const result = await this.redis.set(
+      this.getRefreshLockKey(sessionId),
+      owner,
+      'PX',
+      this.refreshLockTtlMs,
+      'NX',
+    );
     return result === 'OK';
   }
 
@@ -170,12 +196,17 @@ return 0
       typeof session.accessToken === 'string' &&
       Number.isFinite(session.accessTokenExpiresAt) &&
       Number.isFinite(session.sessionExpiresAt) &&
-      (session.sessionAbsoluteDeadline === undefined || Number.isFinite(session.sessionAbsoluteDeadline)) &&
-      (session.refreshToken === undefined || typeof session.refreshToken === 'string')
+      (session.sessionAbsoluteDeadline === undefined ||
+        Number.isFinite(session.sessionAbsoluteDeadline)) &&
+      (session.refreshToken === undefined ||
+        typeof session.refreshToken === 'string')
     );
   }
 
-  private parseDurationMs(rawValue: string | undefined, fallback: number): number {
+  private parseDurationMs(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isNaN(value) || value <= 0 ? fallback : value;
   }

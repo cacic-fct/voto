@@ -6,12 +6,18 @@ export const appRoutes: Route[] = [
   {
     path: 'login',
     canActivate: [redirectAuthenticatedGuard],
-    loadComponent: () => import('./auth/login-page.component').then((component) => component.LoginPageComponent),
+    loadComponent: () =>
+      import('./auth/login-page.component').then(
+        (component) => component.LoginPageComponent,
+      ),
   },
   {
     path: '',
     canActivate: [authGuard],
-    loadComponent: () => import('./shell/app-shell.component').then((component) => component.AppShellComponent),
+    loadComponent: () =>
+      import('./shell/app-shell.component').then(
+        (component) => component.AppShellComponent,
+      ),
     children: [
       {
         path: '',
@@ -21,7 +27,9 @@ export const appRoutes: Route[] = [
       {
         path: 'polls',
         loadComponent: () =>
-          import('./polls/public-polls-page.component').then((component) => component.PublicPollsPageComponent),
+          import('./polls/public-polls-page.component').then(
+            (component) => component.PublicPollsPageComponent,
+          ),
       },
       {
         path: 'polls/direct/:directLinkToken/results',
@@ -33,7 +41,9 @@ export const appRoutes: Route[] = [
       {
         path: 'polls/direct/:directLinkToken',
         loadComponent: () =>
-          import('./polls/poll-vote-page.component').then((component) => component.PollVotePageComponent),
+          import('./polls/poll-vote-page.component').then(
+            (component) => component.PollVotePageComponent,
+          ),
       },
       {
         path: 'polls/:id/results',
@@ -45,7 +55,9 @@ export const appRoutes: Route[] = [
       {
         path: 'polls/:id',
         loadComponent: () =>
-          import('./polls/poll-vote-page.component').then((component) => component.PollVotePageComponent),
+          import('./polls/poll-vote-page.component').then(
+            (component) => component.PollVotePageComponent,
+          ),
       },
       {
         path: 'admin/polls/:id/kiosk/vote',

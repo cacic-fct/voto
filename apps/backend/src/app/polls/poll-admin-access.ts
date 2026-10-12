@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   hasElectionsObserverRole,
   hasVotingAdminRole,
@@ -16,7 +20,9 @@ export type ObserverElectionWindowPoll = {
   votingStartsAt?: Date | null;
 };
 
-export function resolveAdminPollAudience(user?: AuthenticatedPrincipal): AdminPollAudience {
+export function resolveAdminPollAudience(
+  user?: AuthenticatedPrincipal,
+): AdminPollAudience {
   if (!user) {
     throw new UnauthorizedException('Missing authenticated user.');
   }
@@ -32,7 +38,9 @@ export function resolveAdminPollAudience(user?: AuthenticatedPrincipal): AdminPo
   throw new ForbiddenException('Missing permissions: poll#read.');
 }
 
-export function observerElectionPollWhere(now = new Date()): Prisma.PollWhereInput {
+export function observerElectionPollWhere(
+  now = new Date(),
+): Prisma.PollWhereInput {
   const { previousMonthStart, nextMonthStart } = observerElectionWindow(now);
 
   return {
@@ -89,7 +97,11 @@ export function isObserverReadableElectionPoll(
     return false;
   }
 
-  const startDate = poll.votingStartsAt ?? poll.visibleFrom ?? poll.publishedAt ?? poll.createdAt;
+  const startDate =
+    poll.votingStartsAt ??
+    poll.visibleFrom ??
+    poll.publishedAt ??
+    poll.createdAt;
   if (!startDate) {
     return false;
   }
@@ -98,7 +110,10 @@ export function isObserverReadableElectionPoll(
   return startDate >= previousMonthStart && startDate < nextMonthStart;
 }
 
-function observerElectionWindow(now: Date): { previousMonthStart: Date; nextMonthStart: Date } {
+function observerElectionWindow(now: Date): {
+  previousMonthStart: Date;
+  nextMonthStart: Date;
+} {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -108,13 +123,25 @@ function observerElectionWindow(now: Date): { previousMonthStart: Date; nextMont
   const month = Number(parts.find((part) => part.type === 'month')?.value);
   const previous = new Date(Date.UTC(year, month - 2, 1));
   const next = new Date(Date.UTC(year, month, 1));
-  const previousMonthStart = zonedDateTimeToInstant(previous.getUTCFullYear(), previous.getUTCMonth() + 1, 1);
-  const nextMonthStart = zonedDateTimeToInstant(next.getUTCFullYear(), next.getUTCMonth() + 1, 1);
+  const previousMonthStart = zonedDateTimeToInstant(
+    previous.getUTCFullYear(),
+    previous.getUTCMonth() + 1,
+    1,
+  );
+  const nextMonthStart = zonedDateTimeToInstant(
+    next.getUTCFullYear(),
+    next.getUTCMonth() + 1,
+    1,
+  );
 
   return { previousMonthStart, nextMonthStart };
 }
 
-function zonedDateTimeToInstant(year: number, month: number, day: number): Date {
+function zonedDateTimeToInstant(
+  year: number,
+  month: number,
+  day: number,
+): Date {
   const target = Date.UTC(year, month - 1, day);
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
@@ -126,14 +153,27 @@ function zonedDateTimeToInstant(year: number, month: number, day: number): Date 
     second: '2-digit',
     hourCycle: 'h23',
   });
-  for (let offsetMinutes = -14 * 60; offsetMinutes <= 14 * 60; offsetMinutes += 15) {
+  for (
+    let offsetMinutes = -14 * 60;
+    offsetMinutes <= 14 * 60;
+    offsetMinutes += 15
+  ) {
     const candidate = new Date(target - offsetMinutes * 60_000);
     const values = Object.fromEntries(
-      formatter.formatToParts(candidate)
-        .filter(({ type }) => ['year', 'month', 'day', 'hour', 'minute', 'second'].includes(type))
+      formatter
+        .formatToParts(candidate)
+        .filter(({ type }) =>
+          ['year', 'month', 'day', 'hour', 'minute', 'second'].includes(type),
+        )
         .map(({ type, value }) => [type, Number(value)]),
     ) as Record<string, number>;
-    if (values.year === year && values.month === month && values.day === day && values.hour === 0 && values.minute === 0) {
+    if (
+      values.year === year &&
+      values.month === month &&
+      values.day === day &&
+      values.hour === 0 &&
+      values.minute === 0
+    ) {
       return candidate;
     }
   }

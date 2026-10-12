@@ -84,7 +84,9 @@ describe('AppShellComponent', () => {
   });
 
   it('keeps the current user and shows an actionable message when logout fails', async () => {
-    vi.mocked(auth.logout).mockRejectedValueOnce(new Error('Keycloak unavailable'));
+    vi.mocked(auth.logout).mockRejectedValueOnce(
+      new Error('Keycloak unavailable'),
+    );
     const component = fixture.componentInstance as unknown as {
       logout(): Promise<void>;
     };

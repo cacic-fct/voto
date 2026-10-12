@@ -1,5 +1,10 @@
 import { Readable } from 'node:stream';
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { S3Service } from './s3.service';
 
@@ -59,7 +64,11 @@ describe('S3Service', () => {
     const service = new S3Service();
     const body = Buffer.from('image');
 
-    await expect(service.uploadFile('polls/poll-1/image.avif', body, 'image/avif', { pollId: 'poll-1' })).resolves.toEqual({
+    await expect(
+      service.uploadFile('polls/poll-1/image.avif', body, 'image/avif', {
+        pollId: 'poll-1',
+      }),
+    ).resolves.toEqual({
       key: 'polls/poll-1/image.avif',
       size: body.length,
     });
@@ -84,7 +93,9 @@ describe('S3Service', () => {
     const service = new S3Service();
     const body = Readable.from(['image']);
 
-    await expect(service.uploadFile('polls/poll-1/image.avif', body)).resolves.toEqual({
+    await expect(
+      service.uploadFile('polls/poll-1/image.avif', body),
+    ).resolves.toEqual({
       key: 'polls/poll-1/image.avif',
       size: 0,
     });
@@ -106,7 +117,9 @@ describe('S3Service', () => {
       .mockResolvedValueOnce({});
     const service = new S3Service();
 
-    await expect(service.uploadFile('polls/poll-1/image.avif', Readable.from(['image']))).rejects.toThrow('head failed');
+    await expect(
+      service.uploadFile('polls/poll-1/image.avif', Readable.from(['image'])),
+    ).rejects.toThrow('head failed');
     expect(DeleteObjectCommand).toHaveBeenCalledWith({
       Bucket: 'cacic-voto',
       Key: 'polls/poll-1/image.avif',
@@ -123,7 +136,9 @@ describe('S3Service', () => {
     });
     const service = new S3Service();
 
-    await expect(service.downloadFile('polls/poll-1/image.avif')).resolves.toEqual({
+    await expect(
+      service.downloadFile('polls/poll-1/image.avif'),
+    ).resolves.toEqual({
       stream,
       contentLength: 5,
       contentType: 'image/avif',
@@ -139,14 +154,18 @@ describe('S3Service', () => {
     mockS3Send.mockResolvedValue({});
     const service = new S3Service();
 
-    await expect(service.downloadFile('missing.avif')).rejects.toThrow('File not found or empty.');
+    await expect(service.downloadFile('missing.avif')).rejects.toThrow(
+      'File not found or empty.',
+    );
   });
 
   it('deletes configured objects', async () => {
     mockS3Send.mockResolvedValue({});
     const service = new S3Service();
 
-    await expect(service.deleteFile('polls/poll-1/image.avif')).resolves.toBeUndefined();
+    await expect(
+      service.deleteFile('polls/poll-1/image.avif'),
+    ).resolves.toBeUndefined();
     expect(DeleteObjectCommand).toHaveBeenCalledWith({
       Bucket: 'cacic-voto',
       Key: 'polls/poll-1/image.avif',
@@ -157,6 +176,8 @@ describe('S3Service', () => {
     process.env = { ...originalEnv, S3_ENDPOINT: 'http://s3.test' };
     const service = new S3Service();
 
-    await expect(service.deleteFile('polls/poll-1/image.avif')).rejects.toThrow('S3 configuration is incomplete');
+    await expect(service.deleteFile('polls/poll-1/image.avif')).rejects.toThrow(
+      'S3 configuration is incomplete',
+    );
   });
 });

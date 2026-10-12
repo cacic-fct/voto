@@ -35,7 +35,10 @@
         <mat-icon aria-hidden="true">verified_user</mat-icon>
         <div>
           <strong>Voto autorizado para {{ voter.displayName }}</strong>
-          <span>{{ voter.maskedPrimaryEmail }} · autorização válida para um único envio</span>
+          <span
+            >{{ voter.maskedPrimaryEmail }} · autorização válida para um único
+            envio</span
+          >
         </div>
       </div>
     }
@@ -75,10 +78,7 @@
       }
 
       @if (cacicElectionVoteElement(currentPoll)) {
-        <section
-          class="slate-public-section"
-          aria-label="Opções de voto"
-        >
+        <section class="slate-public-section" aria-label="Opções de voto">
           <mat-radio-group
             class="slate-public-list ballot-list"
             [value]="
@@ -172,8 +172,7 @@
         }
 
         @if (
-          canSubmitSlate() &&
-          (!mySlate() || mySlate()?.status !== 'approved')
+          canSubmitSlate() && (!mySlate() || mySlate()?.status !== 'approved')
         ) {
           <app-cacic-election-slate-form
             [slate]="mySlate()"
@@ -192,7 +191,8 @@
         } @else {
           <mat-card appearance="outlined" class="notice-card">
             <mat-card-content
-              >O período de submissão de chapas não está aberto.</mat-card-content
+              >O período de submissão de chapas não está
+              aberto.</mat-card-content
             >
           </mat-card>
         }
@@ -357,9 +357,15 @@
                                   column.id
                                 )
                               "
-                              [attr.aria-label]="row.label + ': ' + column.label"
+                              [attr.aria-label]="
+                                row.label + ': ' + column.label
+                              "
                               (change)="
-                                setSingleGridAnswer(element.id, row.id, column.id)
+                                setSingleGridAnswer(
+                                  element.id,
+                                  row.id,
+                                  column.id
+                                )
                               "
                             >
                             </mat-radio-button>
@@ -399,7 +405,9 @@
                                   column.id
                                 )
                               "
-                              [attr.aria-label]="row.label + ': ' + column.label"
+                              [attr.aria-label]="
+                                row.label + ': ' + column.label
+                              "
                               (change)="
                                 toggleMultipleGridAnswer(
                                   element.id,
@@ -643,9 +651,7 @@
           {{ submitButtonLabel() }}
         </button>
       </div>
-    } @else if (
-      !isSlateSubmissionPoll(currentPoll) && responseStateError()
-    ) {
+    } @else if (!isSlateSubmissionPoll(currentPoll) && responseStateError()) {
       <mat-card appearance="outlined" class="notice-card">
         <mat-card-header>
           <mat-icon mat-card-avatar>sync_problem</mat-icon>
@@ -653,7 +659,11 @@
           <mat-card-subtitle>{{ responseStateError() }}</mat-card-subtitle>
         </mat-card-header>
         <mat-card-actions>
-          <button mat-stroked-button type="button" (click)="retryResponseState(currentPoll)">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="retryResponseState(currentPoll)"
+          >
             <mat-icon>refresh</mat-icon>
             Tentar novamente
           </button>
@@ -680,7 +690,11 @@
         <mat-card appearance="outlined" class="notice-card" aria-live="polite">
           <mat-card-content>{{ resultsFinalizationError() }}</mat-card-content>
           <mat-card-actions>
-            <button mat-stroked-button type="button" (click)="retryFinalResults()">
+            <button
+              mat-stroked-button
+              type="button"
+              (click)="retryFinalResults()"
+            >
               <mat-icon>refresh</mat-icon>
               Tentar novamente
             </button>
@@ -688,9 +702,17 @@
         </mat-card>
       }
       @if (resultsConnectionState() === 'reconnecting') {
-        <p aria-live="polite">Conexão instável para atualização dos resultados; tentando novamente.</p>
-      } @else if (resultsConnectionState() === 'closed' && currentPoll.status === 'published') {
-        <p aria-live="polite">A atualização ao vivo foi interrompida; abra os resultados novamente para reconectar.</p>
+        <p aria-live="polite">
+          Conexão instável para atualização dos resultados; tentando novamente.
+        </p>
+      } @else if (
+        resultsConnectionState() === 'closed' &&
+        currentPoll.status === 'published'
+      ) {
+        <p aria-live="polite">
+          A atualização ao vivo foi interrompida; abra os resultados novamente
+          para reconectar.
+        </p>
       }
       <div class="actions">
         <a mat-stroked-button [routerLink]="resultsLink(currentPoll)">

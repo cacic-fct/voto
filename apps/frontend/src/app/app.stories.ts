@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
 import { App } from './app';
 import { storybookBaseProviders } from './testing/storybook-voting-mocks';
 

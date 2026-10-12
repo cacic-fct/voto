@@ -19,7 +19,9 @@ function run(command, args, options = {}) {
   });
 
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} exited with status ${result.status}`);
+    throw new Error(
+      `${command} ${args.join(' ')} exited with status ${result.status}`,
+    );
   }
 }
 
@@ -62,7 +64,8 @@ function buildTestEnv() {
     HOST: backendHost,
     PORT: backendPort,
     DATABASE_URL:
-      process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/cacic_voto_test',
+      process.env.DATABASE_URL ??
+      'postgresql://postgres:postgres@localhost:5432/cacic_voto_test',
     REDIS_HOST: process.env.REDIS_HOST ?? 'localhost',
     REDIS_PORT: process.env.REDIS_PORT ?? '6379',
     KEYCLOAK_BACKED_E2E: 'true',
@@ -76,7 +79,8 @@ function buildTestEnv() {
     KEYCLOAK_JWT_CLOCK_SKEW_SECONDS: '60',
     KEYCLOAK_M2M_CLIENT_ID: 'cacic-voto-m2m',
     KEYCLOAK_M2M_CLIENT_SECRET: 'cacic-voto-m2m-dev-secret',
-    ACCOUNT_MANAGER_GRPC_URL: process.env.ACCOUNT_MANAGER_GRPC_URL ?? 'localhost:50053',
+    ACCOUNT_MANAGER_GRPC_URL:
+      process.env.ACCOUNT_MANAGER_GRPC_URL ?? 'localhost:50053',
     ACCOUNT_MANAGER_M2M_AUDIENCE: 'cacic-account-manager-audience',
     EVENT_MANAGER_M2M_AUDIENCE: 'cacic-event-manager-audience',
   };
@@ -87,7 +91,10 @@ async function main() {
   dockerCompose(['down', '-v', '--remove-orphans']);
   dockerCompose(['up', '-d']);
 
-  await waitForUrl(`${keycloakUrl}/realms/cacic-sso/.well-known/openid-configuration`, 'test Keycloak');
+  await waitForUrl(
+    `${keycloakUrl}/realms/cacic-sso/.well-known/openid-configuration`,
+    'test Keycloak',
+  );
 
   run(
     process.platform === 'win32' ? 'bunx.cmd' : 'bunx',

@@ -91,14 +91,24 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
     });
   }
 
-  updateGridOptionLabel(elementId: string, axis: GridAxis, optionId: string, event: Event): void {
+  updateGridOptionLabel(
+    elementId: string,
+    axis: GridAxis,
+    optionId: string,
+    event: Event,
+  ): void {
     this.updateGridOption(elementId, axis, optionId, (option) => ({
       ...option,
       label: this.readInputValue(event),
     }));
   }
 
-  updateGridOptionDescription(elementId: string, axis: GridAxis, optionId: string, event: Event): void {
+  updateGridOptionDescription(
+    elementId: string,
+    axis: GridAxis,
+    optionId: string,
+    event: Event,
+  ): void {
     this.updateGridOption(elementId, axis, optionId, (option) => ({
       ...option,
       description: this.readInputValue(event),
@@ -115,17 +125,25 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
       ...element,
       type: nextType,
       required: isAnswerElement(nextType) ? element.required : false,
-      options: isOptionChoiceElement(nextType) ? ensureChoiceOptions(element.options) : [],
+      options: isOptionChoiceElement(nextType)
+        ? ensureChoiceOptions(element.options)
+        : [],
       settings: createSettingsForType(nextType, element.settings),
     }));
   }
 
   updateElementTitle(elementId: string, event: Event): void {
-    this.updateElement(elementId, (element) => ({ ...element, title: this.readInputValue(event) }));
+    this.updateElement(elementId, (element) => ({
+      ...element,
+      title: this.readInputValue(event),
+    }));
   }
 
   updateElementDescription(elementId: string, event: Event): void {
-    this.updateElement(elementId, (element) => ({ ...element, description: this.readInputValue(event) }));
+    this.updateElement(elementId, (element) => ({
+      ...element,
+      description: this.readInputValue(event),
+    }));
   }
 
   addElementDescriptionImage(elementId: string, image: PollImage): void {
@@ -138,7 +156,9 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
   removeElementDescriptionImage(elementId: string, imageId: string): void {
     this.updateElement(elementId, (element) => ({
       ...element,
-      descriptionImages: (element.descriptionImages ?? []).filter((image) => image.id !== imageId),
+      descriptionImages: (element.descriptionImages ?? []).filter(
+        (image) => image.id !== imageId,
+      ),
     }));
   }
 
@@ -158,7 +178,10 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
   }
 
   updateElementRequired(elementId: string, event: MatCheckboxChange): void {
-    this.updateElement(elementId, (element) => ({ ...element, required: event.checked }));
+    this.updateElement(elementId, (element) => ({
+      ...element,
+      required: event.checked,
+    }));
   }
 
   updateLinearScaleMin(elementId: string, event: MatSelectChange): void {
@@ -204,7 +227,11 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
     });
   }
 
-  updateLinearScaleLabel(elementId: string, label: 'minLabel' | 'maxLabel', event: Event): void {
+  updateLinearScaleLabel(
+    elementId: string,
+    label: 'minLabel' | 'maxLabel',
+    event: Event,
+  ): void {
     this.updateElement(elementId, (element) => {
       const scale = ensureLinearScaleSettings(element.settings?.linearScale);
       return {
@@ -238,21 +265,36 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
   }
 
   updateOptionLabel(elementId: string, optionId: string, event: Event): void {
-    this.updateOption(elementId, optionId, (option) => ({ ...option, label: this.readInputValue(event) }));
+    this.updateOption(elementId, optionId, (option) => ({
+      ...option,
+      label: this.readInputValue(event),
+    }));
   }
 
-  updateOptionDescription(elementId: string, optionId: string, event: Event): void {
-    this.updateOption(elementId, optionId, (option) => ({ ...option, description: this.readInputValue(event) }));
+  updateOptionDescription(
+    elementId: string,
+    optionId: string,
+    event: Event,
+  ): void {
+    this.updateOption(elementId, optionId, (option) => ({
+      ...option,
+      description: this.readInputValue(event),
+    }));
   }
 
-  protected updateElement(elementId: string, update: (element: PollElement) => PollElement): void {
+  protected updateElement(
+    elementId: string,
+    update: (element: PollElement) => PollElement,
+  ): void {
     if (isCacicElectionGeneratedElementId(elementId)) {
       return;
     }
 
     this.draft.update((poll) => ({
       ...poll,
-      elements: poll.elements.map((element) => (element.id === elementId ? update(element) : element)),
+      elements: poll.elements.map((element) =>
+        element.id === elementId ? update(element) : element,
+      ),
     }));
   }
 
@@ -263,7 +305,9 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
   ): void {
     this.updateElement(elementId, (element) => ({
       ...element,
-      options: element.options.map((option) => (option.id === optionId ? update(option) : option)),
+      options: element.options.map((option) =>
+        option.id === optionId ? update(option) : option,
+      ),
     }));
   }
 
@@ -281,7 +325,9 @@ export abstract class PollBuilderDraftElements extends PollBuilderDraftPollSetti
           ...element.settings,
           grid: {
             ...grid,
-            [axis]: grid[axis].map((option) => (option.id === optionId ? update(option) : option)),
+            [axis]: grid[axis].map((option) =>
+              option.id === optionId ? update(option) : option,
+            ),
           },
         },
       };

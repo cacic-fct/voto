@@ -39,7 +39,9 @@ export function collectResultElementVersions(
   currentElements: readonly PollElement[],
   responses: readonly PollResultsResponse[],
 ): ResultElementVersion[] {
-  const fallbackElements = new Map(currentElements.map((element) => [element.id, element]));
+  const fallbackElements = new Map(
+    currentElements.map((element) => [element.id, element]),
+  );
   const versions = new Map<string, PollElement>();
 
   for (const element of currentElements) {
@@ -65,7 +67,9 @@ export function collectAnswerEntriesForElementVersion(
   currentElements: readonly PollElement[],
   responses: readonly PollResultsResponse[],
 ): ResultAnswerEntry[] {
-  const fallbackElements = new Map(currentElements.map((element) => [element.id, element]));
+  const fallbackElements = new Map(
+    currentElements.map((element) => [element.id, element]),
+  );
   const entries: ResultAnswerEntry[] = [];
 
   for (const response of responses) {
@@ -121,7 +125,9 @@ export function answerValueLabel(
   }
 
   if (Array.isArray(value)) {
-    return value.map((optionId) => optionLabel(element, optionId) ?? optionId).join(', ');
+    return value
+      .map((optionId) => optionLabel(element, optionId) ?? optionId)
+      .join(', ');
   }
 
   const recordValue = asRecord(value);
@@ -130,7 +136,9 @@ export function answerValueLabel(
       .map((row) => {
         const rawValue = recordValue[row.id];
         const rowValue = Array.isArray(rawValue)
-          ? rawValue.map((columnId) => gridColumnLabel(element, String(columnId))).join(', ')
+          ? rawValue
+              .map((columnId) => gridColumnLabel(element, String(columnId)))
+              .join(', ')
           : typeof rawValue === 'string'
             ? gridColumnLabel(element, rawValue)
             : '';
@@ -146,10 +154,12 @@ export function answerValueLabel(
       return 'Sem resposta';
     }
 
-    const slot = schedulingSlots(element).find((item) => item.id === answer.slotId);
+    const slot = schedulingSlots(element).find(
+      (item) => item.id === answer.slotId,
+    );
     const inviteeLabel =
       options.includeSchedulingInvitees !== false && answer.invitees.length > 0
-        ? ` · Convidados: ${answer.invitees.map((invitee) => invitee.email ? `${invitee.name} (${invitee.email})` : invitee.name).join(', ')}`
+        ? ` · Convidados: ${answer.invitees.map((invitee) => (invitee.email ? `${invitee.name} (${invitee.email})` : invitee.name)).join(', ')}`
         : '';
 
     return `${slot?.fullLabel ?? answer.slotId}${inviteeLabel}`;
@@ -158,7 +168,10 @@ export function answerValueLabel(
   return 'Sem resposta';
 }
 
-export function answerValueLabels(element: PollElement, value: unknown): string[] {
+export function answerValueLabels(
+  element: PollElement,
+  value: unknown,
+): string[] {
   if (typeof value === 'number') {
     return [String(value)];
   }
@@ -180,16 +193,23 @@ export function answerValueLabels(element: PollElement, value: unknown): string[
     return element.settings.grid.rows.flatMap((row) => {
       const rawValue = recordValue[row.id];
       if (Array.isArray(rawValue)) {
-        return rawValue.map((columnId) => `${row.label}: ${gridColumnLabel(element, String(columnId))}`);
+        return rawValue.map(
+          (columnId) =>
+            `${row.label}: ${gridColumnLabel(element, String(columnId))}`,
+        );
       }
 
-      return typeof rawValue === 'string' ? [`${row.label}: ${gridColumnLabel(element, rawValue)}`] : [];
+      return typeof rawValue === 'string'
+        ? [`${row.label}: ${gridColumnLabel(element, rawValue)}`]
+        : [];
     });
   }
 
   if (element.type === 'scheduling') {
     const answer = readSchedulingAnswer(recordValue);
-    const slot = schedulingSlots(element).find((item) => item.id === answer.slotId);
+    const slot = schedulingSlots(element).find(
+      (item) => item.id === answer.slotId,
+    );
     return answer.slotId ? [slot?.fullLabel ?? answer.slotId] : [];
   }
 
@@ -207,19 +227,24 @@ export function isEmptyAnswerValue(value: unknown): boolean {
 }
 
 export function readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
-  return readSchedulingAnswerOrNull(value) ?? {
-    slotId: '',
-    invitees: [],
-  };
+  return (
+    readSchedulingAnswerOrNull(value) ?? {
+      slotId: '',
+      invitees: [],
+    }
+  );
 }
 
-export function readSchedulingAnswerOrNull(value: unknown): PollSchedulingAnswer | null {
+export function readSchedulingAnswerOrNull(
+  value: unknown,
+): PollSchedulingAnswer | null {
   const recordValue = asRecord(value);
   if (!recordValue) {
     return null;
   }
 
-  const slotId = typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '';
+  const slotId =
+    typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '';
   if (!slotId) {
     return null;
   }
@@ -227,10 +252,13 @@ export function readSchedulingAnswerOrNull(value: unknown): PollSchedulingAnswer
   const invitees = Array.isArray(recordValue['invitees'])
     ? recordValue['invitees']
         .map((invitee) => asRecord(invitee))
-        .filter((invitee): invitee is Record<string, unknown> => invitee !== null)
+        .filter(
+          (invitee): invitee is Record<string, unknown> => invitee !== null,
+        )
         .map((invitee) => ({
           name: typeof invitee['name'] === 'string' ? invitee['name'] : '',
-          email: typeof invitee['email'] === 'string' ? invitee['email'] : undefined,
+          email:
+            typeof invitee['email'] === 'string' ? invitee['email'] : undefined,
         }))
         .filter((invitee) => invitee.name.trim().length > 0)
     : [];
@@ -247,7 +275,9 @@ export function schedulingSlots(element: PollElement): PollSchedulingSlot[] {
     return [];
   }
 
-  return settings.availability.flatMap((availability) => schedulingSlotsForAvailability(settings, availability));
+  return settings.availability.flatMap((availability) =>
+    schedulingSlotsForAvailability(settings, availability),
+  );
 }
 
 export function formatDateLabel(value: string): string {
@@ -274,7 +304,9 @@ export function formatTimeMinutes(value: number): string {
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function resolveAnswerElement(
@@ -284,12 +316,18 @@ function resolveAnswerElement(
   return answer.element ?? fallbackElements.get(answer.elementId) ?? null;
 }
 
-function optionLabel(element: PollElement, optionId: string): string | undefined {
+function optionLabel(
+  element: PollElement,
+  optionId: string,
+): string | undefined {
   return element.options.find((option) => option.id === optionId)?.label;
 }
 
 function gridColumnLabel(element: PollElement, columnId: string): string {
-  return element.settings?.grid?.columns.find((column) => column.id === columnId)?.label ?? columnId;
+  return (
+    element.settings?.grid?.columns.find((column) => column.id === columnId)
+      ?.label ?? columnId
+  );
 }
 
 function schedulingSlotsForAvailability(
@@ -300,7 +338,8 @@ function schedulingSlotsForAvailability(
   const windowStart = timeToMinutes(availability.startTime);
   const windowEnd = timeToMinutes(availability.endTime);
   const firstStart = windowStart + settings.bufferBeforeMinutes;
-  const lastStart = windowEnd - settings.durationMinutes - settings.bufferAfterMinutes;
+  const lastStart =
+    windowEnd - settings.durationMinutes - settings.bufferAfterMinutes;
 
   for (
     let startMinutes = firstStart;
@@ -325,6 +364,9 @@ function schedulingSlotsForAvailability(
   return slots;
 }
 
-function schedulingSlotId(availability: PollSchedulingAvailabilityWindow, startMinutes: number): string {
+function schedulingSlotId(
+  availability: PollSchedulingAvailabilityWindow,
+  startMinutes: number,
+): string {
   return `${availability.id}:${formatTimeMinutes(startMinutes)}`;
 }

@@ -5,7 +5,8 @@ export const DEFAULT_KEYCLOAK_CLIENT_ID = 'cacic-voto';
 export const AUTH_SESSION_COOKIE_NAME = 'cacic_voto_session';
 export const AUTH_SESSION_COOKIE_PRODUCTION_NAME = '__Host-cacic_voto_session';
 export const AUTH_STATE_COOKIE_NAME = 'cacic_voto_oauth_state';
-export const AUTH_STATE_COOKIE_PRODUCTION_NAME = '__Host-cacic_voto_oauth_state';
+export const AUTH_STATE_COOKIE_PRODUCTION_NAME =
+  '__Host-cacic_voto_oauth_state';
 
 export function getAuthSessionCookieName(): string {
   return process.env.NODE_ENV === 'production'

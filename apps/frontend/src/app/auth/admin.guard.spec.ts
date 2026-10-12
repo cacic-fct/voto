@@ -1,6 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree, provideRouter } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  Router,
+  RouterStateSnapshot,
+  UrlTree,
+  provideRouter,
+} from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PermissionsService } from './permissions.service';
 import { adminGuard, pollKioskGuard } from './admin.guard';
@@ -8,7 +14,10 @@ import { adminGuard, pollKioskGuard } from './admin.guard';
 describe('adminGuard', () => {
   let isAdmin: ReturnType<typeof signal<boolean>>;
   let canUseKiosk: ReturnType<typeof signal<boolean>>;
-  let permissions: Pick<PermissionsService, 'canUseKiosk' | 'evaluateAdminPermissions' | 'isAdmin'>;
+  let permissions: Pick<
+    PermissionsService,
+    'canUseKiosk' | 'evaluateAdminPermissions' | 'isAdmin'
+  >;
   let router: Router;
 
   beforeEach(() => {
@@ -21,7 +30,10 @@ describe('adminGuard', () => {
     };
 
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: PermissionsService, useValue: permissions }],
+      providers: [
+        provideRouter([]),
+        { provide: PermissionsService, useValue: permissions },
+      ],
     });
 
     router = TestBed.inject(Router);

@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  input,
+  signal,
+} from '@angular/core';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
 import {
   ApiStoryState,
   apiStateOptions,
@@ -23,7 +37,9 @@ import { PublicPollResultsPageComponent } from './public-poll-results-page.compo
 class PublicPollResultsStoryHostComponent {
   readonly estado = input<ApiStoryState>('carregado');
   readonly respostasAoVivo = input(true);
-  readonly sigilo = input<'public' | 'partiallySecret' | 'secret' | 'anonymous'>('public');
+  readonly sigilo = input<
+    'public' | 'partiallySecret' | 'secret' | 'anonymous'
+  >('public');
   readonly seed = input(42);
   protected readonly visible = signal(false);
 

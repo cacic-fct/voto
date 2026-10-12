@@ -7,7 +7,10 @@ import { LoginPageComponent } from './login-page.component';
 
 describe('LoginPageComponent', () => {
   let fixture: ComponentFixture<LoginPageComponent>;
-  let auth: Pick<AuthService, 'isAuthenticated' | 'login' | 'consumeLogoutWarning'>;
+  let auth: Pick<
+    AuthService,
+    'isAuthenticated' | 'login' | 'consumeLogoutWarning'
+  >;
   let isAuthenticated: WritableSignal<boolean>;
   let router: Pick<Router, 'navigateByUrl'>;
 
@@ -45,9 +48,9 @@ describe('LoginPageComponent', () => {
     fixture = TestBed.createComponent(LoginPageComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
-      'servidor não confirmou o logout global',
-    );
+    expect(
+      fixture.nativeElement.querySelector('[role="status"]')?.textContent,
+    ).toContain('servidor não confirmou o logout global');
   });
 
   it('should start login when the user is unauthenticated', async () => {

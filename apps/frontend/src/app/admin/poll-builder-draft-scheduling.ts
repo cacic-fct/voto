@@ -57,14 +57,19 @@ export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElement
 
   updateSchedulingInviteeMode(elementId: string, event: MatSelectChange): void {
     const inviteeMode = event.value as PollSchedulingInviteeMode;
-    if (!this.schedulingInviteeModeOptions.some((option) => option.mode === inviteeMode)) {
+    if (
+      !this.schedulingInviteeModeOptions.some(
+        (option) => option.mode === inviteeMode,
+      )
+    ) {
       return;
     }
 
     this.updateSchedulingSettings(elementId, (settings) => ({
       ...settings,
       inviteeMode,
-      maxInvitees: inviteeMode === 'none' ? 0 : Math.max(settings.maxInvitees, 1),
+      maxInvitees:
+        inviteeMode === 'none' ? 0 : Math.max(settings.maxInvitees, 1),
     }));
   }
 
@@ -82,10 +87,15 @@ export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElement
     }));
   }
 
-  removeSchedulingAvailability(elementId: string, availabilityId: string): void {
+  removeSchedulingAvailability(
+    elementId: string,
+    availabilityId: string,
+  ): void {
     this.updateSchedulingSettings(elementId, (settings) => ({
       ...settings,
-      availability: settings.availability.filter((availability) => availability.id !== availabilityId),
+      availability: settings.availability.filter(
+        (availability) => availability.id !== availabilityId,
+      ),
     }));
   }
 
@@ -131,7 +141,9 @@ export abstract class PollBuilderDraftScheduling extends PollBuilderDraftElement
       ...element,
       settings: {
         ...element.settings,
-        scheduling: update(ensureSchedulingSettings(element.settings?.scheduling)),
+        scheduling: update(
+          ensureSchedulingSettings(element.settings?.scheduling),
+        ),
       },
     }));
   }

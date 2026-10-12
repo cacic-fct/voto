@@ -13,7 +13,9 @@ export function parseDateOnly(value: string | null | undefined): Date | null {
   }
 
   const date = parse(value, DATE_ONLY_FORMAT, new Date());
-  return isValid(date) && format(date, DATE_ONLY_FORMAT) === value ? date : null;
+  return isValid(date) && format(date, DATE_ONLY_FORMAT) === value
+    ? date
+    : null;
 }
 
 /** Serializes a local calendar day without converting it to UTC. */

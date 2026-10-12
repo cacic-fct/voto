@@ -13,7 +13,11 @@
   <router-outlet></router-outlet>
 </main>
 
-<mat-toolbar class="bottom-toolbar" role="navigation" aria-label="Menu principal">
+<mat-toolbar
+  class="bottom-toolbar"
+  role="navigation"
+  aria-label="Menu principal"
+>
   @for (item of navItems(); track item.path) {
     <a
       mat-button
@@ -21,7 +25,8 @@
       [routerLink]="item.path"
       [class.active]="isActive(item.path)"
       [attr.aria-current]="isActive(item.path) ? 'page' : null"
-      [attr.aria-label]="item.label">
+      [attr.aria-label]="item.label"
+    >
       <span class="icon-wrap">
         <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
       </span>

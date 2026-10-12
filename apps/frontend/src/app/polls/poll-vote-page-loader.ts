@@ -64,10 +64,10 @@ export abstract class PollVotePageLoader extends PollVotePageResults {
       }
 
       if (this.isKioskMode) {
-        await this.router.navigate(
-          ['/admin/polls', access.value, 'kiosk'],
-          { replaceUrl: true, queryParams: { reason: 'expired' } },
-        );
+        await this.router.navigate(['/admin/polls', access.value, 'kiosk'], {
+          replaceUrl: true,
+          queryParams: { reason: 'expired' },
+        });
       } else {
         this.error.set('Não foi possível carregar a votação.');
       }

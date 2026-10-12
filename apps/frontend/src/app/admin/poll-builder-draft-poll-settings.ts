@@ -21,11 +21,17 @@ import { PollBuilderDraftState } from './poll-builder-draft-state';
 
 export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState {
   updatePollTitle(event: Event): void {
-    this.draft.update((poll) => ({ ...poll, title: this.readInputValue(event) }));
+    this.draft.update((poll) => ({
+      ...poll,
+      title: this.readInputValue(event),
+    }));
   }
 
   updatePollDescription(event: Event): void {
-    this.draft.update((poll) => ({ ...poll, description: this.readInputValue(event) }));
+    this.draft.update((poll) => ({
+      ...poll,
+      description: this.readInputValue(event),
+    }));
   }
 
   addPollDescriptionImage(image: PollImage): void {
@@ -38,11 +44,17 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
   removePollDescriptionImage(imageId: string): void {
     this.draft.update((poll) => ({
       ...poll,
-      descriptionImages: (poll.descriptionImages ?? []).filter((image) => image.id !== imageId),
+      descriptionImages: (poll.descriptionImages ?? []).filter(
+        (image) => image.id !== imageId,
+      ),
     }));
   }
 
-  updatePollDescriptionImageText(imageId: string, field: 'altText' | 'caption', event: Event): void {
+  updatePollDescriptionImageText(
+    imageId: string,
+    field: 'altText' | 'caption',
+    event: Event,
+  ): void {
     const value = this.readInputValue(event);
     this.draft.update((poll) => ({
       ...poll,
@@ -68,11 +80,13 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
           }
         : undefined,
       voterEligibilitySource:
-        linkedEvent || !requiresLinkedEventEligibilitySource(poll.voterEligibilitySource)
+        linkedEvent ||
+        !requiresLinkedEventEligibilitySource(poll.voterEligibilitySource)
           ? poll.voterEligibilitySource
           : 'authenticatedUsers',
       requireVerifiedUnespRole:
-        linkedEvent || !requiresLinkedEventEligibilitySource(poll.voterEligibilitySource)
+        linkedEvent ||
+        !requiresLinkedEventEligibilitySource(poll.voterEligibilitySource)
           ? poll.requireVerifiedUnespRole
           : false,
     }));
@@ -84,7 +98,9 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
       return;
     }
 
-    this.draft.update((poll) => this.applyCacicElectionRules({ ...poll, mode }));
+    this.draft.update((poll) =>
+      this.applyCacicElectionRules({ ...poll, mode }),
+    );
   }
 
   updateCacicElectionPhase(event: MatSelectChange): void {
@@ -135,7 +151,8 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
     this.draft.update((poll) => ({
       ...poll,
       votingStyle,
-      allowResponseEditing: votingStyle === 'anonymous' ? false : poll.allowResponseEditing,
+      allowResponseEditing:
+        votingStyle === 'anonymous' ? false : poll.allowResponseEditing,
     }));
   }
 
@@ -147,12 +164,16 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
 
     this.draft.update((poll) => {
       const voterEligibilitySource =
-        requiresLinkedEventEligibilitySource(source) && !poll.linkedEvent ? 'authenticatedUsers' : source;
+        requiresLinkedEventEligibilitySource(source) && !poll.linkedEvent
+          ? 'authenticatedUsers'
+          : source;
 
       return {
         ...poll,
         voterEligibilitySource,
-        requireVerifiedUnespRole: supportsVerifiedUnespRoleRequirement(voterEligibilitySource)
+        requireVerifiedUnespRole: supportsVerifiedUnespRoleRequirement(
+          voterEligibilitySource,
+        )
           ? poll.requireVerifiedUnespRole
           : false,
       };
@@ -162,33 +183,47 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
   updateRequireVerifiedUnespRole(event: MatCheckboxChange): void {
     this.draft.update((poll) => ({
       ...poll,
-      requireVerifiedUnespRole: supportsVerifiedUnespRoleRequirement(poll.voterEligibilitySource) && event.checked,
+      requireVerifiedUnespRole:
+        supportsVerifiedUnespRoleRequirement(poll.voterEligibilitySource) &&
+        event.checked,
     }));
   }
 
   updateDirectLinkEnabled(event: MatCheckboxChange): void {
-    this.draft.update((poll) => this.applyCacicElectionRules({ ...poll, directLinkEnabled: event.checked }));
+    this.draft.update((poll) =>
+      this.applyCacicElectionRules({
+        ...poll,
+        directLinkEnabled: event.checked,
+      }),
+    );
   }
 
   updateResultsPublic(event: MatCheckboxChange): void {
-    this.draft.update((poll) => this.applyCacicElectionRules({
-      ...poll,
-      resultsPublic: event.checked,
-      resultsLive: event.checked ? poll.resultsLive : false,
-    }));
+    this.draft.update((poll) =>
+      this.applyCacicElectionRules({
+        ...poll,
+        resultsPublic: event.checked,
+        resultsLive: event.checked ? poll.resultsLive : false,
+      }),
+    );
   }
 
   updateResultsLive(event: MatCheckboxChange): void {
-    this.draft.update((poll) => this.applyCacicElectionRules({
-      ...poll,
-      resultsLive: poll.resultsPublic && event.checked,
-    }));
+    this.draft.update((poll) =>
+      this.applyCacicElectionRules({
+        ...poll,
+        resultsLive: poll.resultsPublic && event.checked,
+      }),
+    );
   }
 
   updateAllowResponseEditing(event: MatCheckboxChange): void {
     this.draft.update((poll) => ({
       ...poll,
-      allowResponseEditing: poll.votingStyle !== 'anonymous' && !poll.allowMultipleResponses && event.checked,
+      allowResponseEditing:
+        poll.votingStyle !== 'anonymous' &&
+        !poll.allowMultipleResponses &&
+        event.checked,
     }));
   }
 
@@ -207,7 +242,10 @@ export abstract class PollBuilderDraftPollSettings extends PollBuilderDraftState
     this.draft.update((poll) => ({
       ...poll,
       [field]: value
-        ? combineDateAndTime(value, this.dateTimeTimeInputValue(poll[field]) || '00:00')
+        ? combineDateAndTime(
+            value,
+            this.dateTimeTimeInputValue(poll[field]) || '00:00',
+          )
         : null,
     }));
   }

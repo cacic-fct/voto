@@ -65,26 +65,33 @@ describe('CookieBannerFeatureFlagService', () => {
 
   it('turns noisy Unleash fetch failures into not-modified responses', async () => {
     const service = createService('browser');
-    const fetchWithoutConsoleNoise = (service as unknown as { fetchWithoutConsoleNoise: typeof fetch })
-      .fetchWithoutConsoleNoise;
+    const fetchWithoutConsoleNoise = (
+      service as unknown as { fetchWithoutConsoleNoise: typeof fetch }
+    ).fetchWithoutConsoleNoise;
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
 
     fetchMock.mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
-    await expect(fetchWithoutConsoleNoise('/api/frontend')).resolves.toMatchObject({
+    await expect(
+      fetchWithoutConsoleNoise('/api/frontend'),
+    ).resolves.toMatchObject({
       status: 304,
       statusText: 'Not Modified',
     });
 
     fetchMock.mockRejectedValueOnce(new Error('offline'));
-    await expect(fetchWithoutConsoleNoise('/api/frontend')).resolves.toMatchObject({
+    await expect(
+      fetchWithoutConsoleNoise('/api/frontend'),
+    ).resolves.toMatchObject({
       status: 304,
       statusText: 'Not Modified',
     });
 
     const okResponse = new Response('{}', { status: 200 });
     fetchMock.mockResolvedValueOnce(okResponse);
-    await expect(fetchWithoutConsoleNoise('/api/frontend')).resolves.toBe(okResponse);
+    await expect(fetchWithoutConsoleNoise('/api/frontend')).resolves.toBe(
+      okResponse,
+    );
   });
 
   it('starts Unleash with runtime config when there is no development override', async () => {
@@ -101,9 +108,10 @@ describe('CookieBannerFeatureFlagService', () => {
       <meta name="cacic-unleash-environment" content="staging">
     `;
     const service = createService('browser');
-    vi.spyOn(service as unknown as CookieBannerFeatureFlagServiceInternals, 'readDevelopmentStorageValue').mockReturnValue(
-      null,
-    );
+    vi.spyOn(
+      service as unknown as CookieBannerFeatureFlagServiceInternals,
+      'readDevelopmentStorageValue',
+    ).mockReturnValue(null);
 
     await service.initialize();
 
@@ -137,9 +145,10 @@ describe('CookieBannerFeatureFlagService', () => {
       return client;
     } as never);
     const service = createService('browser');
-    vi.spyOn(service as unknown as CookieBannerFeatureFlagServiceInternals, 'readDevelopmentStorageValue').mockReturnValue(
-      null,
-    );
+    vi.spyOn(
+      service as unknown as CookieBannerFeatureFlagServiceInternals,
+      'readDevelopmentStorageValue',
+    ).mockReturnValue(null);
 
     await service.initialize();
 
@@ -147,7 +156,9 @@ describe('CookieBannerFeatureFlagService', () => {
   });
 });
 
-function createService(platformId: 'browser' | 'server'): CookieBannerFeatureFlagService {
+function createService(
+  platformId: 'browser' | 'server',
+): CookieBannerFeatureFlagService {
   TestBed.configureTestingModule({
     providers: [
       CookieBannerFeatureFlagService,

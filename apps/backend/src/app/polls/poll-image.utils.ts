@@ -39,7 +39,9 @@ export function isAllowedPollImageMimeType(mimeType: string): boolean {
   return ALLOWED_POLL_IMAGE_MIME_TYPES.has(mimeType.toLowerCase());
 }
 
-export async function convertPollImageToAvif(file: UploadedPollImageFile | undefined): Promise<{
+export async function convertPollImageToAvif(
+  file: UploadedPollImageFile | undefined,
+): Promise<{
   buffer: Buffer;
   width: number;
   height: number;
@@ -48,7 +50,9 @@ export async function convertPollImageToAvif(file: UploadedPollImageFile | undef
   assertValidPollImageUpload(file);
   const originalMimeType = detectPollImageMimeType(file.buffer);
   if (!originalMimeType) {
-    throw new BadRequestException('A imagem precisa estar em um formato raster suportado.');
+    throw new BadRequestException(
+      'A imagem precisa estar em um formato raster suportado.',
+    );
   }
 
   const metadata = await readProcessablePollImageMetadata(file.buffer);
@@ -72,7 +76,9 @@ export async function convertPollImageToAvif(file: UploadedPollImageFile | undef
   };
 }
 
-export function assertValidPollImageUpload(file: UploadedPollImageFile | undefined): asserts file is UploadedPollImageFile {
+export function assertValidPollImageUpload(
+  file: UploadedPollImageFile | undefined,
+): asserts file is UploadedPollImageFile {
   if (!file) {
     throw new BadRequestException('Selecione uma imagem para enviar.');
   }
@@ -82,14 +88,22 @@ export function assertValidPollImageUpload(file: UploadedPollImageFile | undefin
   }
 
   const detectedMimeType = detectPollImageMimeType(file.buffer);
-  if (!detectedMimeType || !ALLOWED_POLL_IMAGE_MIME_TYPES.has(detectedMimeType)) {
-    throw new BadRequestException('A imagem precisa estar em um formato raster suportado.');
+  if (
+    !detectedMimeType ||
+    !ALLOWED_POLL_IMAGE_MIME_TYPES.has(detectedMimeType)
+  ) {
+    throw new BadRequestException(
+      'A imagem precisa estar em um formato raster suportado.',
+    );
   }
 
   file.mimetype = detectedMimeType;
 }
 
-export function buildPollImageObjectKey(pollId: string, imageId: string): string {
+export function buildPollImageObjectKey(
+  pollId: string,
+  imageId: string,
+): string {
   return `polls/${pollId}/images/${imageId}.avif`;
 }
 
@@ -103,24 +117,37 @@ async function readProcessablePollImageMetadata(buffer: Buffer): Promise<{
   pages?: number;
 }> {
   const metadata = await runPollImageOperation(
-    createPollSharp(buffer).timeout({ seconds: POLL_IMAGE_METADATA_TIMEOUT_SECONDS }).metadata(),
+    createPollSharp(buffer)
+      .timeout({ seconds: POLL_IMAGE_METADATA_TIMEOUT_SECONDS })
+      .metadata(),
     'Leitura da imagem',
   );
 
   if (!metadata.width || !metadata.height) {
-    throw new BadRequestException('Não foi possível identificar as dimensões da imagem.');
+    throw new BadRequestException(
+      'Não foi possível identificar as dimensões da imagem.',
+    );
   }
 
   if (metadata.pages && metadata.pages > 1) {
-    throw new BadRequestException('Imagens animadas ou com múltiplas páginas não são aceitas.');
+    throw new BadRequestException(
+      'Imagens animadas ou com múltiplas páginas não são aceitas.',
+    );
   }
 
-  if (metadata.width > MAX_POLL_IMAGE_DIMENSION_PIXELS || metadata.height > MAX_POLL_IMAGE_DIMENSION_PIXELS) {
-    throw new BadRequestException(`A imagem deve ter no máximo ${MAX_POLL_IMAGE_DIMENSION_PIXELS}px por lado.`);
+  if (
+    metadata.width > MAX_POLL_IMAGE_DIMENSION_PIXELS ||
+    metadata.height > MAX_POLL_IMAGE_DIMENSION_PIXELS
+  ) {
+    throw new BadRequestException(
+      `A imagem deve ter no máximo ${MAX_POLL_IMAGE_DIMENSION_PIXELS}px por lado.`,
+    );
   }
 
   if (metadata.width * metadata.height > MAX_POLL_IMAGE_DECODED_PIXELS) {
-    throw new BadRequestException('A imagem tem pixels demais para ser processada com segurança.');
+    throw new BadRequestException(
+      'A imagem tem pixels demais para ser processada com segurança.',
+    );
   }
 
   return {
@@ -130,7 +157,10 @@ async function readProcessablePollImageMetadata(buffer: Buffer): Promise<{
   };
 }
 
-async function runPollImageOperation<T>(operation: Promise<T>, operationName: string): Promise<T> {
+async function runPollImageOperation<T>(
+  operation: Promise<T>,
+  operationName: string,
+): Promise<T> {
   try {
     return await operation;
   } catch (error: unknown) {
@@ -143,15 +173,21 @@ async function runPollImageOperation<T>(operation: Promise<T>, operationName: st
     }
 
     if (isSharpInputLimitError(error)) {
-      throw new BadRequestException('A imagem excede os limites de processamento.');
+      throw new BadRequestException(
+        'A imagem excede os limites de processamento.',
+      );
     }
 
-    throw new BadRequestException(`${operationName} falhou. Envie uma imagem válida.`);
+    throw new BadRequestException(
+      `${operationName} falhou. Envie uma imagem válida.`,
+    );
   }
 }
 
 function isSharpTimeoutError(error: unknown): boolean {
-  return error instanceof Error && error.message.toLowerCase().includes('timeout');
+  return (
+    error instanceof Error && error.message.toLowerCase().includes('timeout')
+  );
 }
 
 function isSharpInputLimitError(error: unknown): boolean {
@@ -160,7 +196,11 @@ function isSharpInputLimitError(error: unknown): boolean {
   }
 
   const message = error.message.toLowerCase();
-  return message.includes('pixel limit') || message.includes('memory limit') || message.includes('exceeds');
+  return (
+    message.includes('pixel limit') ||
+    message.includes('memory limit') ||
+    message.includes('exceeds')
+  );
 }
 
 function detectPollImageMimeType(buffer: Buffer): string | undefined {
@@ -168,7 +208,11 @@ function detectPollImageMimeType(buffer: Buffer): string | undefined {
     return undefined;
   }
 
-  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+  if (
+    buffer
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
     return 'image/png';
   }
 
@@ -176,7 +220,10 @@ function detectPollImageMimeType(buffer: Buffer): string | undefined {
     return 'image/jpeg';
   }
 
-  if (buffer.subarray(0, 6).toString('ascii') === 'GIF87a' || buffer.subarray(0, 6).toString('ascii') === 'GIF89a') {
+  if (
+    buffer.subarray(0, 6).toString('ascii') === 'GIF87a' ||
+    buffer.subarray(0, 6).toString('ascii') === 'GIF89a'
+  ) {
     return 'image/gif';
   }
 
@@ -191,18 +238,25 @@ function detectPollImageMimeType(buffer: Buffer): string | undefined {
     return 'image/tiff';
   }
 
-  if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
     return 'image/webp';
   }
 
   if (buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
-    const brands = buffer.subarray(8, Math.min(buffer.length, 32)).toString('ascii');
+    const brands = buffer
+      .subarray(8, Math.min(buffer.length, 32))
+      .toString('ascii');
     if (/\b(?:avif|avis)\b/.test(brands)) {
       return 'image/avif';
     }
 
     if (/\b(?:heic|heix|hevc|hevx|mif1|msf1)\b/.test(brands)) {
-      return brands.includes('mif1') || brands.includes('msf1') ? 'image/heif' : 'image/heic';
+      return brands.includes('mif1') || brands.includes('msf1')
+        ? 'image/heif'
+        : 'image/heic';
     }
   }
 

@@ -40,7 +40,10 @@ describe('PublicPollsPageComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [PublicPollsPageComponent],
-      providers: [provideRouter([]), { provide: PollApiService, useValue: api }],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: api },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PublicPollsPageComponent);
@@ -59,7 +62,9 @@ describe('PublicPollsPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Sigiloso');
     expect(fixture.nativeElement.textContent).not.toContain('12 respostas');
     expect(fixture.nativeElement.textContent).not.toContain('2 itens');
-    expect(fixture.nativeElement.textContent).not.toContain('Usuários autenticados');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'Usuários autenticados',
+    );
   });
 
   it('should show vote and results actions for live public results', async () => {
@@ -78,7 +83,10 @@ describe('PublicPollsPageComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [PublicPollsPageComponent],
-      providers: [provideRouter([]), { provide: PollApiService, useValue: api }],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: api },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PublicPollsPageComponent);
@@ -97,10 +105,22 @@ describe('PublicPollsPageComponent', () => {
       canShowResults(poll: PollSummary): boolean;
     };
 
-    expect(component.pollStatusLabel({ ...polls[0], status: 'closed' })).toBe('Encerrada');
-    expect(component.pollStatusLabel({ ...polls[0], publishedAt: undefined })).toBe('Publicada');
-    expect(component.pollStatusLabel(polls[0])).toBe('Publicada em 01/06/2026, 07:00');
-    expect(component.canShowResults({ ...polls[0], resultsPublic: true, resultsLive: true })).toBe(true);
+    expect(component.pollStatusLabel({ ...polls[0], status: 'closed' })).toBe(
+      'Encerrada',
+    );
+    expect(
+      component.pollStatusLabel({ ...polls[0], publishedAt: undefined }),
+    ).toBe('Publicada');
+    expect(component.pollStatusLabel(polls[0])).toBe(
+      'Publicada em 01/06/2026, 07:00',
+    );
+    expect(
+      component.canShowResults({
+        ...polls[0],
+        resultsPublic: true,
+        resultsLive: true,
+      }),
+    ).toBe(true);
     expect(
       component.canShowResults({
         ...polls[0],
@@ -115,12 +135,17 @@ describe('PublicPollsPageComponent', () => {
   it('should show a localized error when public polls fail to load', async () => {
     TestBed.resetTestingModule();
     api = {
-      listPublicPolls: vi.fn().mockReturnValue(throwError(() => new Error('offline'))),
+      listPublicPolls: vi
+        .fn()
+        .mockReturnValue(throwError(() => new Error('offline'))),
     };
 
     await TestBed.configureTestingModule({
       imports: [PublicPollsPageComponent],
-      providers: [provideRouter([]), { provide: PollApiService, useValue: api }],
+      providers: [
+        provideRouter([]),
+        { provide: PollApiService, useValue: api },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PublicPollsPageComponent);
@@ -128,6 +153,8 @@ describe('PublicPollsPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Não foi possível carregar as votações.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Não foi possível carregar as votações.',
+    );
   });
 });

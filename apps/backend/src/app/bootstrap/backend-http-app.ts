@@ -20,13 +20,18 @@ export async function createBackendHttpApp(): Promise<INestApplication> {
   }
 }
 
-export async function configureBackendHttpApp(app: INestApplication): Promise<void> {
+export async function configureBackendHttpApp(
+  app: INestApplication,
+): Promise<void> {
   configureTrustedProxy(app);
   app.setGlobalPrefix(globalPrefix);
   app.enableShutdownHooks();
   // Keep authentication and ordinary mutations small. The eligibility CSV
   // endpoint is the only route that accepts a multi-megabyte JSON payload.
-  app.use('/api/admin/polls/:id/eligibility-enrollments/import', json({ limit: '6mb' }));
+  app.use(
+    '/api/admin/polls/:id/eligibility-enrollments/import',
+    json({ limit: '6mb' }),
+  );
   app.use(json({ limit: '256kb' }));
   app.use(urlencoded({ extended: true, limit: '64kb' }));
   app.use(requireTrustedMutationOrigin);
@@ -41,7 +46,9 @@ export async function configureBackendHttpApp(app: INestApplication): Promise<vo
   if (isSwaggerEnabled()) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('CACiC Voto API')
-      .setDescription('REST API for authentication, poll management, public polls, and vote submissions.')
+      .setDescription(
+        'REST API for authentication, poll management, public polls, and vote submissions.',
+      )
       .setVersion('1.0')
       .addCookieAuth(getAuthSessionCookieName())
       .build();
@@ -71,7 +78,9 @@ function configureTrustedProxy(app: INestApplication): void {
     throw new Error('TRUST_PROXY_HOPS must be configured in production.');
   }
   if (process.env.NODE_ENV === 'production' && !readCanonicalOrigin()) {
-    throw new Error('PUBLIC_ORIGIN must be configured as an HTTPS origin in production.');
+    throw new Error(
+      'PUBLIC_ORIGIN must be configured as an HTTPS origin in production.',
+    );
   }
 
   const hops = rawHops ? Number.parseInt(rawHops, 10) : 0;
@@ -79,18 +88,25 @@ function configureTrustedProxy(app: INestApplication): void {
     throw new Error('TRUST_PROXY_HOPS must be a non-negative integer.');
   }
 
-  const expressApp = app.getHttpAdapter().getInstance() as { set(name: string, value: unknown): void };
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set(name: string, value: unknown): void;
+  };
   expressApp.set('trust proxy', hops);
 }
 
 function readCanonicalOrigin(): string | undefined {
-  const rawOrigin = process.env.PUBLIC_ORIGIN?.trim() ?? process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
+  const rawOrigin =
+    process.env.PUBLIC_ORIGIN?.trim() ??
+    process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
   if (!rawOrigin) {
     return undefined;
   }
   try {
     const url = new URL(rawOrigin);
-    if (url.protocol === 'https:' || (process.env.NODE_ENV !== 'production' && url.protocol === 'http:')) {
+    if (
+      url.protocol === 'https:' ||
+      (process.env.NODE_ENV !== 'production' && url.protocol === 'http:')
+    ) {
       return url.origin;
     }
   } catch {
@@ -99,8 +115,16 @@ function readCanonicalOrigin(): string | undefined {
   return undefined;
 }
 
-export function requireTrustedMutationOrigin(request: Request, response: Response, next: NextFunction): void {
-  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
+export function requireTrustedMutationOrigin(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): void {
+  if (
+    request.method === 'GET' ||
+    request.method === 'HEAD' ||
+    request.method === 'OPTIONS'
+  ) {
     next();
     return;
   }
@@ -132,9 +156,10 @@ export function readMutationOrigins(): Set<string> {
     addOrigin(origins, 'http://localhost:3000');
     addOrigin(origins, 'http://localhost:4200');
   }
-  const configuredOrigins = process.env.NODE_ENV === 'production'
-    ? process.env.CSRF_ALLOWED_ORIGINS
-    : process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS;
+  const configuredOrigins =
+    process.env.NODE_ENV === 'production'
+      ? process.env.CSRF_ALLOWED_ORIGINS
+      : process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS;
   for (const value of (configuredOrigins ?? '').split(',')) {
     addOrigin(origins, value.trim());
   }
@@ -147,7 +172,10 @@ function addOrigin(origins: Set<string>, rawOrigin?: string): void {
   }
   try {
     const url = new URL(rawOrigin);
-    if (url.protocol === 'https:' || (process.env.NODE_ENV !== 'production' && url.protocol === 'http:')) {
+    if (
+      url.protocol === 'https:' ||
+      (process.env.NODE_ENV !== 'production' && url.protocol === 'http:')
+    ) {
       origins.add(url.origin);
     }
   } catch {

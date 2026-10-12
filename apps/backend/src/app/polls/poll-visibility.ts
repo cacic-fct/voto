@@ -5,7 +5,11 @@ import {
   PollStatus as DbPollStatus,
   Prisma,
 } from '@prisma/client';
-import { PollEligibilityRecord, PollRecord, PollResultsMetadata } from './poll-records';
+import {
+  PollEligibilityRecord,
+  PollRecord,
+  PollResultsMetadata,
+} from './poll-records';
 
 export function publicReadablePollWhere(now: Date): Prisma.PollWhereInput {
   return {
@@ -46,11 +50,17 @@ export function isPollPubliclyVisible(
     return false;
   }
 
-  return poll.status === DbPollStatus.PUBLISHED || (poll.status === DbPollStatus.CLOSED && poll.resultsPublic);
+  return (
+    poll.status === DbPollStatus.PUBLISHED ||
+    (poll.status === DbPollStatus.CLOSED && poll.resultsPublic)
+  );
 }
 
 export function isPollVotingOpen(
-  poll: Pick<PollRecord, 'status' | 'visibleFrom' | 'votingStartsAt' | 'votingEndsAt'>,
+  poll: Pick<
+    PollRecord,
+    'status' | 'visibleFrom' | 'votingStartsAt' | 'votingEndsAt'
+  >,
   now: Date,
 ): boolean {
   return (
@@ -64,17 +74,30 @@ export function isPollVotingOpen(
 export function isCacicElectionVotingPoll(
   poll: Pick<PollResultsMetadata, 'mode' | 'cacicElectionPhase'>,
 ): boolean {
-  return poll.mode === DbPollMode.CACIC_ELECTION && poll.cacicElectionPhase === DbCacicElectionPhase.ELECTION;
+  return (
+    poll.mode === DbPollMode.CACIC_ELECTION &&
+    poll.cacicElectionPhase === DbCacicElectionPhase.ELECTION
+  );
 }
 
 export function shouldRequireVotingEligibilityForRead(
   poll: Pick<PollEligibilityRecord, 'mode' | 'cacicElectionPhase'>,
 ): boolean {
-  return !(poll.mode === DbPollMode.CACIC_ELECTION && poll.cacicElectionPhase === DbCacicElectionPhase.SLATE_SUBMISSION);
+  return !(
+    poll.mode === DbPollMode.CACIC_ELECTION &&
+    poll.cacicElectionPhase === DbCacicElectionPhase.SLATE_SUBMISSION
+  );
 }
 
-export function assertPollAcceptsVoteResponses(poll: Pick<PollRecord, 'mode' | 'cacicElectionPhase'>): void {
-  if (poll.mode === DbPollMode.CACIC_ELECTION && poll.cacicElectionPhase !== DbCacicElectionPhase.ELECTION) {
-    throw new BadRequestException('Slate submissions must use the CACiC election slate endpoint.');
+export function assertPollAcceptsVoteResponses(
+  poll: Pick<PollRecord, 'mode' | 'cacicElectionPhase'>,
+): void {
+  if (
+    poll.mode === DbPollMode.CACIC_ELECTION &&
+    poll.cacicElectionPhase !== DbCacicElectionPhase.ELECTION
+  ) {
+    throw new BadRequestException(
+      'Slate submissions must use the CACiC election slate endpoint.',
+    );
   }
 }

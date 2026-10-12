@@ -20,7 +20,9 @@ describe('EventManagerIntegrationService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     call = jest.spyOn(GrpcUnaryClient.prototype, 'call');
-    service = new EventManagerIntegrationService(tokenService as unknown as KeycloakM2mTokenService);
+    service = new EventManagerIntegrationService(
+      tokenService as unknown as KeycloakM2mTokenService,
+    );
   });
 
   afterEach(() => {
@@ -66,7 +68,9 @@ describe('EventManagerIntegrationService', () => {
 
   it('checks attendance through gRPC', async () => {
     call.mockResolvedValue({ attended: true });
-    await expect(service.hasAttendance('event-1', 'user-1')).resolves.toBe(true);
+    await expect(service.hasAttendance('event-1', 'user-1')).resolves.toBe(
+      true,
+    );
     expect(call).toHaveBeenCalledWith(
       'CheckVotingAttendance',
       { eventId: 'event-1', userId: 'user-1' },
@@ -77,7 +81,12 @@ describe('EventManagerIntegrationService', () => {
 
   it('passes a bounded retry budget for vote-time attendance checks', async () => {
     call.mockResolvedValue({ attended: true });
-    await expect(service.hasAttendance('event-1', 'user-1', { timeoutMs: 25, maxAttempts: 1 })).resolves.toBe(true);
+    await expect(
+      service.hasAttendance('event-1', 'user-1', {
+        timeoutMs: 25,
+        maxAttempts: 1,
+      }),
+    ).resolves.toBe(true);
     expect(call).toHaveBeenCalledWith(
       'CheckVotingAttendance',
       { eventId: 'event-1', userId: 'user-1' },
@@ -89,12 +98,16 @@ describe('EventManagerIntegrationService', () => {
   it('rejects an invalid attendance response', async () => {
     call.mockResolvedValue({ attended: 'true' });
     await expect(service.hasAttendance('event-1', 'user-1')).rejects.toEqual(
-      expect.objectContaining({ message: 'Event Manager returned an invalid attendance response.' }),
+      expect.objectContaining({
+        message: 'Event Manager returned an invalid attendance response.',
+      }),
     );
   });
 
   it('wraps gRPC failures as service unavailable', async () => {
     call.mockRejectedValue(new Error('unavailable'));
-    await expect(service.listLinkableEvents()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(service.listLinkableEvents()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });

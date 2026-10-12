@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  signal,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -13,7 +18,14 @@ import { PollApiService } from './poll-api.service';
 @Component({
   selector: 'app-public-polls-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressBarModule],
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatChipsModule,
+    MatIconModule,
+    MatProgressBarModule,
+  ],
   templateUrl: './public-polls-page.component.html',
   styleUrl: './public-polls-page.component.scss',
 })
@@ -35,7 +47,9 @@ export class PublicPollsPageComponent {
       return 'Encerrada';
     }
 
-    return poll.publishedAt ? `Publicada em ${this.dateTimeFormatter.format(new Date(poll.publishedAt))}` : 'Publicada';
+    return poll.publishedAt
+      ? `Publicada em ${this.dateTimeFormatter.format(new Date(poll.publishedAt))}`
+      : 'Publicada';
   }
 
   protected canVote(poll: PollSummary): boolean {

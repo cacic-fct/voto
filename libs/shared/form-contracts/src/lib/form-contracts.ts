@@ -55,7 +55,11 @@ export type FormStarRatingSettings = {
 
 export type FormSchedulingInviteeMode = 'none' | 'optional' | 'required';
 
-export const FORM_SCHEDULING_INVITEE_MODES = ['none', 'optional', 'required'] as const satisfies readonly FormSchedulingInviteeMode[];
+export const FORM_SCHEDULING_INVITEE_MODES = [
+  'none',
+  'optional',
+  'required',
+] as const satisfies readonly FormSchedulingInviteeMode[];
 
 export type FormSchedulingAvailabilityWindow = {
   id: string;
@@ -150,7 +154,10 @@ export type FormResponse = {
 };
 
 export function isFormElementType(value: unknown): value is FormElementType {
-  return typeof value === 'string' && (FORM_ELEMENT_TYPES as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (FORM_ELEMENT_TYPES as readonly string[]).includes(value)
+  );
 }
 
 export function isFormAnswerElementType(type: FormElementType): boolean {
@@ -171,7 +178,14 @@ export function normalizeFormStringArrayValue(value: unknown): string[] | null {
     return null;
   }
 
-  const normalized = [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))];
+  const normalized = [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
   return normalized.length > 0 ? normalized : null;
 }
 
@@ -183,7 +197,9 @@ export function normalizeFormNumberValue(value: unknown): number | null {
   return value;
 }
 
-export function normalizeFormResponseAnswers(answers: readonly FormResponseAnswer[]): FormResponseAnswer[] {
+export function normalizeFormResponseAnswers(
+  answers: readonly FormResponseAnswer[],
+): FormResponseAnswer[] {
   const normalized = new Map<string, FormAnswerValue>();
 
   for (const answer of answers) {
@@ -193,5 +209,8 @@ export function normalizeFormResponseAnswers(answers: readonly FormResponseAnswe
     }
   }
 
-  return [...normalized.entries()].map(([elementId, value]) => ({ elementId, value }));
+  return [...normalized.entries()].map(([elementId, value]) => ({
+    elementId,
+    value,
+  }));
 }

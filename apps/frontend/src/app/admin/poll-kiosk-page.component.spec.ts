@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormGroup } from '@angular/forms';
-import { ActivatedRoute, ParamMap, Router, convertToParamMap, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  ParamMap,
+  Router,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import { Poll } from '@org/voting-contracts';
 import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -145,7 +151,9 @@ describe('PollKioskPageComponent', () => {
     const pollB = { ...poll, id: 'poll-2', title: 'Outra votação' };
     const dynamicApi = {
       ...api,
-      getAdminPoll: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
+      getAdminPoll: vi
+        .fn()
+        .mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
     };
     await TestBed.configureTestingModule({
       imports: [PollKioskPageComponent],

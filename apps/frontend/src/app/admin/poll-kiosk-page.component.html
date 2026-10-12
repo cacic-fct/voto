@@ -4,7 +4,11 @@
   }
 
   <header class="kiosk-header">
-    <a matIconButton routerLink="/admin" aria-label="Voltar para a área restrita">
+    <a
+      matIconButton
+      routerLink="/admin"
+      aria-label="Voltar para a área restrita"
+    >
       <mat-icon>arrow_back</mat-icon>
     </a>
     <div>
@@ -54,8 +58,13 @@
             autocapitalize="none"
             spellcheck="false"
           />
-          <mat-hint>Use o endereço principal cadastrado na Conta CACiC.</mat-hint>
-          @if (form.controls.primaryEmail.touched && form.controls.primaryEmail.invalid) {
+          <mat-hint
+            >Use o endereço principal cadastrado na Conta CACiC.</mat-hint
+          >
+          @if (
+            form.controls.primaryEmail.touched &&
+            form.controls.primaryEmail.invalid
+          ) {
             <mat-error>Informe um e-mail válido.</mat-error>
           }
         </mat-form-field>
@@ -72,8 +81,12 @@
             aria-describedby="totp-help"
             (input)="normalizeTotpCode($event)"
           />
-          <mat-hint id="totp-help">Código de seis dígitos exibido na carteira CACiC.</mat-hint>
-          @if (form.controls.totpCode.touched && form.controls.totpCode.invalid) {
+          <mat-hint id="totp-help"
+            >Código de seis dígitos exibido na carteira CACiC.</mat-hint
+          >
+          @if (
+            form.controls.totpCode.touched && form.controls.totpCode.invalid
+          ) {
             <mat-error>Informe os seis dígitos do código.</mat-error>
           }
         </mat-form-field>

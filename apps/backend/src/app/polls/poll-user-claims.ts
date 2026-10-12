@@ -28,11 +28,15 @@ export function hasNonEmptyRawValue(rawValue: unknown): boolean {
     : typeof rawValue === 'number' && Number.isFinite(rawValue);
 }
 
-export function readUserEnrollmentNumber(user: AuthenticatedPrincipal): string | null {
+export function readUserEnrollmentNumber(
+  user: AuthenticatedPrincipal,
+): string | null {
   return readEnrollmentNumberFromClaims(user.claims);
 }
 
-export function readEnrollmentNumberFromClaims(claims: Record<string, unknown>): string | null {
+export function readEnrollmentNumberFromClaims(
+  claims: Record<string, unknown>,
+): string | null {
   for (const value of readClaimValuesFromClaims(claims, [
     'enrollmentNumber',
     'enrollment_number',
@@ -49,11 +53,16 @@ export function readEnrollmentNumberFromClaims(claims: Record<string, unknown>):
 }
 
 export function hasUnespEmail(user: AuthenticatedPrincipal): boolean {
-  return readUserEmails(user).some((email) => email.endsWith(UNESP_EMAIL_DOMAIN));
+  return readUserEmails(user).some((email) =>
+    email.endsWith(UNESP_EMAIL_DOMAIN),
+  );
 }
 
 export function readUserEmails(user: AuthenticatedPrincipal): string[] {
-  const emails = [user.email, ...readClaimValues(user, ['email', 'secondary_emails', 'secondaryEmails'])]
+  const emails = [
+    user.email,
+    ...readClaimValues(user, ['email', 'secondary_emails', 'secondaryEmails']),
+  ]
     .filter((value): value is string => typeof value === 'string')
     .flatMap((email) => parseStringList(email))
     .map((email) => email.trim().toLowerCase())
@@ -62,19 +71,25 @@ export function readUserEmails(user: AuthenticatedPrincipal): string[] {
   return [...new Set(emails)];
 }
 
-export function hasUndergraduateUnespRole(user: AuthenticatedPrincipal): boolean {
+export function hasUndergraduateUnespRole(
+  user: AuthenticatedPrincipal,
+): boolean {
   return readClaimValues(user, ['unesp_role', 'unespRole'])
     .filter((value): value is string => typeof value === 'string')
     .some((role) => role.trim() === UNDERGRADUATE_UNESP_ROLE);
 }
 
-export function hasComputerScienceEnrollmentPattern(enrollmentNumber: string | null): boolean {
+export function hasComputerScienceEnrollmentPattern(
+  enrollmentNumber: string | null,
+): boolean {
   const normalizedEnrollmentNumber = enrollmentNumber?.replace(/\D/g, '');
   if (!normalizedEnrollmentNumber || normalizedEnrollmentNumber.length < 4) {
     return false;
   }
 
-  return normalizedEnrollmentNumber.substring(2, 4) === COMPUTER_SCIENCE_COURSE_CODE;
+  return (
+    normalizedEnrollmentNumber.substring(2, 4) === COMPUTER_SCIENCE_COURSE_CODE
+  );
 }
 
 export function hasVerifiedUnespRole(user: AuthenticatedPrincipal): boolean {
@@ -86,13 +101,21 @@ export function hasVerifiedUnespRole(user: AuthenticatedPrincipal): boolean {
   ]).some((value) => readBooleanValue(value));
 }
 
-export function readClaimValues(user: AuthenticatedPrincipal, claimNames: readonly string[]): unknown[] {
+export function readClaimValues(
+  user: AuthenticatedPrincipal,
+  claimNames: readonly string[],
+): unknown[] {
   return readClaimValuesFromClaims(user.claims, claimNames);
 }
 
-export function readClaimValuesFromClaims(claims: Record<string, unknown>, claimNames: readonly string[]): unknown[] {
+export function readClaimValuesFromClaims(
+  claims: Record<string, unknown>,
+  claimNames: readonly string[],
+): unknown[] {
   const values: unknown[] = [];
-  const attributes = isRecord(claims['attributes']) ? (claims['attributes'] as Record<string, unknown>) : undefined;
+  const attributes = isRecord(claims['attributes'])
+    ? (claims['attributes'] as Record<string, unknown>)
+    : undefined;
 
   for (const claimName of claimNames) {
     values.push(...flattenClaimValue(claims[claimName]));
@@ -127,14 +150,19 @@ export function parseStringList(value: string): string[] {
       const parsed = JSON.parse(trimmed) as unknown;
       /* istanbul ignore else -- valid JSON that starts with "[" parses as an array. */
       if (Array.isArray(parsed)) {
-        return parsed.filter((item): item is string => typeof item === 'string');
+        return parsed.filter(
+          (item): item is string => typeof item === 'string',
+        );
       }
     } catch {
       return [trimmed];
     }
   }
 
-  return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+  return trimmed
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export function readBooleanValue(value: unknown): boolean {
@@ -154,7 +182,10 @@ export function toPollResultsVoter(user: {
 }): PollResultsVoter {
   const claims = isRecord(user.claims) ? user.claims : {};
   const enrollmentNumber = readEnrollmentNumberFromClaims(claims);
-  const unespRoles = readClaimValuesFromClaims(claims, ['unesp_role', 'unespRole'])
+  const unespRoles = readClaimValuesFromClaims(claims, [
+    'unesp_role',
+    'unespRole',
+  ])
     .filter((value): value is string => typeof value === 'string')
     .map((value) => value.trim())
     .filter(Boolean);
@@ -162,14 +193,21 @@ export function toPollResultsVoter(user: {
   return {
     userId: user.id,
     name: user.name ?? readStringClaimFromClaims(claims, 'name'),
-    preferredUsername: user.preferredUsername ?? readStringClaimFromClaims(claims, 'preferred_username'),
+    preferredUsername:
+      user.preferredUsername ??
+      readStringClaimFromClaims(claims, 'preferred_username'),
     email: user.email ?? readStringClaimFromClaims(claims, 'email'),
-    ...(unespRoles.length > 0 ? { unespRole: [...new Set(unespRoles)].join(', ') } : {}),
+    ...(unespRoles.length > 0
+      ? { unespRole: [...new Set(unespRoles)].join(', ') }
+      : {}),
     ...(enrollmentNumber ? { enrollmentNumber } : {}),
   };
 }
 
-export function readStringClaimFromClaims(claims: Record<string, unknown>, claimName: string): string | undefined {
+export function readStringClaimFromClaims(
+  claims: Record<string, unknown>,
+  claimName: string,
+): string | undefined {
   const value = claims[claimName];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

@@ -1,6 +1,23 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Req, Res, Sse } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Put,
+  Req,
+  Res,
+  Sse,
+} from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import { ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCookieAuth,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type {
   AdminCacicElectionSlate,
   CacicElectionSlate,
@@ -15,7 +32,10 @@ import type { Observable } from 'rxjs';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import type { AuthenticatedRequest } from '../auth/auth.types';
-import { SubmitCacicElectionSlateDto, SubmitPollResponseDto } from './dto/poll.dto';
+import {
+  SubmitCacicElectionSlateDto,
+  SubmitPollResponseDto,
+} from './dto/poll.dto';
 import { PollImagesService } from './poll-images.service';
 import { PollsService } from './polls.service';
 
@@ -36,13 +56,20 @@ export class PublicPollsController {
   }
 
   @Get('direct/:directLinkToken')
-  @ApiOperation({ summary: 'Read a published poll through a direct voting link' })
-  @ApiOkResponse({ description: 'Published poll definition for a direct link.' })
+  @ApiOperation({
+    summary: 'Read a published poll through a direct voting link',
+  })
+  @ApiOkResponse({
+    description: 'Published poll definition for a direct link.',
+  })
   getPollByDirectLink(
     @Param('directLinkToken') directLinkToken: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<Poll> {
-    return this.polls.getPublishedPollByDirectLink(directLinkToken, request.user);
+    return this.polls.getPublishedPollByDirectLink(
+      directLinkToken,
+      request.user,
+    );
   }
 
   @Get('direct/:directLinkToken/images/:imageId')
@@ -54,10 +81,18 @@ export class PublicPollsController {
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
-    const pollId = await this.polls.assertPublishedDirectLinkPollReadable(directLinkToken, request.user);
-    const image = await this.pollImages.getPollImage(pollId, imageId, request.user, {
-      allowPublishedRead: true,
-    });
+    const pollId = await this.polls.assertPublishedDirectLinkPollReadable(
+      directLinkToken,
+      request.user,
+    );
+    const image = await this.pollImages.getPollImage(
+      pollId,
+      imageId,
+      request.user,
+      {
+        allowPublishedRead: true,
+      },
+    );
     response.setHeader('Content-Type', image.contentType);
     response.setHeader('Cache-Control', 'private, max-age=86400');
     if (image.contentLength !== undefined) {
@@ -67,27 +102,47 @@ export class PublicPollsController {
   }
 
   @Get('direct/:directLinkToken/results')
-  @ApiOperation({ summary: 'Read public poll results through a direct voting link when enabled' })
-  @ApiOkResponse({ description: 'Public poll results without voter identity data.' })
+  @ApiOperation({
+    summary:
+      'Read public poll results through a direct voting link when enabled',
+  })
+  @ApiOkResponse({
+    description: 'Public poll results without voter identity data.',
+  })
   getDirectLinkPollResults(
     @Param('directLinkToken') directLinkToken: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<PollResults> {
-    return this.polls.getDirectLinkPublicPollResults(directLinkToken, request.user);
+    return this.polls.getDirectLinkPublicPollResults(
+      directLinkToken,
+      request.user,
+    );
   }
 
   @Get('direct/:directLinkToken/responses/me')
-  @ApiOperation({ summary: 'Read the current voter response state through a direct voting link' })
-  @ApiOkResponse({ description: 'Current voter response state and editable response when available.' })
+  @ApiOperation({
+    summary:
+      'Read the current voter response state through a direct voting link',
+  })
+  @ApiOkResponse({
+    description:
+      'Current voter response state and editable response when available.',
+  })
   getMyDirectLinkResponse(
     @Param('directLinkToken') directLinkToken: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<PollUserResponseState> {
-    return this.polls.getDirectLinkUserResponseState(directLinkToken, request.user);
+    return this.polls.getDirectLinkUserResponseState(
+      directLinkToken,
+      request.user,
+    );
   }
 
   @Sse('direct/:directLinkToken/results/events')
-  @ApiOperation({ summary: 'Stream public poll result updates through a direct voting link when enabled' })
+  @ApiOperation({
+    summary:
+      'Stream public poll result updates through a direct voting link when enabled',
+  })
   streamDirectLinkPollResults(
     @Param('directLinkToken') directLinkToken: string,
     @Req() request: AuthenticatedRequest,
@@ -108,7 +163,11 @@ export class PublicPollsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: SubmitPollResponseDto,
   ): Promise<PollResponse> {
-    return this.polls.submitDirectLinkResponse(directLinkToken, body, request.user);
+    return this.polls.submitDirectLinkResponse(
+      directLinkToken,
+      body,
+      request.user,
+    );
   }
 
   @Get(':id')
@@ -131,9 +190,14 @@ export class PublicPollsController {
     @Res() response: Response,
   ): Promise<void> {
     await this.polls.assertPublishedPollReadable(id, request.user);
-    const image = await this.pollImages.getPollImage(id, imageId, request.user, {
-      allowPublishedRead: true,
-    });
+    const image = await this.pollImages.getPollImage(
+      id,
+      imageId,
+      request.user,
+      {
+        allowPublishedRead: true,
+      },
+    );
     response.setHeader('Content-Type', image.contentType);
     response.setHeader('Cache-Control', 'private, max-age=86400');
     if (image.contentLength !== undefined) {
@@ -144,7 +208,9 @@ export class PublicPollsController {
 
   @Get(':id/results')
   @ApiOperation({ summary: 'Read public poll results when enabled' })
-  @ApiOkResponse({ description: 'Public poll results without voter identity data.' })
+  @ApiOkResponse({
+    description: 'Public poll results without voter identity data.',
+  })
   getPollResults(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
@@ -154,7 +220,10 @@ export class PublicPollsController {
 
   @Get(':id/cacic-election/slates')
   @ApiOperation({ summary: 'List approved CACiC election slate submissions' })
-  @ApiOkResponse({ description: 'Approved slate submissions without private identifier fields.' })
+  @ApiOkResponse({
+    description:
+      'Approved slate submissions without private identifier fields.',
+  })
   listCacicElectionSlates(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
@@ -163,7 +232,10 @@ export class PublicPollsController {
   }
 
   @Get(':id/cacic-election/slates/me')
-  @ApiOperation({ summary: 'Read the current authenticated user CACiC election slate submission' })
+  @ApiOperation({
+    summary:
+      'Read the current authenticated user CACiC election slate submission',
+  })
   @ApiOkResponse({ description: 'Current user slate submission when present.' })
   getMyCacicElectionSlate(
     @Param('id') id: string,
@@ -173,8 +245,12 @@ export class PublicPollsController {
   }
 
   @Put(':id/cacic-election/slates/me')
-  @ApiOperation({ summary: 'Submit or resubmit the current user CACiC election slate' })
-  @ApiOkResponse({ description: 'Stored slate submission without private identifier fields.' })
+  @ApiOperation({
+    summary: 'Submit or resubmit the current user CACiC election slate',
+  })
+  @ApiOkResponse({
+    description: 'Stored slate submission without private identifier fields.',
+  })
   submitCacicElectionSlate(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
@@ -185,7 +261,10 @@ export class PublicPollsController {
 
   @Get(':id/responses/me')
   @ApiOperation({ summary: 'Read the current voter response state for a poll' })
-  @ApiOkResponse({ description: 'Current voter response state and editable response when available.' })
+  @ApiOkResponse({
+    description:
+      'Current voter response state and editable response when available.',
+  })
   getMyResponse(
     @Param('id') id: string,
     @Req() request: AuthenticatedRequest,
@@ -224,7 +303,8 @@ export class PublicPollsController {
         stream.destroy();
       }
     };
-    const canObserveAbort = typeof request.once === 'function' && typeof request.off === 'function';
+    const canObserveAbort =
+      typeof request.once === 'function' && typeof request.off === 'function';
     if (canObserveAbort) {
       request.once('aborted', abort);
     }

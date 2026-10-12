@@ -5,8 +5,14 @@ import { PollBuilderDraftService } from './poll-builder-draft.service';
 describe('PollBuilderDraftService', () => {
   let service: PollBuilderDraftService;
 
-  function textEvent(value: string, tag: 'input' | 'textarea' = 'input'): Event {
-    const element = tag === 'input' ? document.createElement('input') : document.createElement('textarea');
+  function textEvent(
+    value: string,
+    tag: 'input' | 'textarea' = 'input',
+  ): Event {
+    const element =
+      tag === 'input'
+        ? document.createElement('input')
+        : document.createElement('textarea');
     element.value = value;
     return { target: element } as unknown as Event;
   }
@@ -95,9 +101,15 @@ describe('PollBuilderDraftService', () => {
     service.updateVotingEndsAtDate(new Date(2026, 5, 27));
     service.updateVotingEndsAtTime(textEvent('18:12'));
 
-    expect(service.draft().visibleFrom).toBe(new Date(2026, 5, 27, 9, 10).toISOString());
-    expect(service.draft().votingStartsAt).toBe(new Date(2026, 5, 27, 10, 11).toISOString());
-    expect(service.draft().votingEndsAt).toBe(new Date(2026, 5, 27, 18, 12).toISOString());
+    expect(service.draft().visibleFrom).toBe(
+      new Date(2026, 5, 27, 9, 10).toISOString(),
+    );
+    expect(service.draft().votingStartsAt).toBe(
+      new Date(2026, 5, 27, 10, 11).toISOString(),
+    );
+    expect(service.draft().votingEndsAt).toBe(
+      new Date(2026, 5, 27, 18, 12).toISOString(),
+    );
   });
 
   it('should copy the last scheduling availability date when adding another window', () => {
@@ -109,7 +121,9 @@ describe('PollBuilderDraftService', () => {
 
     const [updatedElement] = service.draft().elements;
     expect(updatedElement.settings?.scheduling?.availability).toHaveLength(3);
-    expect(updatedElement.settings?.scheduling?.availability.at(-1)?.date).toBe(lastDate);
+    expect(updatedElement.settings?.scheduling?.availability.at(-1)?.date).toBe(
+      lastDate,
+    );
   });
 
   it('should clear options when a choice element becomes informational', () => {
@@ -146,7 +160,9 @@ describe('PollBuilderDraftService', () => {
   });
 
   it('should only keep verified role requirement for computer science eligibility', () => {
-    service.updateVoterEligibilitySource({ value: 'computerScienceStudents' } as never);
+    service.updateVoterEligibilitySource({
+      value: 'computerScienceStudents',
+    } as never);
     service.updateRequireVerifiedUnespRole({ checked: true } as never);
 
     expect(service.draft().requireVerifiedUnespRole).toBe(true);
@@ -254,7 +270,9 @@ describe('PollBuilderDraftService', () => {
 
   it('should update poll text fields and reset to a new poll', () => {
     service.updatePollTitle(textEvent(' Assembleia '));
-    service.updatePollDescription(textEvent('Descrição da votação', 'textarea'));
+    service.updatePollDescription(
+      textEvent('Descrição da votação', 'textarea'),
+    );
 
     expect(service.draft().title).toBe(' Assembleia ');
     expect(service.draft().description).toBe('Descrição da votação');
@@ -274,11 +292,16 @@ describe('PollBuilderDraftService', () => {
 
     service.dropElement({ previousIndex: 0, currentIndex: 1 } as never);
 
-    expect(service.draft().elements.map((element) => element.id)).toEqual([second.id, first.id]);
+    expect(service.draft().elements.map((element) => element.id)).toEqual([
+      second.id,
+      first.id,
+    ]);
 
     service.removeElement(second.id);
 
-    expect(service.draft().elements.map((element) => element.id)).toEqual([first.id]);
+    expect(service.draft().elements.map((element) => element.id)).toEqual([
+      first.id,
+    ]);
   });
 
   it('should add, edit, and remove choice options', () => {
@@ -288,12 +311,19 @@ describe('PollBuilderDraftService', () => {
 
     service.addOption(element.id);
     service.updateOptionLabel(element.id, firstOption.id, textEvent('Sim'));
-    service.updateOptionDescription(element.id, firstOption.id, textEvent('Voto favorável', 'textarea'));
+    service.updateOptionDescription(
+      element.id,
+      firstOption.id,
+      textEvent('Voto favorável', 'textarea'),
+    );
     service.removeOption(element.id, element.options[1].id);
 
     const updatedElement = service.draft().elements[0];
     expect(updatedElement.options).toHaveLength(2);
-    expect(updatedElement.options[0]).toMatchObject({ label: 'Sim', description: 'Voto favorável' });
+    expect(updatedElement.options[0]).toMatchObject({
+      label: 'Sim',
+      description: 'Voto favorável',
+    });
   });
 
   it('should update element text, required state, and create missing choice options when needed', () => {
@@ -301,7 +331,10 @@ describe('PollBuilderDraftService', () => {
     const element = service.draft().elements[0];
 
     service.updateElementTitle(element.id, textEvent('Título atualizado'));
-    service.updateElementDescription(element.id, textEvent('Descrição atualizada', 'textarea'));
+    service.updateElementDescription(
+      element.id,
+      textEvent('Descrição atualizada', 'textarea'),
+    );
     service.updateElementRequired(element.id, { checked: true } as never);
     service.updateElementType(element.id, { value: 'singleChoice' } as never);
 
@@ -323,10 +356,28 @@ describe('PollBuilderDraftService', () => {
 
     service.addGridOption(element.id, 'rows');
     service.addGridOption(element.id, 'columns');
-    service.updateGridOptionLabel(element.id, 'rows', firstRow?.id ?? '', textEvent('Atividade'));
-    service.updateGridOptionDescription(element.id, 'columns', firstColumn?.id ?? '', textEvent('Período matutino'));
-    service.removeGridOption(element.id, 'rows', element.settings?.grid?.rows[1].id ?? '');
-    service.removeGridOption(element.id, 'columns', element.settings?.grid?.columns[1].id ?? '');
+    service.updateGridOptionLabel(
+      element.id,
+      'rows',
+      firstRow?.id ?? '',
+      textEvent('Atividade'),
+    );
+    service.updateGridOptionDescription(
+      element.id,
+      'columns',
+      firstColumn?.id ?? '',
+      textEvent('Período matutino'),
+    );
+    service.removeGridOption(
+      element.id,
+      'rows',
+      element.settings?.grid?.rows[1].id ?? '',
+    );
+    service.removeGridOption(
+      element.id,
+      'columns',
+      element.settings?.grid?.columns[1].id ?? '',
+    );
 
     const grid = service.draft().elements[0].settings?.grid;
     expect(grid?.rows).toHaveLength(2);
@@ -341,7 +392,9 @@ describe('PollBuilderDraftService', () => {
 
     service.updateVotingStyle({ value: 'invalid' } as never);
     service.updateVoterEligibilitySource({ value: 'invalid' } as never);
-    service.updateElementType(original.elements[0].id, { value: 'invalid' } as never);
+    service.updateElementType(original.elements[0].id, {
+      value: 'invalid',
+    } as never);
 
     expect(service.draft()).toEqual(original);
   });
@@ -352,12 +405,23 @@ describe('PollBuilderDraftService', () => {
 
     service.updateLinearScaleMin(elementId, { value: 7 } as never);
     service.updateLinearScaleMax(elementId, { value: 1 } as never);
-    expect(service.draft().elements[0].settings?.linearScale).toMatchObject({ min: 1, max: 5 });
+    expect(service.draft().elements[0].settings?.linearScale).toMatchObject({
+      min: 1,
+      max: 5,
+    });
 
     service.updateLinearScaleMin(elementId, { value: 0 } as never);
     service.updateLinearScaleMax(elementId, { value: 10 } as never);
-    service.updateLinearScaleLabel(elementId, 'minLabel', textEvent('Discordo'));
-    service.updateLinearScaleLabel(elementId, 'maxLabel', textEvent('Concordo'));
+    service.updateLinearScaleLabel(
+      elementId,
+      'minLabel',
+      textEvent('Discordo'),
+    );
+    service.updateLinearScaleLabel(
+      elementId,
+      'maxLabel',
+      textEvent('Concordo'),
+    );
 
     expect(service.draft().elements[0].settings?.linearScale).toEqual({
       min: 0,
@@ -372,31 +436,68 @@ describe('PollBuilderDraftService', () => {
     const elementId = service.draft().elements[0].id;
 
     service.updateStarRatingMax(elementId, { value: 2 } as never);
-    expect(service.draft().elements[0].settings?.starRating).toEqual({ max: 5 });
+    expect(service.draft().elements[0].settings?.starRating).toEqual({
+      max: 5,
+    });
 
     service.updateStarRatingMax(elementId, { value: 10 } as never);
-    expect(service.draft().elements[0].settings?.starRating).toEqual({ max: 10 });
+    expect(service.draft().elements[0].settings?.starRating).toEqual({
+      max: 10,
+    });
   });
 
   it('should update scheduling settings and availability windows', () => {
     service.addElement('scheduling');
     const elementId = service.draft().elements[0].id;
-    const firstAvailability = service.draft().elements[0].settings?.scheduling?.availability[0];
+    const firstAvailability =
+      service.draft().elements[0].settings?.scheduling?.availability[0];
 
     service.updateSchedulingText(elementId, 'hostName', textEvent('Comissão'));
     service.updateSchedulingText(elementId, 'location', textEvent('Sala 1'));
-    service.updateSchedulingTimezone(elementId, { value: 'America/Sao_Paulo' } as never);
-    service.updateSchedulingNumber(elementId, 'durationMinutes', { value: 60 } as never);
-    service.updateSchedulingNumber(elementId, 'slotIntervalMinutes', { value: 15 } as never);
-    service.updateSchedulingNumber(elementId, 'bufferBeforeMinutes', { value: 5 } as never);
-    service.updateSchedulingNumber(elementId, 'bufferAfterMinutes', { value: 10 } as never);
-    service.updateSchedulingNumber(elementId, 'maxInvitees', { value: 4 } as never);
-    service.updateSchedulingInviteeMode(elementId, { value: 'required' } as never);
+    service.updateSchedulingTimezone(elementId, {
+      value: 'America/Sao_Paulo',
+    } as never);
+    service.updateSchedulingNumber(elementId, 'durationMinutes', {
+      value: 60,
+    } as never);
+    service.updateSchedulingNumber(elementId, 'slotIntervalMinutes', {
+      value: 15,
+    } as never);
+    service.updateSchedulingNumber(elementId, 'bufferBeforeMinutes', {
+      value: 5,
+    } as never);
+    service.updateSchedulingNumber(elementId, 'bufferAfterMinutes', {
+      value: 10,
+    } as never);
+    service.updateSchedulingNumber(elementId, 'maxInvitees', {
+      value: 4,
+    } as never);
+    service.updateSchedulingInviteeMode(elementId, {
+      value: 'required',
+    } as never);
     service.addSchedulingAvailability(elementId);
-    service.updateSchedulingAvailabilityDate(elementId, firstAvailability?.id ?? '', new Date(2026, 5, 24));
-    service.updateSchedulingAvailability(elementId, firstAvailability?.id ?? '', 'startTime', textEvent('08:30'));
-    service.updateSchedulingAvailability(elementId, firstAvailability?.id ?? '', 'endTime', textEvent('11:30'));
-    service.removeSchedulingAvailability(elementId, service.draft().elements[0].settings?.scheduling?.availability[1].id ?? '');
+    service.updateSchedulingAvailabilityDate(
+      elementId,
+      firstAvailability?.id ?? '',
+      new Date(2026, 5, 24),
+    );
+    service.updateSchedulingAvailability(
+      elementId,
+      firstAvailability?.id ?? '',
+      'startTime',
+      textEvent('08:30'),
+    );
+    service.updateSchedulingAvailability(
+      elementId,
+      firstAvailability?.id ?? '',
+      'endTime',
+      textEvent('11:30'),
+    );
+    service.removeSchedulingAvailability(
+      elementId,
+      service.draft().elements[0].settings?.scheduling?.availability[1].id ??
+        '',
+    );
 
     const scheduling = service.draft().elements[0].settings?.scheduling;
     expect(scheduling).toMatchObject({
@@ -422,9 +523,13 @@ describe('PollBuilderDraftService', () => {
     service.addElement('scheduling');
     const elementId = service.draft().elements[0].id;
 
-    service.updateSchedulingNumber(elementId, 'durationMinutes', { value: '60' } as never);
+    service.updateSchedulingNumber(elementId, 'durationMinutes', {
+      value: '60',
+    } as never);
     service.updateSchedulingTimezone(elementId, { value: '' } as never);
-    service.updateSchedulingInviteeMode(elementId, { value: 'invalid' } as never);
+    service.updateSchedulingInviteeMode(elementId, {
+      value: 'invalid',
+    } as never);
     expect(service.draft().elements[0].settings?.scheduling).toMatchObject({
       durationMinutes: 30,
       inviteeMode: 'optional',
@@ -446,7 +551,11 @@ describe('PollBuilderDraftService', () => {
     expect(service.isAnswerElement('statement')).toBe(false);
     expect(service.isAnswerElement('time')).toBe(true);
     expect(service.elementTypeLabel('shortText')).toBe('Resposta curta');
-    expect(service.elementTypeOption('unknown' as never)).toEqual({ type: 'unknown', label: 'unknown', icon: 'help' });
+    expect(service.elementTypeOption('unknown' as never)).toEqual({
+      type: 'unknown',
+      label: 'unknown',
+      icon: 'help',
+    });
     expect(service.statusLabel('draft')).toBe('Rascunho');
     expect(service.statusLabel('published')).toBe('Publicada');
     expect(service.statusLabel('closed')).toBe('Encerrada');

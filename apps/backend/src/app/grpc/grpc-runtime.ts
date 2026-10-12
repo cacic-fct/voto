@@ -12,7 +12,11 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 type UnknownMethod = MethodDefinition<unknown, unknown>;
-const TRANSIENT_CODES = new Set([status.UNAVAILABLE, status.DEADLINE_EXCEEDED, status.RESOURCE_EXHAUSTED]);
+const TRANSIENT_CODES = new Set([
+  status.UNAVAILABLE,
+  status.DEADLINE_EXCEEDED,
+  status.RESOURCE_EXHAUSTED,
+]);
 
 export function authorizationMetadata(accessToken: string): Metadata {
   const metadata = new Metadata();
@@ -20,7 +24,11 @@ export function authorizationMetadata(accessToken: string): Metadata {
   return metadata;
 }
 
-export function loadService(fileName: string, packageSegments: string[], serviceName: string): ServiceDefinition {
+export function loadService(
+  fileName: string,
+  packageSegments: string[],
+  serviceName: string,
+): ServiceDefinition {
   const configuredRoot = process.env.CACIC_GRPC_PROTO_ROOT?.trim();
   const candidates = [
     ...(configuredRoot ? [join(configuredRoot, fileName)] : []),
@@ -41,18 +49,24 @@ export function loadService(fileName: string, packageSegments: string[], service
   let current: GrpcObject | undefined = loadPackageDefinition(definition);
   for (const segment of packageSegments) {
     const next: unknown = current?.[segment];
-    if (typeof next !== 'object' || next === null) throw new Error(`Missing gRPC package in ${protoPath}.`);
+    if (typeof next !== 'object' || next === null)
+      throw new Error(`Missing gRPC package in ${protoPath}.`);
     current = next as GrpcObject;
   }
-  const service = current[serviceName] as { service?: ServiceDefinition } | undefined;
-  if (!service?.service) throw new Error(`Missing gRPC service ${serviceName}.`);
+  const service = current[serviceName] as
+    { service?: ServiceDefinition } | undefined;
+  if (!service?.service)
+    throw new Error(`Missing gRPC service ${serviceName}.`);
   return service.service;
 }
 
 export class GrpcUnaryClient {
   private readonly client: Client;
 
-  constructor(target: string, private readonly service: ServiceDefinition) {
+  constructor(
+    target: string,
+    private readonly service: ServiceDefinition,
+  ) {
     this.client = new Client(target, ChannelCredentials.createInsecure(), {
       'grpc.keepalive_time_ms': 60_000,
       'grpc.keepalive_timeout_ms': 10_000,
@@ -64,7 +78,11 @@ export class GrpcUnaryClient {
     methodName: string,
     request: unknown,
     metadata: Metadata,
-    options: { idempotent?: boolean; maxAttempts?: number; timeoutMs?: number } = {},
+    options: {
+      idempotent?: boolean;
+      maxAttempts?: number;
+      timeoutMs?: number;
+    } = {},
   ): Promise<T> {
     const method = this.method(methodName);
     const attempts = options.idempotent ? (options.maxAttempts ?? 3) : 1;
@@ -75,7 +93,9 @@ export class GrpcUnaryClient {
       if (Date.now() >= deadline) break;
       try {
         await new Promise<void>((resolve, reject) => {
-          this.client.waitForReady(deadline, (error) => (error ? reject(error) : resolve()));
+          this.client.waitForReady(deadline, (error) =>
+            error ? reject(error) : resolve(),
+          );
         });
         if (Date.now() >= deadline) break;
         return await new Promise<T>((resolve, reject) => {
@@ -86,19 +106,27 @@ export class GrpcUnaryClient {
             request,
             metadata,
             { deadline },
-            (error, response) => (error ? reject(error) : resolve(response as T)),
+            (error, response) =>
+              error ? reject(error) : resolve(response as T),
           );
         });
       } catch (error) {
         lastError = error;
         if (!this.shouldRetry(error, attempt, attempts)) throw error;
         const backoffMs = Math.min(100 * 2 ** (attempt - 1), 1_000);
-        const jitteredBackoffMs = Math.round(backoffMs * (0.8 + Math.random() * 0.4));
+        const jitteredBackoffMs = Math.round(
+          backoffMs * (0.8 + Math.random() * 0.4),
+        );
         if (Date.now() + jitteredBackoffMs >= deadline) break;
         await new Promise((resolve) => setTimeout(resolve, jitteredBackoffMs));
       }
     }
-    throw lastError ?? Object.assign(new Error('gRPC call deadline exceeded.'), { code: status.DEADLINE_EXCEEDED });
+    throw (
+      lastError ??
+      Object.assign(new Error('gRPC call deadline exceeded.'), {
+        code: status.DEADLINE_EXCEEDED,
+      })
+    );
   }
 
   close(): void {
@@ -107,15 +135,25 @@ export class GrpcUnaryClient {
 
   private method(name: string): UnknownMethod {
     const method = Object.values(this.service).find(
-      (candidate) => candidate.originalName === name || candidate.path.endsWith(`/${name}`),
+      (candidate) =>
+        candidate.originalName === name || candidate.path.endsWith(`/${name}`),
     );
     if (!method) throw new Error(`Unknown gRPC method ${name}.`);
     return method;
   }
 
-  private shouldRetry(error: unknown, attempt: number, attempts: number): boolean {
-    if (attempt >= attempts || typeof error !== 'object' || error === null) return false;
-    if ('code' in error && typeof error.code === 'number') return TRANSIENT_CODES.has(error.code);
-    return error instanceof Error && /failed to connect|before the deadline/i.test(error.message);
+  private shouldRetry(
+    error: unknown,
+    attempt: number,
+    attempts: number,
+  ): boolean {
+    if (attempt >= attempts || typeof error !== 'object' || error === null)
+      return false;
+    if ('code' in error && typeof error.code === 'number')
+      return TRANSIENT_CODES.has(error.code);
+    return (
+      error instanceof Error &&
+      /failed to connect|before the deadline/i.test(error.message)
+    );
   }
 }

@@ -10,22 +10,15 @@
     "importHelpers": true,
     "target": "es2015",
     "module": "esnext",
-    "lib": [
-      "es2020",
-      "dom"
-    ],
+    "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@org/backend/app/*": [
-        "./apps/backend/src/app/*"
-      ],
+      "@org/backend/app/*": ["./apps/backend/src/app/*"],
       "@org/backend/http-app": [
         "./apps/backend/src/app/bootstrap/backend-http-app.ts"
       ],
-      "@org/voting-contracts": [
-        "./libs/shared/voting-contracts/src/index.ts"
-      ],
+      "@org/voting-contracts": ["./libs/shared/voting-contracts/src/index.ts"],
       "@cacic-fct/form-contracts": [
         "./libs/shared/form-contracts/src/index.ts"
       ],
@@ -37,8 +30,5 @@
       ]
     }
   },
-  "exclude": [
-    "node_modules",
-    "tmp"
-  ]
+  "exclude": ["node_modules", "tmp"]
 }

@@ -41,14 +41,22 @@ export class PollApiService {
   }
 
   getDirectLinkPoll(directLinkToken: string): Observable<Poll> {
-    return this.http.get<Poll>(`/api/polls/direct/${encodeURIComponent(directLinkToken)}`);
+    return this.http.get<Poll>(
+      `/api/polls/direct/${encodeURIComponent(directLinkToken)}`,
+    );
   }
 
-  submitResponse(id: string, request: SubmitPollResponseRequest): Observable<PollResponse> {
+  submitResponse(
+    id: string,
+    request: SubmitPollResponseRequest,
+  ): Observable<PollResponse> {
     return this.http.post<PollResponse>(`/api/polls/${id}/responses`, request);
   }
 
-  submitDirectLinkResponse(directLinkToken: string, request: SubmitPollResponseRequest): Observable<PollResponse> {
+  submitDirectLinkResponse(
+    directLinkToken: string,
+    request: SubmitPollResponseRequest,
+  ): Observable<PollResponse> {
     return this.http.post<PollResponse>(
       `/api/polls/direct/${encodeURIComponent(directLinkToken)}/responses`,
       request,
@@ -56,7 +64,9 @@ export class PollApiService {
   }
 
   getMyPollResponse(id: string): Observable<PollUserResponseState> {
-    return this.http.get<PollUserResponseState>(`/api/polls/${id}/responses/me`);
+    return this.http.get<PollUserResponseState>(
+      `/api/polls/${id}/responses/me`,
+    );
   }
 
   authorizeKioskVote(
@@ -107,21 +117,32 @@ export class PollApiService {
   }
 
   listPublicCacicElectionSlates(id: string): Observable<CacicElectionSlate[]> {
-    return this.http.get<CacicElectionSlate[]>(`/api/polls/${id}/cacic-election/slates`);
+    return this.http.get<CacicElectionSlate[]>(
+      `/api/polls/${id}/cacic-election/slates`,
+    );
   }
 
-  getMyCacicElectionSlate(id: string): Observable<AdminCacicElectionSlate | null> {
-    return this.http.get<AdminCacicElectionSlate | null>(`/api/polls/${id}/cacic-election/slates/me`);
+  getMyCacicElectionSlate(
+    id: string,
+  ): Observable<AdminCacicElectionSlate | null> {
+    return this.http.get<AdminCacicElectionSlate | null>(
+      `/api/polls/${id}/cacic-election/slates/me`,
+    );
   }
 
   submitCacicElectionSlate(
     id: string,
     request: SubmitCacicElectionSlateRequest,
   ): Observable<CacicElectionSlate> {
-    return this.http.put<CacicElectionSlate>(`/api/polls/${id}/cacic-election/slates/me`, request);
+    return this.http.put<CacicElectionSlate>(
+      `/api/polls/${id}/cacic-election/slates/me`,
+      request,
+    );
   }
 
-  getMyDirectLinkPollResponse(directLinkToken: string): Observable<PollUserResponseState> {
+  getMyDirectLinkPollResponse(
+    directLinkToken: string,
+  ): Observable<PollUserResponseState> {
     return this.http.get<PollUserResponseState>(
       `/api/polls/direct/${encodeURIComponent(directLinkToken)}/responses/me`,
     );
@@ -132,11 +153,17 @@ export class PollApiService {
   }
 
   listLinkableEvents(): Observable<EventManagerEvent[]> {
-    return this.http.get<EventManagerEvent[]>('/api/admin/polls/linkable-events');
+    return this.http.get<EventManagerEvent[]>(
+      '/api/admin/polls/linkable-events',
+    );
   }
 
-  listPollEligibilityEnrollments(id: string): Observable<PollEligibilityEnrollmentList> {
-    return this.http.get<PollEligibilityEnrollmentList>(`/api/admin/polls/${id}/eligibility-enrollments`);
+  listPollEligibilityEnrollments(
+    id: string,
+  ): Observable<PollEligibilityEnrollmentList> {
+    return this.http.get<PollEligibilityEnrollmentList>(
+      `/api/admin/polls/${id}/eligibility-enrollments`,
+    );
   }
 
   addPollEligibilityEnrollments(
@@ -159,14 +186,21 @@ export class PollApiService {
     );
   }
 
-  deletePollEligibilityEnrollment(id: string, enrollmentNumber: string): Observable<void> {
+  deletePollEligibilityEnrollment(
+    id: string,
+    enrollmentNumber: string,
+  ): Observable<void> {
     return this.http.delete<void>(
       `/api/admin/polls/${id}/eligibility-enrollments/${encodeURIComponent(enrollmentNumber)}`,
     );
   }
 
-  clearPollEligibilityEnrollments(id: string): Observable<PollEligibilityEnrollmentList> {
-    return this.http.delete<PollEligibilityEnrollmentList>(`/api/admin/polls/${id}/eligibility-enrollments`);
+  clearPollEligibilityEnrollments(
+    id: string,
+  ): Observable<PollEligibilityEnrollmentList> {
+    return this.http.delete<PollEligibilityEnrollmentList>(
+      `/api/admin/polls/${id}/eligibility-enrollments`,
+    );
   }
 
   getAdminPoll(id: string): Observable<Poll> {
@@ -178,20 +212,30 @@ export class PollApiService {
   }
 
   exportCacicElectionVoterEnrollments(id: string): Observable<Blob> {
-    return this.http.get(`/api/admin/polls/${id}/cacic-election/voter-enrollments.txt`, {
-      responseType: 'blob',
-    });
+    return this.http.get(
+      `/api/admin/polls/${id}/cacic-election/voter-enrollments.txt`,
+      {
+        responseType: 'blob',
+      },
+    );
   }
 
-  listAdminCacicElectionSlates(id: string): Observable<AdminCacicElectionSlate[]> {
-    return this.http.get<AdminCacicElectionSlate[]>(`/api/admin/polls/${id}/cacic-election/slates`);
+  listAdminCacicElectionSlates(
+    id: string,
+  ): Observable<AdminCacicElectionSlate[]> {
+    return this.http.get<AdminCacicElectionSlate[]>(
+      `/api/admin/polls/${id}/cacic-election/slates`,
+    );
   }
 
   createAdminCacicElectionSlate(
     id: string,
     request: UpdateCacicElectionSlateRequest,
   ): Observable<AdminCacicElectionSlate> {
-    return this.http.post<AdminCacicElectionSlate>(`/api/admin/polls/${id}/cacic-election/slates`, request);
+    return this.http.post<AdminCacicElectionSlate>(
+      `/api/admin/polls/${id}/cacic-election/slates`,
+      request,
+    );
   }
 
   updateAdminCacicElectionSlate(
@@ -238,15 +282,21 @@ export class PollApiService {
   }
 
   getDirectLinkPollResults(directLinkToken: string): Observable<PollResults> {
-    return this.http.get<PollResults>(`/api/polls/direct/${encodeURIComponent(directLinkToken)}/results`);
+    return this.http.get<PollResults>(
+      `/api/polls/direct/${encodeURIComponent(directLinkToken)}/results`,
+    );
   }
 
   openAdminPollResultsEvents(id: string): EventSource {
-    return this.openResultsEvents(`/api/admin/polls/${encodeURIComponent(id)}/results/events`);
+    return this.openResultsEvents(
+      `/api/admin/polls/${encodeURIComponent(id)}/results/events`,
+    );
   }
 
   openPublicPollResultsEvents(id: string): EventSource {
-    return this.openResultsEvents(`/api/polls/${encodeURIComponent(id)}/results/events`);
+    return this.openResultsEvents(
+      `/api/polls/${encodeURIComponent(id)}/results/events`,
+    );
   }
 
   openDirectLinkPollResultsEvents(directLinkToken: string): EventSource {
@@ -273,7 +323,11 @@ export class PollApiService {
     return this.http.delete<void>(`/api/admin/polls/${id}/images/${imageId}`);
   }
 
-  updatePollStatus(id: string, status: PollStatus, expectedUpdatedAt: string): Observable<Poll> {
+  updatePollStatus(
+    id: string,
+    status: PollStatus,
+    expectedUpdatedAt: string,
+  ): Observable<Poll> {
     return this.http.patch<Poll>(`/api/admin/polls/${id}/status`, {
       status,
       expectedUpdatedAt,

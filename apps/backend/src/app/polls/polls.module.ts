@@ -27,7 +27,11 @@ import { PublicPollsController } from './public-polls.controller';
 
 @Module({
   imports: [AuthModule, FeatureFlagsModule],
-  controllers: [AdminPollKioskController, AdminPollsController, PublicPollsController],
+  controllers: [
+    AdminPollKioskController,
+    AdminPollsController,
+    PublicPollsController,
+  ],
   providers: [
     AccountManagerIntegrationService,
     EventManagerIntegrationService,

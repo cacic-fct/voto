@@ -1,12 +1,6 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import {
-  PLATFORM_ID,
-  Service,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { PLATFORM_ID, Service, computed, inject, signal } from '@angular/core';
 import {
   AuthRefreshResult,
   AuthenticatedUser,
@@ -337,7 +331,10 @@ export class AuthService {
     }
 
     const controller = new AbortController();
-    const timeout = globalThis.setTimeout(() => controller.abort(), this.accountTrackingTimeoutMs);
+    const timeout = globalThis.setTimeout(
+      () => controller.abort(),
+      this.accountTrackingTimeoutMs,
+    );
     try {
       await fetch(url, {
         credentials: 'include',
@@ -423,7 +420,11 @@ export class AuthService {
 
     this.setSessionStorageItem(
       this.logoutWarningStorageKey,
-      localSessionCleared ? 'global' : globalLogoutComplete ? 'local' : 'local-and-global',
+      localSessionCleared
+        ? 'global'
+        : globalLogoutComplete
+          ? 'local'
+          : 'local-and-global',
     );
   }
 
@@ -447,7 +448,10 @@ export class AuthService {
     const response = body as Record<string, unknown>;
     return {
       globalLogoutComplete: response['globalLogoutComplete'] === true,
-      logoutUrl: typeof response['logoutUrl'] === 'string' ? response['logoutUrl'] : undefined,
+      logoutUrl:
+        typeof response['logoutUrl'] === 'string'
+          ? response['logoutUrl']
+          : undefined,
     };
   }
 }

@@ -99,7 +99,12 @@ mat-card,
 .public-text-answers blockquote {
   margin: 0;
   padding: 0.75rem 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 28%, var(--mat-sys-outline-variant));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--mat-sys-primary) 28%,
+      var(--mat-sys-outline-variant)
+    );
   border-radius: 8px;
   background: var(--mat-sys-surface-container-low);
   color: var(--mat-sys-on-surface);

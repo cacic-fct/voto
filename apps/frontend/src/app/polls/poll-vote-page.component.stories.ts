@@ -1,7 +1,27 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
-import { CacicElectionPhase, PollMode, PollStatus, PollVoterEligibilitySource, PollVotingStyle } from '@org/voting-contracts';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  input,
+  signal,
+} from '@angular/core';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
+import {
+  CacicElectionPhase,
+  PollMode,
+  PollStatus,
+  PollVoterEligibilitySource,
+  PollVotingStyle,
+} from '@org/voting-contracts';
 import {
   ApiStoryState,
   MySlateStoryState,
@@ -36,13 +56,16 @@ import { PollVotePageComponent } from './poll-vote-page.component';
   `,
 })
 class PollVoteStoryHostComponent {
-  readonly descricao = input('Escolha as opções que representam melhor a decisão coletiva.');
+  readonly descricao = input(
+    'Escolha as opções que representam melhor a decisão coletiva.',
+  );
   readonly estado = input<ApiStoryState>('carregado');
   readonly estilo = input<PollVotingStyle>('secret');
   readonly eventoVinculado = input(true);
   readonly permitirEdicao = input(false);
   readonly permitirMultiplas = input(false);
-  readonly habilitacao = input<PollVoterEligibilitySource>('authenticatedUsers');
+  readonly habilitacao =
+    input<PollVoterEligibilitySource>('authenticatedUsers');
   readonly itens = input(14);
   readonly modo = input<PollMode>('regular');
   readonly faseEleicao = input<CacicElectionPhase>('slateSubmission');
@@ -258,7 +281,8 @@ export const EleicoesChapaRejeitada: Story = {
     modo: 'cacicElection',
     faseEleicao: 'slateSubmission',
     titulo: 'Eleições do CACiC - correção de chapa',
-    descricao: 'Ajuste a chapa rejeitada enquanto o prazo de submissão estiver aberto.',
+    descricao:
+      'Ajuste a chapa rejeitada enquanto o prazo de submissão estiver aberto.',
     itens: 0,
     chapas: 2,
     minhaChapa: 'rejeitada',

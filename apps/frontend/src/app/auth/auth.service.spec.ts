@@ -73,7 +73,11 @@ describe('AuthService', () => {
     expect(service.isAuthenticated()).toBe(true);
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/session',
-      expect.objectContaining({ credentials: 'include', method: 'GET', signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'GET',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -110,7 +114,9 @@ describe('AuthService', () => {
     const fallback = vi
       .spyOn(service, 'loginWithExistingSsoSession')
       .mockImplementation(() => undefined);
-    silentSso.check.mockRejectedValue(new Error('Third-party cookies are unavailable'));
+    silentSso.check.mockRejectedValue(
+      new Error('Third-party cookies are unavailable'),
+    );
 
     const initialize = service.initialize();
     http
@@ -195,7 +201,11 @@ describe('AuthService', () => {
     expect(service.consumeLogoutWarning()).toBeNull();
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/clear',
-      expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(redirectSpy).toHaveBeenCalledWith(rootUrl);
 
@@ -219,10 +229,16 @@ describe('AuthService', () => {
     expect(service.user()).toBeNull();
     expect(fetch).toHaveBeenCalledWith(
       'https://account.cacic.com.br/api/tracking/clear',
-      expect.objectContaining({ credentials: 'include', method: 'POST', signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(redirectSpy).toHaveBeenCalledWith('#logged-out');
-    expect(service.consumeLogoutWarning()).toContain('não confirmou o logout global');
+    expect(service.consumeLogoutWarning()).toContain(
+      'não confirmou o logout global',
+    );
     expect(service.consumeLogoutWarning()).toBeNull();
 
     redirectSpy.mockRestore();
@@ -250,8 +266,12 @@ describe('AuthService', () => {
 
     expect(service.user()).toBeNull();
     expect(service.consumePostLogoutRedirect()).toBe(true);
-    expect(service.consumeLogoutWarning()).toContain('não confirmou a remoção da sessão local');
-    expect(redirectSpy).toHaveBeenCalledWith('https://sso.example/logout?client_id=voto-client');
+    expect(service.consumeLogoutWarning()).toContain(
+      'não confirmou a remoção da sessão local',
+    );
+    expect(redirectSpy).toHaveBeenCalledWith(
+      'https://sso.example/logout?client_id=voto-client',
+    );
 
     redirectSpy.mockRestore();
   });
@@ -265,7 +285,10 @@ describe('AuthService', () => {
     const failedLogout = service.logout();
     http
       .expectOne('/api/auth/logout')
-      .flush({ code: 'KEYCLOAK_UNAVAILABLE' }, { status: 503, statusText: 'Service Unavailable' });
+      .flush(
+        { code: 'KEYCLOAK_UNAVAILABLE' },
+        { status: 503, statusText: 'Service Unavailable' },
+      );
     await expect(failedLogout).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(service.user()).toEqual(user);
     expect(service.consumePostLogoutRedirect()).toBe(false);
@@ -284,7 +307,9 @@ describe('AuthService', () => {
       return new Promise<Response>(() => undefined);
     });
     const internals = service as unknown as { redirectTo(url: string): void };
-    const redirectSpy = vi.spyOn(internals, 'redirectTo').mockImplementation(() => undefined);
+    const redirectSpy = vi
+      .spyOn(internals, 'redirectTo')
+      .mockImplementation(() => undefined);
     service.user.set(user);
 
     const logout = service.logout();
@@ -340,12 +365,13 @@ describe('AuthService', () => {
     service.user.set(user);
 
     const refresh = firstValueFrom(service.refreshTokenSilently());
-    http
-      .expectOne('/api/auth/refresh')
-      .flush(
-        { code: 'KEYCLOAK_UNAVAILABLE', message: 'Identity provider is temporarily unavailable.' },
-        { status: 503, statusText: 'Service Unavailable' },
-      );
+    http.expectOne('/api/auth/refresh').flush(
+      {
+        code: 'KEYCLOAK_UNAVAILABLE',
+        message: 'Identity provider is temporarily unavailable.',
+      },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
 
     await expect(refresh).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(service.user()).toEqual(user);

@@ -1,4 +1,11 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { PollImage } from '@org/voting-contracts';
 import { PollStatus as DbPollStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -44,8 +51,14 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
   private startCleanup(): void {
     if (this.stopping || this.cleanupRun) return;
     this.cleanupRun = this.retryPendingObjectDeletions()
-      .catch(() => this.logger.warn('Poll image cleanup queue is unavailable; pending work is retained.'))
-      .finally(() => { this.cleanupRun = undefined; });
+      .catch(() =>
+        this.logger.warn(
+          'Poll image cleanup queue is unavailable; pending work is retained.',
+        ),
+      )
+      .finally(() => {
+        this.cleanupRun = undefined;
+      });
   }
 
   async retryPendingObjectDeletions(): Promise<void> {
@@ -71,18 +84,25 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.$transaction(async (tx) => {
       const expired = await tx.pollImage.findMany({
         where: { placement: 'UNUSED', createdAt: { lt: cutoff } },
-        orderBy: { createdAt: 'asc' }, take: 25,
+        orderBy: { createdAt: 'asc' },
+        take: 25,
         select: { id: true, objectKey: true },
       });
       for (const image of expired) {
         // Recheck placement in the DELETE so a concurrent save that attaches
         // the image wins rather than leaving an outbox intent for a live image.
         const removed = await tx.pollImage.deleteMany({
-          where: { id: image.id, placement: 'UNUSED', createdAt: { lt: cutoff } },
+          where: {
+            id: image.id,
+            placement: 'UNUSED',
+            createdAt: { lt: cutoff },
+          },
         });
         if (removed.count === 1) {
           await tx.pollObjectDeletion.upsert({
-            where: { objectKey: image.objectKey }, create: { objectKey: image.objectKey }, update: {},
+            where: { objectKey: image.objectKey },
+            create: { objectKey: image.objectKey },
+            update: {},
           });
         }
       }
@@ -90,7 +110,10 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private readonly logger = new Logger(PollImagesService.name);
-  private readonly deleteAttempts = this.positiveInteger(process.env.S3_DELETE_RETRY_ATTEMPTS, 3);
+  private readonly deleteAttempts = this.positiveInteger(
+    process.env.S3_DELETE_RETRY_ATTEMPTS,
+    3,
+  );
 
   constructor(
     private readonly prisma: PrismaService,
@@ -113,14 +136,22 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     // Persist compensation before S3 can succeed. Delay abandoned-upload cleanup
     // so a second instance cannot collect an upload while it is being attached.
     await this.prisma.pollObjectDeletion.create({
-      data: { objectKey, nextAttemptAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      data: {
+        objectKey,
+        nextAttemptAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
     });
     try {
       const uploadResult = await this.s3.uploadFile(
         objectKey,
         converted.buffer,
         'image/avif',
-        { pollId, imageId, uploadedBy: user.sub, originalMimeType: converted.originalMimeType },
+        {
+          pollId,
+          imageId,
+          uploadedBy: user.sub,
+          originalMimeType: converted.originalMimeType,
+        },
       );
       const image = await this.prisma.$transaction(async (tx) => {
         const created = await tx.pollImage.create({
@@ -150,12 +181,14 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
   async deletePollImage(pollId: string, imageId: string): Promise<void> {
     const objectKey = await this.prisma.$transaction(async (tx) => {
       const image = await tx.pollImage.findFirst({
-        where: { id: imageId, pollId }, select: { objectKey: true },
+        where: { id: imageId, pollId },
+        select: { objectKey: true },
       });
       if (!image) throw new NotFoundException('Poll image not found.');
       await tx.pollObjectDeletion.upsert({
         where: { objectKey: image.objectKey },
-        create: { objectKey: image.objectKey }, update: {},
+        create: { objectKey: image.objectKey },
+        update: {},
       });
       await tx.pollImage.delete({ where: { id: imageId } });
       return image.objectKey;
@@ -195,7 +228,13 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException('Poll image not found.');
     }
 
-    if (!this.canReadPollImage(image.poll, user, options?.allowPublishedRead === true)) {
+    if (
+      !this.canReadPollImage(
+        image.poll,
+        user,
+        options?.allowPublishedRead === true,
+      )
+    ) {
       throw new ForbiddenException('You cannot access this poll image.');
     }
 
@@ -207,7 +246,9 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async deleteObjectKeysBestEffort(objectKeys: readonly string[]): Promise<void> {
+  async deleteObjectKeysBestEffort(
+    objectKeys: readonly string[],
+  ): Promise<void> {
     for (const objectKey of [...new Set(objectKeys)]) {
       await this.deleteObjectBestEffort(objectKey);
     }
@@ -236,7 +277,11 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private canReadPollImage(
-    poll: { status: DbPollStatus; resultsPublic: boolean; visibleFrom: Date | null },
+    poll: {
+      status: DbPollStatus;
+      resultsPublic: boolean;
+      visibleFrom: Date | null;
+    },
     user?: AuthenticatedPrincipal,
     allowPublishedRead = false,
   ): boolean {
@@ -244,12 +289,16 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     if (
       allowPublishedRead &&
       isVisible &&
-      (poll.status === DbPollStatus.PUBLISHED || (poll.status === DbPollStatus.CLOSED && poll.resultsPublic))
+      (poll.status === DbPollStatus.PUBLISHED ||
+        (poll.status === DbPollStatus.CLOSED && poll.resultsPublic))
     ) {
       return true;
     }
 
-    return Boolean(user?.permissionSet.has('poll#read') || user?.permissions.includes('poll#read'));
+    return Boolean(
+      user?.permissionSet.has('poll#read') ||
+      user?.permissions.includes('poll#read'),
+    );
   }
 
   private async deleteObjectBestEffort(objectKey: string): Promise<void> {
@@ -257,9 +306,14 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     for (let attempt = 1; attempt <= this.deleteAttempts; attempt += 1) {
       try {
         // A surviving reference always wins over a stale compensation intent.
-        const referenced = await this.prisma.pollImage.findFirst({ where: { objectKey }, select: { id: true } });
+        const referenced = await this.prisma.pollImage.findFirst({
+          where: { objectKey },
+          select: { id: true },
+        });
         if (!referenced) await this.s3.deleteFile(objectKey);
-        await this.prisma.pollObjectDeletion.deleteMany({ where: { objectKey } });
+        await this.prisma.pollObjectDeletion.deleteMany({
+          where: { objectKey },
+        });
         return;
       } catch (error: unknown) {
         lastError = error;
@@ -273,7 +327,10 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prisma.pollObjectDeletion.updateMany({
         where: { objectKey },
-        data: { attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 5 * 60_000) },
+        data: {
+          attempts: { increment: 1 },
+          nextAttemptAt: new Date(Date.now() + 5 * 60_000),
+        },
       });
     } catch {
       // The existing durable intent remains eligible for the next worker/restart.
@@ -283,7 +340,10 @@ export class PollImagesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private positiveInteger(rawValue: string | undefined, fallback: number): number {
+  private positiveInteger(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }

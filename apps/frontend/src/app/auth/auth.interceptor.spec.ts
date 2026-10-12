@@ -1,4 +1,8 @@
-import { HttpErrorResponse, HttpRequest, HttpResponse } from '@angular/common/http';
+import {
+  HttpErrorResponse,
+  HttpRequest,
+  HttpResponse,
+} from '@angular/common/http';
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AuthRefreshResult } from '@org/voting-contracts';
@@ -12,7 +16,9 @@ describe('authInterceptor', () => {
 
   function configure(platformId: 'browser' | 'server' = 'browser'): void {
     auth = {
-      refreshTokenSilently: vi.fn().mockReturnValue(of({} as AuthRefreshResult)),
+      refreshTokenSilently: vi
+        .fn()
+        .mockReturnValue(of({} as AuthRefreshResult)),
       clearSession: vi.fn(),
     };
 
@@ -33,7 +39,9 @@ describe('authInterceptor', () => {
     const next = vi.fn().mockReturnValue(of(response));
 
     const result = await firstValueFrom(
-      TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+      TestBed.runInInjectionContext(() =>
+        authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+      ),
     );
 
     expect(result).toBe(response);
@@ -41,24 +49,37 @@ describe('authInterceptor', () => {
   });
 
   it('does not refresh auth endpoint failures', async () => {
-    const error = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const error = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
     const next = vi.fn().mockReturnValue(throwError(() => error));
 
     await expect(
       firstValueFrom(
-        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/auth/me'), next)),
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(new HttpRequest('GET', '/api/auth/me'), next),
+        ),
       ),
     ).rejects.toBe(error);
     expect(auth.refreshTokenSilently).not.toHaveBeenCalled();
   });
 
   it('refreshes once and retries browser requests after 401 responses', async () => {
-    const error = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const error = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
     const response = new HttpResponse({ status: 200, body: { ok: true } });
-    const next = vi.fn().mockReturnValueOnce(throwError(() => error)).mockReturnValueOnce(of(response));
+    const next = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => error))
+      .mockReturnValueOnce(of(response));
 
     const result = await firstValueFrom(
-      TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+      TestBed.runInInjectionContext(() =>
+        authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+      ),
     );
 
     expect(result).toBe(response);
@@ -67,14 +88,24 @@ describe('authInterceptor', () => {
   });
 
   it('clears the session when refresh fails', async () => {
-    const error = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
-    const refreshError = new HttpErrorResponse({ status: 403, statusText: 'Forbidden' });
-    vi.mocked(auth.refreshTokenSilently).mockReturnValue(throwError(() => refreshError));
+    const error = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+    const refreshError = new HttpErrorResponse({
+      status: 403,
+      statusText: 'Forbidden',
+    });
+    vi.mocked(auth.refreshTokenSilently).mockReturnValue(
+      throwError(() => refreshError),
+    );
     const next = vi.fn().mockReturnValue(throwError(() => error));
 
     await expect(
       firstValueFrom(
-        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+        ),
       ),
     ).rejects.toBe(refreshError);
 
@@ -82,18 +113,25 @@ describe('authInterceptor', () => {
   });
 
   it('keeps the session when refresh reports a transient identity-provider outage', async () => {
-    const initialError = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const initialError = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
     const refreshError = new HttpErrorResponse({
       status: 503,
       statusText: 'Service Unavailable',
       error: { code: 'KEYCLOAK_UNAVAILABLE' },
     });
-    vi.mocked(auth.refreshTokenSilently).mockReturnValue(throwError(() => refreshError));
+    vi.mocked(auth.refreshTokenSilently).mockReturnValue(
+      throwError(() => refreshError),
+    );
     const next = vi.fn().mockReturnValue(throwError(() => initialError));
 
     await expect(
       firstValueFrom(
-        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+        ),
       ),
     ).rejects.toBe(refreshError);
 
@@ -101,14 +139,21 @@ describe('authInterceptor', () => {
   });
 
   it('does not refresh or replay a kiosk authorization validation failure', async () => {
-    const error = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
+    const error = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
     const next = vi.fn().mockReturnValue(throwError(() => error));
 
     await expect(
       firstValueFrom(
         TestBed.runInInjectionContext(() =>
           authInterceptor(
-            new HttpRequest('POST', '/api/admin/polls/poll-1/kiosk/authorization', {}),
+            new HttpRequest(
+              'POST',
+              '/api/admin/polls/poll-1/kiosk/authorization',
+              {},
+            ),
             next,
           ),
         ),
@@ -121,13 +166,24 @@ describe('authInterceptor', () => {
   });
 
   it('does not clear the session when the retried business request fails', async () => {
-    const initialError = new HttpErrorResponse({ status: 401, statusText: 'Unauthorized' });
-    const retryError = new HttpErrorResponse({ status: 409, statusText: 'Conflict' });
-    const next = vi.fn().mockReturnValueOnce(throwError(() => initialError)).mockReturnValueOnce(throwError(() => retryError));
+    const initialError = new HttpErrorResponse({
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+    const retryError = new HttpErrorResponse({
+      status: 409,
+      statusText: 'Conflict',
+    });
+    const next = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => initialError))
+      .mockReturnValueOnce(throwError(() => retryError));
 
     await expect(
       firstValueFrom(
-        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+        ),
       ),
     ).rejects.toBe(retryError);
 
@@ -137,12 +193,17 @@ describe('authInterceptor', () => {
   });
 
   it('passes non-auth errors through without refreshing', async () => {
-    const error = new HttpErrorResponse({ status: 500, statusText: 'Server Error' });
+    const error = new HttpErrorResponse({
+      status: 500,
+      statusText: 'Server Error',
+    });
     const next = vi.fn().mockReturnValue(throwError(() => error));
 
     await expect(
       firstValueFrom(
-        TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', '/api/polls'), next)),
+        TestBed.runInInjectionContext(() =>
+          authInterceptor(new HttpRequest('GET', '/api/polls'), next),
+        ),
       ),
     ).rejects.toBe(error);
 

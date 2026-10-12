@@ -1,14 +1,21 @@
-import { PollElement, PollResponse, PollResponseAnswer } from '@org/voting-contracts';
+import {
+  PollElement,
+  PollResponse,
+  PollResponseAnswer,
+} from '@org/voting-contracts';
 import { Prisma } from '@prisma/client';
 import { PollResultResponseRecord } from './poll-records';
-import { externalPollElementId, externalPollOptionId } from './poll-identifiers';
+import {
+  externalPollElementId,
+  externalPollOptionId,
+} from './poll-identifiers';
 
 export const pollResponseInclude = {
   answers: {
-      select: {
-        elementId: true,
-        value: true,
-        elementSnapshot: true,
+    select: {
+      elementId: true,
+      value: true,
+      elementSnapshot: true,
     },
   },
   user: {
@@ -22,12 +29,16 @@ export const pollResponseInclude = {
   },
 } satisfies Prisma.PollResponseInclude;
 
-export function toContractPollResponse(response: PollResultResponseRecord): PollResponse {
+export function toContractPollResponse(
+  response: PollResultResponseRecord,
+): PollResponse {
   return {
     id: response.id,
     pollId: response.pollId,
     submittedAt: response.submittedAt?.toISOString(),
-    answers: response.answers.map((answer) => toContractPollResponseAnswer(answer, response.pollId)),
+    answers: response.answers.map((answer) =>
+      toContractPollResponseAnswer(answer, response.pollId),
+    ),
   };
 }
 
@@ -36,7 +47,11 @@ export function toContractPollResponseAnswer(
   pollId = '',
 ): PollResponseAnswer {
   const elementId = externalPollElementId(pollId, answer.elementId);
-  const element = toContractSnapshotElement(answer.elementSnapshot, pollId, answer.elementId);
+  const element = toContractSnapshotElement(
+    answer.elementSnapshot,
+    pollId,
+    answer.elementId,
+  );
   return {
     elementId,
     value: normalizeStoredAnswerValue(
@@ -48,15 +63,23 @@ export function toContractPollResponseAnswer(
   };
 }
 
-function normalizeStoredAnswerValue(elementId: string, value: unknown, elementType?: PollElement['type']): unknown {
+function normalizeStoredAnswerValue(
+  elementId: string,
+  value: unknown,
+  elementType?: PollElement['type'],
+): unknown {
   if (typeof value === 'string') {
-    return elementType === 'singleChoice' || elementType === 'selectionDropdown' || elementType === 'multipleChoice'
+    return elementType === 'singleChoice' ||
+      elementType === 'selectionDropdown' ||
+      elementType === 'multipleChoice'
       ? externalPollOptionId(elementId, value)
       : value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => normalizeStoredAnswerValue(elementId, item, elementType));
+    return value.map((item) =>
+      normalizeStoredAnswerValue(elementId, item, elementType),
+    );
   }
 
   if (value && typeof value === 'object') {
@@ -71,8 +94,13 @@ function normalizeStoredAnswerValue(elementId: string, value: unknown, elementTy
   return value;
 }
 
-function toContractSnapshotElement(value: unknown, pollId: string, storedElementId: string): PollElement | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+function toContractSnapshotElement(
+  value: unknown,
+  pollId: string,
+  storedElementId: string,
+): PollElement | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
   const snapshot = value as Record<string, unknown>;
   if (
     typeof snapshot['id'] !== 'string' ||
@@ -80,16 +108,19 @@ function toContractSnapshotElement(value: unknown, pollId: string, storedElement
     typeof snapshot['title'] !== 'string' ||
     typeof snapshot['required'] !== 'boolean' ||
     !Array.isArray(snapshot['options'])
-  ) return undefined;
+  )
+    return undefined;
 
   const options = snapshot['options'].map((option) => {
-    if (!option || typeof option !== 'object' || Array.isArray(option)) return option;
+    if (!option || typeof option !== 'object' || Array.isArray(option))
+      return option;
     const normalized = option as Record<string, unknown>;
     return {
       ...normalized,
-      id: typeof normalized['id'] === 'string'
-        ? externalPollOptionId(storedElementId, normalized['id'])
-        : normalized['id'],
+      id:
+        typeof normalized['id'] === 'string'
+          ? externalPollOptionId(storedElementId, normalized['id'])
+          : normalized['id'],
     };
   });
   return {

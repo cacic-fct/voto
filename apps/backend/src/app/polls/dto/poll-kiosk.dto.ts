@@ -12,7 +12,8 @@ export class AuthorizePollKioskVoteDto {
   primaryEmail!: string;
 
   @ApiProperty({
-    description: 'Six-digit TOTP generated from the voter Account Manager seed.',
+    description:
+      'Six-digit TOTP generated from the voter Account Manager seed.',
     example: '123456',
     pattern: '^\\d{6}$',
   })

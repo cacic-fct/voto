@@ -228,10 +228,7 @@ export class PollKioskAuthorizationService {
       sessionId,
     );
     const voter = await this.loadVoter(authorization.voter);
-    return this.polls.getUserResponseState(
-      pollId,
-      this.toPrincipal(voter),
-    );
+    return this.polls.getUserResponseState(pollId, this.toPrincipal(voter));
   }
 
   async submitResponse(
@@ -277,13 +274,18 @@ export class PollKioskAuthorizationService {
       return response;
     } catch (error) {
       if (!submitted) {
-        await this.releaseAuthorization(reservation).catch((releaseError: unknown) => {
-        this.logger.warn({
-          event: 'poll-kiosk-authorization-release-failed',
-          pollId,
-          error: releaseError instanceof Error ? releaseError.message : String(releaseError),
-        });
-        });
+        await this.releaseAuthorization(reservation).catch(
+          (releaseError: unknown) => {
+            this.logger.warn({
+              event: 'poll-kiosk-authorization-release-failed',
+              pollId,
+              error:
+                releaseError instanceof Error
+                  ? releaseError.message
+                  : String(releaseError),
+            });
+          },
+        );
       }
       throw error;
     }
@@ -321,12 +323,7 @@ export class PollKioskAuthorizationService {
     }
 
     const raw = await this.redis.get(this.authorizationKey(token));
-    return this.parseAndAssertAuthorization(
-      raw,
-      pollId,
-      admin,
-      sessionId,
-    );
+    return this.parseAndAssertAuthorization(raw, pollId, admin, sessionId);
   }
 
   private async reserveAuthorization(
@@ -334,7 +331,11 @@ export class PollKioskAuthorizationService {
     token: string | undefined,
     admin: AuthenticatedPrincipal,
     sessionId: string,
-  ): Promise<{ authorization: StoredKioskAuthorization; reservationKey: string; tokenKey: string }> {
+  ): Promise<{
+    authorization: StoredKioskAuthorization;
+    reservationKey: string;
+    tokenKey: string;
+  }> {
     if (!token) {
       throw new UnauthorizedException('Missing kiosk voting authorization.');
     }
@@ -375,7 +376,10 @@ return nil
   }): Promise<void> {
     const remainingTtlSeconds = Math.max(
       1,
-      Math.ceil((new Date(reservation.authorization.expiresAt).getTime() - Date.now()) / 1000),
+      Math.ceil(
+        (new Date(reservation.authorization.expiresAt).getTime() - Date.now()) /
+          1000,
+      ),
     );
     await this.redis.eval(
       `
@@ -393,16 +397,29 @@ return 1
     );
   }
 
-  private async loadVoter(reference: StoredKioskVoterReference | StoredKioskVoter): Promise<StoredKioskVoter> {
-    if ('email' in reference && 'name' in reference && reference.email && reference.name) {
+  private async loadVoter(
+    reference: StoredKioskVoterReference | StoredKioskVoter,
+  ): Promise<StoredKioskVoter> {
+    if (
+      'email' in reference &&
+      'name' in reference &&
+      reference.email &&
+      reference.name
+    ) {
       return {
         sub: reference.sub,
         email: reference.email,
         name: reference.name,
-        ...(reference.enrollmentNumber ? { enrollmentNumber: reference.enrollmentNumber } : {}),
-        ...(reference.secondaryEmails ? { secondaryEmails: reference.secondaryEmails } : {}),
+        ...(reference.enrollmentNumber
+          ? { enrollmentNumber: reference.enrollmentNumber }
+          : {}),
+        ...(reference.secondaryEmails
+          ? { secondaryEmails: reference.secondaryEmails }
+          : {}),
         ...(reference.unespRole ? { unespRole: reference.unespRole } : {}),
-        ...(reference.unespRoleVerified === undefined ? {} : { unespRoleVerified: reference.unespRoleVerified }),
+        ...(reference.unespRoleVerified === undefined
+          ? {}
+          : { unespRoleVerified: reference.unespRoleVerified }),
       };
     }
 
@@ -417,12 +434,19 @@ return 1
       },
     });
     if (!user?.id || !user.email || !user.name) {
-      throw new UnauthorizedException('Kiosk voter identity is no longer available.');
+      throw new UnauthorizedException(
+        'Kiosk voter identity is no longer available.',
+      );
     }
 
     const claims = isClaimRecord(user.claims) ? user.claims : {};
-    const secondaryEmails = readClaimValuesFromClaims(claims, ['secondary_emails', 'secondaryEmails'])
-      .flatMap((value) => typeof value === 'string' ? parseStringList(value) : [])
+    const secondaryEmails = readClaimValuesFromClaims(claims, [
+      'secondary_emails',
+      'secondaryEmails',
+    ])
+      .flatMap((value) =>
+        typeof value === 'string' ? parseStringList(value) : [],
+      )
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean);
     const roles = readClaimValuesFromClaims(claims, ['unesp_role', 'unespRole'])
@@ -434,26 +458,29 @@ return 1
       email: user.email.trim().toLowerCase(),
       name: user.name.trim(),
       ...(readEnrollmentNumberFromClaims(claims)
-        ? { enrollmentNumber: readEnrollmentNumberFromClaims(claims) ?? undefined }
+        ? {
+            enrollmentNumber:
+              readEnrollmentNumberFromClaims(claims) ?? undefined,
+          }
         : {}),
       ...(secondaryEmails.length
         ? { secondaryEmails: [...new Set(secondaryEmails)] }
         : {}),
-      ...(roles.length
-        ? { unespRole: [...new Set(roles)].join(', ') }
-        : {}),
+      ...(roles.length ? { unespRole: [...new Set(roles)].join(', ') } : {}),
       ...(readClaimValuesFromClaims(claims, [
         'unespRoleVerified',
         'isUnespRoleVerified',
         'unesp_role_verified',
         'is_unesp_role_verified',
       ]).length > 0
-        ? { unespRoleVerified: readClaimValuesFromClaims(claims, [
-          'unespRoleVerified',
-          'isUnespRoleVerified',
-          'unesp_role_verified',
-          'is_unesp_role_verified',
-        ]).some((value) => readBooleanValue(value)) }
+        ? {
+            unespRoleVerified: readClaimValuesFromClaims(claims, [
+              'unespRoleVerified',
+              'isUnespRoleVerified',
+              'unesp_role_verified',
+              'is_unesp_role_verified',
+            ]).some((value) => readBooleanValue(value)),
+          }
         : {}),
     };
   }
@@ -479,7 +506,9 @@ return 1
     return authorization;
   }
 
-  private parseAuthorization(raw: string | null): StoredKioskAuthorization | null {
+  private parseAuthorization(
+    raw: string | null,
+  ): StoredKioskAuthorization | null {
     if (!raw) {
       return null;
     }
@@ -676,11 +705,7 @@ return value
     const endsAt = poll.votingEndsAt
       ? new Date(poll.votingEndsAt).getTime()
       : Number.POSITIVE_INFINITY;
-    if (
-      poll.status !== 'published' ||
-      startsAt > now ||
-      endsAt <= now
-    ) {
+    if (poll.status !== 'published' || startsAt > now || endsAt <= now) {
       throw new ConflictException('Poll is not accepting kiosk votes.');
     }
     if (
@@ -694,18 +719,16 @@ return value
   }
 
   private assertCanContinue(state: PollUserResponseState): void {
-    if (
-      state.hasSubmitted &&
-      !state.canEdit &&
-      !state.canSubmitAnother
-    ) {
+    if (state.hasSubmitted && !state.canEdit && !state.canSubmitAnother) {
       throw new ConflictException('This voter has already voted in this poll.');
     }
   }
 
   private toContext(
     poll: Poll,
-    authorization: Omit<StoredKioskAuthorization, 'voter'> & { voter: StoredKioskVoter },
+    authorization: Omit<StoredKioskAuthorization, 'voter'> & {
+      voter: StoredKioskVoter;
+    },
   ): PollKioskVotingContext {
     return {
       poll,
@@ -755,7 +778,10 @@ return value
     return admin.sub;
   }
 
-  private positiveInteger(rawValue: string | undefined, fallback: number): number {
+  private positiveInteger(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }
@@ -765,9 +791,7 @@ return value
   }
 
   private stringValue(value: unknown): string | undefined {
-    return typeof value === 'string' && value.trim()
-      ? value.trim()
-      : undefined;
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
   private stringArray(value: unknown): string[] {

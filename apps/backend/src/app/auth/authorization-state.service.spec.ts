@@ -23,7 +23,8 @@ describe('AuthorizationStateService', () => {
       KEYCLOAK_AUTH_STATE_REDIS_PREFIX: 'test:state:',
       KEYCLOAK_AUTH_STATE_TTL_SECONDS: '30',
       KEYCLOAK_POST_LOGIN_REDIRECT_URI: 'https://app.example/home',
-      KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS: 'https://app.example, https://other.example, not-a-url',
+      KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS:
+        'https://app.example, https://other.example, not-a-url',
     };
     redis = createRedisMock();
     service = new AuthorizationStateService(redis as never);
@@ -57,20 +58,45 @@ describe('AuthorizationStateService', () => {
   });
 
   it('allows safe relative post-login paths and rejects auth/internal or open redirects', async () => {
-    await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo: '/polls/1' });
-    expect(JSON.parse(redis.set.mock.calls[0][1] as string)).toMatchObject({ returnTo: '/polls/1' });
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: '/polls/1',
+    });
+    expect(JSON.parse(redis.set.mock.calls[0][1] as string)).toMatchObject({
+      returnTo: '/polls/1',
+    });
 
-    await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo: '//evil.example' });
-    expect(JSON.parse(redis.set.mock.calls[1][1] as string)).not.toHaveProperty('returnTo');
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: '//evil.example',
+    });
+    expect(JSON.parse(redis.set.mock.calls[1][1] as string)).not.toHaveProperty(
+      'returnTo',
+    );
 
-    await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo: '/api/auth/login' });
-    expect(JSON.parse(redis.set.mock.calls[2][1] as string)).not.toHaveProperty('returnTo');
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: '/api/auth/login',
+    });
+    expect(JSON.parse(redis.set.mock.calls[2][1] as string)).not.toHaveProperty(
+      'returnTo',
+    );
 
-    await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo: 'https://evil.example' });
-    expect(JSON.parse(redis.set.mock.calls[3][1] as string)).not.toHaveProperty('returnTo');
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: 'https://evil.example',
+    });
+    expect(JSON.parse(redis.set.mock.calls[3][1] as string)).not.toHaveProperty(
+      'returnTo',
+    );
 
-    await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo: 'http://[::1' });
-    expect(JSON.parse(redis.set.mock.calls[4][1] as string)).not.toHaveProperty('returnTo');
+    await service.create({
+      redirectUri: 'https://api.example/api/auth/callback',
+      returnTo: 'http://[::1',
+    });
+    expect(JSON.parse(redis.set.mock.calls[4][1] as string)).not.toHaveProperty(
+      'returnTo',
+    );
   });
 
   it('canonicalizes relative paths before applying the auth-loop policy', async () => {
@@ -85,15 +111,22 @@ describe('AuthorizationStateService', () => {
     ];
 
     for (const returnTo of redirects) {
-      await service.create({ redirectUri: 'https://api.example/api/auth/callback', returnTo });
-      expect(JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string)).not.toHaveProperty('returnTo');
+      await service.create({
+        redirectUri: 'https://api.example/api/auth/callback',
+        returnTo,
+      });
+      expect(
+        JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string),
+      ).not.toHaveProperty('returnTo');
     }
 
     await service.create({
       redirectUri: 'https://api.example/api/auth/callback',
       returnTo: '/api/auth/../../polls?tab=1#results',
     });
-    expect(JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string)).toMatchObject({
+    expect(
+      JSON.parse(redis.set.mock.calls.at(-1)?.[1] as string),
+    ).toMatchObject({
       returnTo: '/polls?tab=1#results',
     });
   });
@@ -114,7 +147,11 @@ describe('AuthorizationStateService', () => {
       state: 'external',
       prompt: 'login',
     });
-    expect(redis.eval).toHaveBeenCalledWith(expect.stringContaining('redis.call("get"'), 1, 'test:state:state-1');
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('redis.call("get"'),
+      1,
+      'test:state:state-1',
+    );
   });
 
   it('returns undefined for empty, missing, non-record, or malformed stored states', async () => {
@@ -131,15 +168,23 @@ describe('AuthorizationStateService', () => {
   });
 
   it('resolves callback and post-login redirect URIs', () => {
-    expect(service.getAuthorizationRedirectUri({ redirectUri: 'https://api.example/api/auth/callback' })).toBe(
-      'https://api.example/api/auth/callback',
-    );
+    expect(
+      service.getAuthorizationRedirectUri({
+        redirectUri: 'https://api.example/api/auth/callback',
+      }),
+    ).toBe('https://api.example/api/auth/callback');
     expect(service.getAuthorizationRedirectUri()).toBeUndefined();
-    expect(service.getPostLoginRedirectUri({ returnTo: '/polls' })).toBe('/polls');
-    expect(service.getPostLoginRedirectUri({ returnTo: 'https://other.example/dashboard' })).toBe(
-      'https://other.example/dashboard',
+    expect(service.getPostLoginRedirectUri({ returnTo: '/polls' })).toBe(
+      '/polls',
     );
-    expect(service.getPostLoginRedirectUri({ returnTo: 'https://evil.example' })).toBe('https://app.example/home');
+    expect(
+      service.getPostLoginRedirectUri({
+        returnTo: 'https://other.example/dashboard',
+      }),
+    ).toBe('https://other.example/dashboard');
+    expect(
+      service.getPostLoginRedirectUri({ returnTo: 'https://evil.example' }),
+    ).toBe('https://app.example/home');
     expect(service.getPostLoginRedirectUri()).toBe('https://app.example/home');
   });
 
@@ -150,7 +195,9 @@ describe('AuthorizationStateService', () => {
     delete process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS;
     service = new AuthorizationStateService(redis as never);
 
-    expect(service.getPostLoginRedirectUri({ returnTo: 'https://app.example/home' })).toBe('/');
+    expect(
+      service.getPostLoginRedirectUri({ returnTo: 'https://app.example/home' }),
+    ).toBe('/');
   });
 
   it('uses default config and empty parsed state fallbacks', async () => {
@@ -160,7 +207,9 @@ describe('AuthorizationStateService', () => {
     delete process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS;
     service = new AuthorizationStateService(redis as never);
 
-    redis.eval.mockResolvedValueOnce(JSON.stringify({ redirectUri: 1, returnTo: 2, state: 3, prompt: 4 }));
+    redis.eval.mockResolvedValueOnce(
+      JSON.stringify({ redirectUri: 1, returnTo: 2, state: 3, prompt: 4 }),
+    );
 
     await expect(service.consume('state-1')).resolves.toEqual({
       redirectUri: '',
@@ -168,7 +217,9 @@ describe('AuthorizationStateService', () => {
       state: undefined,
       prompt: undefined,
     });
-    expect(redis.eval.mock.calls[0][2]).toMatch(/^cacic-voto:auth:oauth-state:/);
+    expect(redis.eval.mock.calls[0][2]).toMatch(
+      /^cacic-voto:auth:oauth-state:/,
+    );
     expect(service.getPostLoginRedirectUri()).toBe('/');
   });
 });

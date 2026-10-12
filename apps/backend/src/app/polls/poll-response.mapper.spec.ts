@@ -1,4 +1,7 @@
-import { namespacedPollElementId, namespacedPollOptionId } from './poll-identifiers';
+import {
+  namespacedPollElementId,
+  namespacedPollOptionId,
+} from './poll-identifiers';
 import { toContractPollResponse } from './poll-response.mapper';
 
 describe('poll response historical mapping', () => {
@@ -11,17 +14,19 @@ describe('poll response historical mapping', () => {
       submittedAt: new Date('2026-06-21T12:00:00.000Z'),
       createdAt: new Date('2026-06-21T12:00:00.000Z'),
       userId: 'user-1',
-      answers: [{
-        elementId: storedElementId,
-        value: storedOptionId,
-        elementSnapshot: {
-          id: 'question-1',
-          type: 'singleChoice',
-          title: 'Original question',
-          required: true,
-          options: [{ id: 'option-1', label: 'Original option' }],
+      answers: [
+        {
+          elementId: storedElementId,
+          value: storedOptionId,
+          elementSnapshot: {
+            id: 'question-1',
+            type: 'singleChoice',
+            title: 'Original question',
+            required: true,
+            options: [{ id: 'option-1', label: 'Original option' }],
+          },
         },
-      }],
+      ],
       user: null,
     } as never);
 

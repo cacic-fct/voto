@@ -1,10 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import {
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { PermissionsService } from '../auth/permissions.service';
@@ -18,7 +28,14 @@ type NavItem = {
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterOutlet, MatButtonModule, MatIconModule, MatSnackBarModule, MatToolbarModule],
+  imports: [
+    RouterLink,
+    RouterOutlet,
+    MatButtonModule,
+    MatIconModule,
+    MatSnackBarModule,
+    MatToolbarModule,
+  ],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })
@@ -40,7 +57,13 @@ export class AppShellComponent {
   protected readonly navItems = computed<NavItem[]>(() => [
     { path: '/polls', label: 'Votações', icon: 'ballot' },
     ...(this.permissions.isAdmin()
-      ? [{ path: '/admin', label: 'Área restrita', icon: 'admin_panel_settings' }]
+      ? [
+          {
+            path: '/admin',
+            label: 'Área restrita',
+            icon: 'admin_panel_settings',
+          },
+        ]
       : []),
   ]);
 
@@ -56,9 +79,13 @@ export class AppShellComponent {
     try {
       await this.auth.logout();
     } catch {
-      this.snackBar.open('Não foi possível encerrar a sessão. Tente novamente.', 'OK', {
-        duration: 5000,
-      });
+      this.snackBar.open(
+        'Não foi possível encerrar a sessão. Tente novamente.',
+        'OK',
+        {
+          duration: 5000,
+        },
+      );
     }
   }
 }

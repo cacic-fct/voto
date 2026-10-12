@@ -3,18 +3,26 @@ import { parseCsv } from './csv-parser';
 
 describe('parseCsv', () => {
   it('parses comma-separated files with trimmed headers and values', () => {
-    expect(parseCsv('\uFEFFnome, matricula\n Maria , 123 \n João,456')).toEqual({
-      headers: ['nome', 'matricula'],
-      rows: [
-        { nome: 'Maria', matricula: '123' },
-        { nome: 'João', matricula: '456' },
-      ],
-    });
+    expect(parseCsv('\uFEFFnome, matricula\n Maria , 123 \n João,456')).toEqual(
+      {
+        headers: ['nome', 'matricula'],
+        rows: [
+          { nome: 'Maria', matricula: '123' },
+          { nome: 'João', matricula: '456' },
+        ],
+      },
+    );
   });
 
   it('detects semicolon and tab delimiters from the first line', () => {
-    expect(parseCsv('nome;matricula\nAna;789').rows[0]).toEqual({ nome: 'Ana', matricula: '789' });
-    expect(parseCsv('nome\tmatricula\nCaio\t101').rows[0]).toEqual({ nome: 'Caio', matricula: '101' });
+    expect(parseCsv('nome;matricula\nAna;789').rows[0]).toEqual({
+      nome: 'Ana',
+      matricula: '789',
+    });
+    expect(parseCsv('nome\tmatricula\nCaio\t101').rows[0]).toEqual({
+      nome: 'Caio',
+      matricula: '101',
+    });
   });
 
   it('keeps quoted delimiters, escaped quotes, and line breaks inside a field', () => {
@@ -32,13 +40,23 @@ describe('parseCsv', () => {
   });
 
   it('handles Windows line endings', () => {
-    expect(parseCsv('nome,matricula\r\nAna,123\r\n').rows).toEqual([{ nome: 'Ana', matricula: '123' }]);
+    expect(parseCsv('nome,matricula\r\nAna,123\r\n').rows).toEqual([
+      { nome: 'Ana', matricula: '123' },
+    ]);
   });
 
   it('throws localized errors for malformed or headerless CSV content', () => {
-    expect(() => parseCsv('"sem fechamento')).toThrow('O CSV possui uma coluna com aspas sem fechamento.');
-    expect(() => parseCsv('')).toThrow('O CSV precisa incluir uma linha de cabeçalho.');
-    expect(() => parseCsv('nome,nome\nAna,Maria')).toThrow('O CSV possui cabeçalhos duplicados: nome.');
-    expect(() => parseCsv('nome,matricula\nAna')).toThrow('A linha 2 possui 1 colunas; esperado: 2.');
+    expect(() => parseCsv('"sem fechamento')).toThrow(
+      'O CSV possui uma coluna com aspas sem fechamento.',
+    );
+    expect(() => parseCsv('')).toThrow(
+      'O CSV precisa incluir uma linha de cabeçalho.',
+    );
+    expect(() => parseCsv('nome,nome\nAna,Maria')).toThrow(
+      'O CSV possui cabeçalhos duplicados: nome.',
+    );
+    expect(() => parseCsv('nome,matricula\nAna')).toThrow(
+      'A linha 2 possui 1 colunas; esperado: 2.',
+    );
   });
 });

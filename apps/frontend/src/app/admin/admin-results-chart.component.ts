@@ -48,7 +48,12 @@ export type AdminResultsChartConfig = {
       </div>
 
       @if (hasData()) {
-        <div #chartHost class="chart-card__chart" role="img" [attr.aria-label]="config().title"></div>
+        <div
+          #chartHost
+          class="chart-card__chart"
+          role="img"
+          [attr.aria-label]="config().title"
+        ></div>
       } @else {
         <div class="chart-card__empty">
           <mat-icon>bar_chart_off</mat-icon>
@@ -60,7 +65,9 @@ export type AdminResultsChartConfig = {
   styleUrl: './admin-results-chart.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class AdminResultsChartComponent
+  implements AfterViewInit, OnChanges, OnDestroy
+{
   readonly config = input.required<AdminResultsChartConfig>();
 
   @ViewChild('chartHost')
@@ -80,7 +87,10 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
 
     this.renderChart();
 
-    if (this.chartHost?.nativeElement && typeof ResizeObserver !== 'undefined') {
+    if (
+      this.chartHost?.nativeElement &&
+      typeof ResizeObserver !== 'undefined'
+    ) {
       this.resizeObserver = new ResizeObserver(() => this.chart?.resize());
       this.resizeObserver.observe(this.chartHost.nativeElement);
     }
@@ -97,7 +107,10 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
     this.themeObserver?.disconnect();
-    this.colorSchemeQuery?.removeEventListener('change', this.handleColorSchemeChange);
+    this.colorSchemeQuery?.removeEventListener(
+      'change',
+      this.handleColorSchemeChange,
+    );
     this.chart?.dispose();
   }
 
@@ -141,7 +154,10 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
     }
 
     this.colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    this.colorSchemeQuery.addEventListener('change', this.handleColorSchemeChange);
+    this.colorSchemeQuery.addEventListener(
+      'change',
+      this.handleColorSchemeChange,
+    );
   }
 
   private buildOption(): EChartsOption {
@@ -346,7 +362,9 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
     });
   }
 
-  private isTooltipParam(value: unknown): value is { name: string; value: number } {
+  private isTooltipParam(
+    value: unknown,
+  ): value is { name: string; value: number } {
     return (
       typeof value === 'object' &&
       value !== null &&
@@ -365,8 +383,10 @@ export class AdminResultsChartComponent implements AfterViewInit, OnChanges, OnD
 
   private readThemeColors(): ChartThemeColors {
     const styles = getComputedStyle(document.body);
-    const cssValue = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
-    const color = (name: string, fallback: string) => this.resolveCssColor(cssValue(name, fallback), fallback);
+    const cssValue = (name: string, fallback: string) =>
+      styles.getPropertyValue(name).trim() || fallback;
+    const color = (name: string, fallback: string) =>
+      this.resolveCssColor(cssValue(name, fallback), fallback);
 
     return {
       fontFamily: cssValue('font-family', 'Inter Variable, sans-serif'),

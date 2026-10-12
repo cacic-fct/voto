@@ -8,10 +8,20 @@ import {
 } from '@org/voting-contracts';
 import { PollImagePlacement as DbPollImagePlacement } from '@prisma/client';
 import { SavePollDto } from './dto/poll.dto';
-import { cleanOptionalText, isGridElement, isOptionChoiceElement } from './poll-contract.mapper';
+import {
+  cleanOptionalText,
+  isGridElement,
+  isOptionChoiceElement,
+} from './poll-contract.mapper';
 import { normalizePollIdentifier } from './poll-identifiers';
-import { PollImageReferenceData, PollPublicationScheduleData } from './poll-records';
-import { parseDateAnswerValue, parseTimeAnswerValue } from './poll-response.validator';
+import {
+  PollImageReferenceData,
+  PollPublicationScheduleData,
+} from './poll-records';
+import {
+  parseDateAnswerValue,
+  parseTimeAnswerValue,
+} from './poll-response.validator';
 
 const MAX_ELEMENT_OPTIONS = 80;
 const MAX_DESCRIPTION_IMAGES = 8;
@@ -28,7 +38,11 @@ const SCHEDULING_INTERVAL_MAXIMUM = 180;
 const SCHEDULING_BUFFER_MAXIMUM = 120;
 const SCHEDULING_MAX_INVITEES = 20;
 const SCHEDULING_MAX_AVAILABILITY_WINDOWS = 120;
-const SCHEDULING_INVITEE_MODES = ['none', 'optional', 'required'] as const satisfies readonly PollSchedulingInviteeMode[];
+const SCHEDULING_INVITEE_MODES = [
+  'none',
+  'optional',
+  'required',
+] as const satisfies readonly PollSchedulingInviteeMode[];
 
 @Injectable()
 export class PollMutationValidationService {
@@ -49,17 +63,26 @@ export class PollMutationValidationService {
         throw new BadRequestException('Element title is required.');
       }
 
-      if ((element.type === 'section' || element.type === 'statement') && element.required) {
-        throw new BadRequestException(`Display-only element "${element.title}" cannot be required.`);
+      if (
+        (element.type === 'section' || element.type === 'statement') &&
+        element.required
+      ) {
+        throw new BadRequestException(
+          `Display-only element "${element.title}" cannot be required.`,
+        );
       }
 
       const isOptionChoice = isOptionChoiceElement(element.type);
       if (isOptionChoice && element.options.length < 2) {
-        throw new BadRequestException(`Element "${element.title}" needs at least two options.`);
+        throw new BadRequestException(
+          `Element "${element.title}" needs at least two options.`,
+        );
       }
 
       if (!isOptionChoice && element.options.length > 0) {
-        throw new BadRequestException(`Element "${element.title}" cannot have options.`);
+        throw new BadRequestException(
+          `Element "${element.title}" cannot have options.`,
+        );
       }
 
       const optionIds = new Set<string>();
@@ -70,7 +93,9 @@ export class PollMutationValidationService {
         optionIds.add(option.id);
 
         if (!option.label.trim()) {
-          throw new BadRequestException(`Option label is required in element "${element.title}".`);
+          throw new BadRequestException(
+            `Option label is required in element "${element.title}".`,
+          );
         }
       }
 
@@ -97,7 +122,10 @@ export class PollMutationValidationService {
       if (scheduling) {
         scheduling.timezone = scheduling.timezone.trim();
         for (const availability of scheduling.availability) {
-          availability.id = normalizePollIdentifier(availability.id, 'Scheduling availability id');
+          availability.id = normalizePollIdentifier(
+            availability.id,
+            'Scheduling availability id',
+          );
         }
       }
     }
@@ -106,35 +134,57 @@ export class PollMutationValidationService {
   validateImageReferences(input: SavePollDto, elementIds: Set<string>): void {
     const references = this.collectImageReferences(input);
     if (references.length > MAX_POLL_IMAGES) {
-      throw new BadRequestException(`Polls can include at most ${MAX_POLL_IMAGES} images.`);
+      throw new BadRequestException(
+        `Polls can include at most ${MAX_POLL_IMAGES} images.`,
+      );
     }
 
     const seenImageIds = new Set<string>();
     for (const reference of references) {
       if (seenImageIds.has(reference.id)) {
-        throw new BadRequestException('The same image cannot be embedded more than once.');
+        throw new BadRequestException(
+          'The same image cannot be embedded more than once.',
+        );
       }
       seenImageIds.add(reference.id);
 
       if (reference.elementId && !elementIds.has(reference.elementId)) {
-        throw new BadRequestException('Poll image references an unknown element.');
+        throw new BadRequestException(
+          'Poll image references an unknown element.',
+        );
       }
     }
   }
 
   validatePollPublicationSchedule(schedule: PollPublicationScheduleData): void {
-    if (schedule.visibleFrom && schedule.votingEndsAt && schedule.votingEndsAt <= schedule.visibleFrom) {
-      throw new BadRequestException('Poll voting end date must be after the visibility start date.');
+    if (
+      schedule.visibleFrom &&
+      schedule.votingEndsAt &&
+      schedule.votingEndsAt <= schedule.visibleFrom
+    ) {
+      throw new BadRequestException(
+        'Poll voting end date must be after the visibility start date.',
+      );
     }
 
-    if (schedule.votingStartsAt && schedule.votingEndsAt && schedule.votingEndsAt <= schedule.votingStartsAt) {
-      throw new BadRequestException('Poll voting end date must be after the voting start date.');
+    if (
+      schedule.votingStartsAt &&
+      schedule.votingEndsAt &&
+      schedule.votingEndsAt <= schedule.votingStartsAt
+    ) {
+      throw new BadRequestException(
+        'Poll voting end date must be after the voting start date.',
+      );
     }
   }
 
   collectImageReferences(input: SavePollDto): PollImageReferenceData[] {
     const references: PollImageReferenceData[] = [
-      ...this.normalizeImageReferences(input.descriptionImages, DbPollImagePlacement.POLL_DESCRIPTION, null),
+      ...this.normalizeImageReferences(
+        input.descriptionImages,
+        DbPollImagePlacement.POLL_DESCRIPTION,
+        null,
+      ),
     ];
 
     for (const element of input.elements) {
@@ -160,7 +210,9 @@ export class PollMutationValidationService {
     }
 
     if (images.length > MAX_DESCRIPTION_IMAGES) {
-      throw new BadRequestException(`Each description can include at most ${MAX_DESCRIPTION_IMAGES} images.`);
+      throw new BadRequestException(
+        `Each description can include at most ${MAX_DESCRIPTION_IMAGES} images.`,
+      );
     }
 
     return images.map((image, position) => {
@@ -186,11 +238,21 @@ export class PollMutationValidationService {
       this.rejectUnexpectedSettings(element, ['grid']);
       const grid = element.settings?.grid;
       if (!grid) {
-        throw new BadRequestException(`Element "${element.title}" needs grid settings.`);
+        throw new BadRequestException(
+          `Element "${element.title}" needs grid settings.`,
+        );
       }
 
-      this.validateSettingsOptions(grid.rows, `Rows in element "${element.title}"`, 1);
-      this.validateSettingsOptions(grid.columns, `Columns in element "${element.title}"`, 2);
+      this.validateSettingsOptions(
+        grid.rows,
+        `Rows in element "${element.title}"`,
+        1,
+      );
+      this.validateSettingsOptions(
+        grid.columns,
+        `Columns in element "${element.title}"`,
+        2,
+      );
       return;
     }
 
@@ -198,11 +260,18 @@ export class PollMutationValidationService {
       this.rejectUnexpectedSettings(element, ['linearScale']);
       const scale = element.settings?.linearScale;
       if (!scale) {
-        throw new BadRequestException(`Element "${element.title}" needs linear scale settings.`);
+        throw new BadRequestException(
+          `Element "${element.title}" needs linear scale settings.`,
+        );
       }
 
-      if (!Number.isInteger(scale.min) || !LINEAR_SCALE_MIN_VALUES.includes(scale.min)) {
-        throw new BadRequestException(`Element "${element.title}" linear scale must start at 0 or 1.`);
+      if (
+        !Number.isInteger(scale.min) ||
+        !LINEAR_SCALE_MIN_VALUES.includes(scale.min)
+      ) {
+        throw new BadRequestException(
+          `Element "${element.title}" linear scale must start at 0 or 1.`,
+        );
       }
 
       if (
@@ -211,7 +280,9 @@ export class PollMutationValidationService {
         scale.max > LINEAR_SCALE_MAX_MAXIMUM ||
         scale.max <= scale.min
       ) {
-        throw new BadRequestException(`Element "${element.title}" linear scale must end between 2 and 10.`);
+        throw new BadRequestException(
+          `Element "${element.title}" linear scale must end between 2 and 10.`,
+        );
       }
       return;
     }
@@ -220,11 +291,19 @@ export class PollMutationValidationService {
       this.rejectUnexpectedSettings(element, ['starRating']);
       const rating = element.settings?.starRating;
       if (!rating) {
-        throw new BadRequestException(`Element "${element.title}" needs star rating settings.`);
+        throw new BadRequestException(
+          `Element "${element.title}" needs star rating settings.`,
+        );
       }
 
-      if (!Number.isInteger(rating.max) || rating.max < STAR_RATING_MINIMUM || rating.max > STAR_RATING_MAXIMUM) {
-        throw new BadRequestException(`Element "${element.title}" star rating must be between 3 and 10.`);
+      if (
+        !Number.isInteger(rating.max) ||
+        rating.max < STAR_RATING_MINIMUM ||
+        rating.max > STAR_RATING_MAXIMUM
+      ) {
+        throw new BadRequestException(
+          `Element "${element.title}" star rating must be between 3 and 10.`,
+        );
       }
       return;
     }
@@ -233,7 +312,9 @@ export class PollMutationValidationService {
       this.rejectUnexpectedSettings(element, ['scheduling']);
       const scheduling = element.settings?.scheduling;
       if (!scheduling) {
-        throw new BadRequestException(`Element "${element.title}" needs scheduling settings.`);
+        throw new BadRequestException(
+          `Element "${element.title}" needs scheduling settings.`,
+        );
       }
 
       this.validateSchedulingSettings(element.title, scheduling);
@@ -252,20 +333,35 @@ export class PollMutationValidationService {
     }
 
     const allowed = new Set<keyof PollElementSettings>(allowedSettings);
-    for (const key of ['grid', 'linearScale', 'starRating', 'scheduling'] as const) {
+    for (const key of [
+      'grid',
+      'linearScale',
+      'starRating',
+      'scheduling',
+    ] as const) {
       if (element.settings[key] && !allowed.has(key)) {
-        throw new BadRequestException(`Element "${element.title}" has settings that do not match its type.`);
+        throw new BadRequestException(
+          `Element "${element.title}" has settings that do not match its type.`,
+        );
       }
     }
   }
 
-  validateSettingsOptions(options: readonly PollChoiceOption[], label: string, minimumSize: number): void {
+  validateSettingsOptions(
+    options: readonly PollChoiceOption[],
+    label: string,
+    minimumSize: number,
+  ): void {
     if (options.length < minimumSize) {
-      throw new BadRequestException(`${label} must include at least ${minimumSize} item(s).`);
+      throw new BadRequestException(
+        `${label} must include at least ${minimumSize} item(s).`,
+      );
     }
 
     if (options.length > MAX_ELEMENT_OPTIONS) {
-      throw new BadRequestException(`${label} must include at most ${MAX_ELEMENT_OPTIONS} items.`);
+      throw new BadRequestException(
+        `${label} must include at most ${MAX_ELEMENT_OPTIONS} items.`,
+      );
     }
 
     const optionIds = new Set<string>();
@@ -281,16 +377,23 @@ export class PollMutationValidationService {
     }
   }
 
-  validateSchedulingSettings(elementTitle: string, settings: PollSchedulingSettings): void {
+  validateSchedulingSettings(
+    elementTitle: string,
+    settings: PollSchedulingSettings,
+  ): void {
     const timezone = settings.timezone.trim();
     if (!timezone) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling timezone is required.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling timezone is required.`,
+      );
     }
 
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format();
     } catch {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling timezone is invalid.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling timezone is invalid.`,
+      );
     }
 
     this.validateSchedulingInteger(
@@ -319,7 +422,9 @@ export class PollMutationValidationService {
     );
 
     if (!SCHEDULING_INVITEE_MODES.includes(settings.inviteeMode)) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling invitee mode is invalid.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling invitee mode is invalid.`,
+      );
     }
 
     this.validateSchedulingInteger(
@@ -330,59 +435,106 @@ export class PollMutationValidationService {
     );
 
     if (settings.availability.length === 0) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling availability is required.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling availability is required.`,
+      );
     }
 
     if (settings.availability.length > SCHEDULING_MAX_AVAILABILITY_WINDOWS) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling availability has too many windows.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling availability has too many windows.`,
+      );
     }
 
     const windowIds = new Set<string>();
     const requiredMinutes =
-      settings.bufferBeforeMinutes + settings.durationMinutes + settings.bufferAfterMinutes;
+      settings.bufferBeforeMinutes +
+      settings.durationMinutes +
+      settings.bufferAfterMinutes;
     const intervals: { start: Date; end: Date }[] = [];
 
     for (const availability of settings.availability) {
-      const availabilityId = normalizePollIdentifier(availability.id, 'Scheduling availability id');
+      const availabilityId = normalizePollIdentifier(
+        availability.id,
+        'Scheduling availability id',
+      );
       if (windowIds.has(availabilityId)) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability has duplicated ids.`);
+        throw new BadRequestException(
+          `Element "${elementTitle}" scheduling availability has duplicated ids.`,
+        );
       }
       windowIds.add(availabilityId);
 
       parseDateAnswerValue(elementTitle, availability.date);
-      const startMinutes = parseTimeAnswerValue(elementTitle, availability.startTime);
-      const endMinutes = parseTimeAnswerValue(elementTitle, availability.endTime);
+      const startMinutes = parseTimeAnswerValue(
+        elementTitle,
+        availability.startTime,
+      );
+      const endMinutes = parseTimeAnswerValue(
+        elementTitle,
+        availability.endTime,
+      );
       if (endMinutes <= startMinutes) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability must end after it starts.`);
+        throw new BadRequestException(
+          `Element "${elementTitle}" scheduling availability must end after it starts.`,
+        );
       }
 
       if (endMinutes - startMinutes < requiredMinutes) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability is shorter than the meeting.`);
+        throw new BadRequestException(
+          `Element "${elementTitle}" scheduling availability is shorter than the meeting.`,
+        );
       }
 
-      const start = this.resolveLocalDateTime(elementTitle, timezone, availability.date, availability.startTime);
-      const end = this.resolveLocalDateTime(elementTitle, timezone, availability.date, availability.endTime);
+      const start = this.resolveLocalDateTime(
+        elementTitle,
+        timezone,
+        availability.date,
+        availability.startTime,
+      );
+      const end = this.resolveLocalDateTime(
+        elementTitle,
+        timezone,
+        availability.date,
+        availability.endTime,
+      );
       if (end <= start) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability has an invalid time range.`);
+        throw new BadRequestException(
+          `Element "${elementTitle}" scheduling availability has an invalid time range.`,
+        );
       }
       intervals.push({ start, end });
     }
 
-    intervals.sort((left, right) => left.start.getTime() - right.start.getTime());
+    intervals.sort(
+      (left, right) => left.start.getTime() - right.start.getTime(),
+    );
     for (let index = 1; index < intervals.length; index += 1) {
       if (intervals[index].start < intervals[index - 1].end) {
-        throw new BadRequestException(`Element "${elementTitle}" scheduling availability windows overlap.`);
+        throw new BadRequestException(
+          `Element "${elementTitle}" scheduling availability windows overlap.`,
+        );
       }
     }
   }
 
-  validateSchedulingInteger(value: number, minimum: number, maximum: number, message: string): void {
+  validateSchedulingInteger(
+    value: number,
+    minimum: number,
+    maximum: number,
+    message: string,
+  ): void {
     if (!Number.isInteger(value) || value < minimum || value > maximum) {
       throw new BadRequestException(message);
     }
   }
 
-  private resolveLocalDateTime(elementTitle: string, timezone: string, date: string, time: string): Date {
+  private resolveLocalDateTime(
+    elementTitle: string,
+    timezone: string,
+    date: string,
+    time: string,
+  ): Date {
     const [year, month, day] = date.split('-').map(Number);
     const [hours, minutes] = time.split(':').map(Number);
     const target = Date.UTC(year, month - 1, day, hours, minutes);
@@ -399,11 +551,18 @@ export class PollMutationValidationService {
 
     // Current IANA zones use offsets in 15-minute increments. Searching the
     // full legal offset range also detects DST gaps and folds deterministically.
-    for (let offsetMinutes = -14 * 60; offsetMinutes <= 14 * 60; offsetMinutes += 15) {
+    for (
+      let offsetMinutes = -14 * 60;
+      offsetMinutes <= 14 * 60;
+      offsetMinutes += 15
+    ) {
       const candidate = new Date(target - offsetMinutes * 60_000);
       const parts = Object.fromEntries(
-        formatter.formatToParts(candidate)
-          .filter(({ type }) => ['year', 'month', 'day', 'hour', 'minute'].includes(type))
+        formatter
+          .formatToParts(candidate)
+          .filter(({ type }) =>
+            ['year', 'month', 'day', 'hour', 'minute'].includes(type),
+          )
           .map(({ type, value }) => [type, Number(value)]),
       ) as Record<string, number>;
       if (
@@ -420,10 +579,14 @@ export class PollMutationValidationService {
     }
 
     if (matches.length === 0) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling time does not exist in ${timezone}.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling time does not exist in ${timezone}.`,
+      );
     }
     if (matches.length > 1) {
-      throw new BadRequestException(`Element "${elementTitle}" scheduling time is ambiguous in ${timezone}.`);
+      throw new BadRequestException(
+        `Element "${elementTitle}" scheduling time is ambiguous in ${timezone}.`,
+      );
     }
 
     return matches[0];

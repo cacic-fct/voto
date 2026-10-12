@@ -7,12 +7,20 @@ import { normalizePostLoginRedirect } from './post-login-redirect';
 @Injectable()
 export class AuthorizationStateService {
   private readonly logger = new Logger(AuthorizationStateService.name);
-  private readonly keyPrefix = process.env.KEYCLOAK_AUTH_STATE_REDIS_PREFIX ?? 'cacic-voto:auth:oauth-state:';
-  private readonly stateTtlSeconds = this.parseDurationSeconds(process.env.KEYCLOAK_AUTH_STATE_TTL_SECONDS, 10 * 60);
-  private readonly defaultPostLoginRedirectUri = process.env.KEYCLOAK_POST_LOGIN_REDIRECT_URI ?? '/';
-  private readonly allowedPostLoginRedirectOrigins = this.readAllowedPostLoginRedirectOrigins();
+  private readonly keyPrefix =
+    process.env.KEYCLOAK_AUTH_STATE_REDIS_PREFIX ??
+    'cacic-voto:auth:oauth-state:';
+  private readonly stateTtlSeconds = this.parseDurationSeconds(
+    process.env.KEYCLOAK_AUTH_STATE_TTL_SECONDS,
+    10 * 60,
+  );
+  private readonly defaultPostLoginRedirectUri =
+    process.env.KEYCLOAK_POST_LOGIN_REDIRECT_URI ?? '/';
+  private readonly allowedPostLoginRedirectOrigins =
+    this.readAllowedPostLoginRedirectOrigins();
   private readonly applicationOrigin =
-    process.env.PUBLIC_ORIGIN?.trim() ?? process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
+    process.env.PUBLIC_ORIGIN?.trim() ??
+    process.env.KEYCLOAK_CANONICAL_ORIGIN?.trim();
 
   constructor(private readonly redis: Redis) {}
 
@@ -70,7 +78,10 @@ return value
   }
 
   getPostLoginRedirectUri(state?: AuthorizationState): string {
-    return this.normalizePostLoginReturnTo(state?.returnTo) ?? this.defaultPostLoginRedirectUri;
+    return (
+      this.normalizePostLoginReturnTo(state?.returnTo) ??
+      this.defaultPostLoginRedirectUri
+    );
   }
 
   private parseStoredState(rawState: string): AuthorizationState | undefined {
@@ -107,7 +118,9 @@ return value
     const origins = new Set<string>();
     this.addUrlOrigin(origins, this.defaultPostLoginRedirectUri);
 
-    for (const origin of (process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS ?? '').split(',')) {
+    for (const origin of (
+      process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS ?? ''
+    ).split(',')) {
       this.addUrlOrigin(origins, origin.trim());
     }
 
@@ -122,11 +135,16 @@ return value
     try {
       origins.add(new URL(rawUrl).origin);
     } catch {
-      this.logger.warn(`Ignoring invalid Keycloak post-login redirect origin: ${rawUrl}`);
+      this.logger.warn(
+        `Ignoring invalid Keycloak post-login redirect origin: ${rawUrl}`,
+      );
     }
   }
 
-  private readStringClaim(claims: Record<string, unknown>, key: string): string | undefined {
+  private readStringClaim(
+    claims: Record<string, unknown>,
+    key: string,
+  ): string | undefined {
     const value = claims[key];
     return typeof value === 'string' ? value : undefined;
   }
@@ -139,7 +157,10 @@ return value
     return `${this.keyPrefix}${state}`;
   }
 
-  private parseDurationSeconds(rawValue: string | undefined, fallback: number): number {
+  private parseDurationSeconds(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     return Number.isNaN(value) || value <= 0 ? fallback : value;
   }

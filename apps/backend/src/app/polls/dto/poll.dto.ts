@@ -60,7 +60,9 @@ export class PollChoiceOptionDto {
   @MaxLength(240)
   label!: string;
 
-  @ApiPropertyOptional({ example: 'Representantes do curso de Ciência da Computação.' })
+  @ApiPropertyOptional({
+    example: 'Representantes do curso de Ciência da Computação.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -259,7 +261,9 @@ export class PollElementDto {
   @MaxLength(240)
   title!: string;
 
-  @ApiPropertyOptional({ example: 'Seu voto será contabilizado ao final da votação.' })
+  @ApiPropertyOptional({
+    example: 'Seu voto será contabilizado ao final da votação.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -297,7 +301,9 @@ export class SavePollDto {
   @MaxLength(240)
   title!: string;
 
-  @ApiPropertyOptional({ example: 'Formulário de votação para representantes discentes.' })
+  @ApiPropertyOptional({
+    example: 'Formulário de votação para representantes discentes.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(4000)
@@ -313,7 +319,8 @@ export class SavePollDto {
 
   @ApiPropertyOptional({
     example: '2026-06-27T12:30:00.000Z',
-    description: 'Updated-at version returned by the last read. Required for poll replacement updates.',
+    description:
+      'Updated-at version returned by the last read. Required for poll replacement updates.',
   })
   @IsOptional()
   @IsISO8601()
@@ -324,7 +331,10 @@ export class SavePollDto {
   @IsIn(POLL_MODES)
   mode?: PollMode;
 
-  @ApiPropertyOptional({ enum: CACIC_ELECTION_PHASES, example: 'slateSubmission' })
+  @ApiPropertyOptional({
+    enum: CACIC_ELECTION_PHASES,
+    example: 'slateSubmission',
+  })
   @IsOptional()
   @IsIn(CACIC_ELECTION_PHASES)
   cacicElectionPhase?: CacicElectionPhase;
@@ -334,7 +344,10 @@ export class SavePollDto {
   @IsIn(POLL_VOTING_STYLES)
   votingStyle?: PollVotingStyle;
 
-  @ApiPropertyOptional({ enum: POLL_VOTER_ELIGIBILITY_SOURCES, example: 'authenticatedUsers' })
+  @ApiPropertyOptional({
+    enum: POLL_VOTER_ELIGIBILITY_SOURCES,
+    example: 'authenticatedUsers',
+  })
   @IsOptional()
   @IsIn(POLL_VOTER_ELIGIBILITY_SOURCES)
   voterEligibilitySource?: PollVoterEligibilitySource;
@@ -350,7 +363,8 @@ export class SavePollDto {
 
   @ApiPropertyOptional({
     example: false,
-    description: 'Allow authenticated users with the shareable direct link to vote even when other eligibility rules do not match.',
+    description:
+      'Allow authenticated users with the shareable direct link to vote even when other eligibility rules do not match.',
   })
   @IsOptional()
   @IsBoolean()
@@ -358,7 +372,8 @@ export class SavePollDto {
 
   @ApiPropertyOptional({
     example: true,
-    description: 'Allow voters to see public poll results according to the live-results setting.',
+    description:
+      'Allow voters to see public poll results according to the live-results setting.',
   })
   @IsOptional()
   @IsBoolean()
@@ -375,7 +390,8 @@ export class SavePollDto {
 
   @ApiPropertyOptional({
     example: true,
-    description: 'Allow voters to edit their submitted response. Disabled for anonymous polls.',
+    description:
+      'Allow voters to edit their submitted response. Disabled for anonymous polls.',
   })
   @IsOptional()
   @IsBoolean()
@@ -391,7 +407,8 @@ export class SavePollDto {
 
   @ApiPropertyOptional({
     example: '2026-06-27T12:30:00.000Z',
-    description: 'First instant when authenticated voters can see this poll in public routes.',
+    description:
+      'First instant when authenticated voters can see this poll in public routes.',
   })
   @IsOptional()
   @IsISO8601()
@@ -452,7 +469,15 @@ export class PollResponseAnswerDto {
       { type: 'string' },
       { type: 'number' },
       { type: 'array', items: { type: 'string' } },
-      { type: 'object', additionalProperties: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] } },
+      {
+        type: 'object',
+        additionalProperties: {
+          oneOf: [
+            { type: 'string' },
+            { type: 'array', items: { type: 'string' } },
+          ],
+        },
+      },
       { type: 'null' },
     ],
     example: 'option-1',
@@ -474,7 +499,8 @@ export class AddPollEligibilityEnrollmentsDto {
   @ApiProperty({
     example: ['20240001', '20240002'],
     type: [String],
-    description: 'Enrollment numbers that should be allowed to vote in this poll.',
+    description:
+      'Enrollment numbers that should be allowed to vote in this poll.',
   })
   @IsArray()
   @ArrayMaxSize(1000)
@@ -496,7 +522,10 @@ export class ImportPollEligibilityEnrollmentsDto {
   @MaxLength(5_000_000)
   content!: string;
 
-  @ApiPropertyOptional({ enum: POLL_ELIGIBILITY_MUTATION_MODES, example: 'append' })
+  @ApiPropertyOptional({
+    enum: POLL_ELIGIBILITY_MUTATION_MODES,
+    example: 'append',
+  })
   @IsOptional()
   @IsIn(POLL_ELIGIBILITY_MUTATION_MODES)
   mode?: PollEligibilityMutationMode;
@@ -529,7 +558,10 @@ export class CacicElectionSlateMemberDto {
   @MaxLength(64)
   enrollmentNumber?: string;
 
-  @ApiProperty({ enum: CACIC_ELECTION_SLATE_MEMBER_ROLES, example: 'president' })
+  @ApiProperty({
+    enum: CACIC_ELECTION_SLATE_MEMBER_ROLES,
+    example: 'president',
+  })
   @IsIn(CACIC_ELECTION_SLATE_MEMBER_ROLES)
   role!: CacicElectionSlateMemberRole;
 
@@ -543,7 +575,10 @@ export class CacicElectionSlateMemberDto {
   @IsBoolean()
   isRepresentative!: boolean;
 
-  @ApiProperty({ enum: CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES, example: 'email' })
+  @ApiProperty({
+    enum: CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES,
+    example: 'email',
+  })
   @IsIn(CACIC_ELECTION_SLATE_MEMBER_IDENTIFIER_TYPES)
   identifierType!: CacicElectionSlateMemberIdentifierType;
 
@@ -568,7 +603,10 @@ export class SubmitCacicElectionSlateDto {
 }
 
 export class UpdateCacicElectionSlateDto extends SubmitCacicElectionSlateDto {
-  @ApiPropertyOptional({ enum: CACIC_ELECTION_SLATE_STATUSES, example: 'approved' })
+  @ApiPropertyOptional({
+    enum: CACIC_ELECTION_SLATE_STATUSES,
+    example: 'approved',
+  })
   @IsOptional()
   @IsIn(CACIC_ELECTION_SLATE_STATUSES)
   status?: CacicElectionSlateStatus;
@@ -580,7 +618,9 @@ export class UpdateCacicElectionSlateDto extends SubmitCacicElectionSlateDto {
 }
 
 export class RejectCacicElectionSlateDto {
-  @ApiProperty({ example: 'A chapa não contemplou todos os cargos obrigatórios.' })
+  @ApiProperty({
+    example: 'A chapa não contemplou todos os cargos obrigatórios.',
+  })
   @IsString()
   @MaxLength(2000)
   reason!: string;

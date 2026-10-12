@@ -1,4 +1,7 @@
-import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PollQueryService } from './poll-query.service';
 
 describe('PollQueryService public catalog authorization', () => {
@@ -34,8 +37,16 @@ describe('PollQueryService public catalog authorization', () => {
 
   it('omits restricted catalog metadata when eligibility denies the requester', async () => {
     const prisma = { poll: { findMany: jest.fn().mockResolvedValue([poll]) } };
-    const eligibility = { ensureVotingAllowed: jest.fn().mockRejectedValue(new ForbiddenException()) };
-    const service = new PollQueryService(prisma as never, {} as never, eligibility as never);
+    const eligibility = {
+      ensureVotingAllowed: jest
+        .fn()
+        .mockRejectedValue(new ForbiddenException()),
+    };
+    const service = new PollQueryService(
+      prisma as never,
+      {} as never,
+      eligibility as never,
+    );
 
     await expect(service.listPublicPolls(principal)).resolves.toEqual([]);
     expect(eligibility.ensureVotingAllowed).toHaveBeenCalled();
@@ -43,23 +54,57 @@ describe('PollQueryService public catalog authorization', () => {
 
   it('returns public catalog metadata only after the requester passes eligibility', async () => {
     const prisma = { poll: { findMany: jest.fn().mockResolvedValue([poll]) } };
-    const eligibility = { ensureVotingAllowed: jest.fn().mockResolvedValue(undefined) };
-    const service = new PollQueryService(prisma as never, {} as never, eligibility as never);
+    const eligibility = {
+      ensureVotingAllowed: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new PollQueryService(
+      prisma as never,
+      {} as never,
+      eligibility as never,
+    );
 
     await expect(service.listPublicPolls(principal)).resolves.toEqual([
-      expect.objectContaining({ id: 'restricted-poll', title: 'Restrito', responseCount: 2 }),
+      expect.objectContaining({
+        id: 'restricted-poll',
+        title: 'Restrito',
+        responseCount: 2,
+      }),
     ]);
   });
   it('omits unavailable restricted entries while retaining independently eligible polls and coalescing checks', async () => {
-    const restricted = { ...poll, id: 'outage-a', voterEligibilitySource: 'EVENT_ATTENDANCE', linkedEventId: 'event-1' };
-    const publicPoll = { ...poll, id: 'available', voterEligibilitySource: 'AUTHENTICATED_USERS' };
-    const prisma = { poll: { findMany: jest.fn().mockResolvedValue([
-      restricted, { ...restricted, id: 'outage-b' }, publicPoll,
-    ]) } };
-    const eligibility = { ensureVotingAllowed: jest.fn(async (item: { id: string }) => {
-      if (item.id !== 'available') throw new ServiceUnavailableException('Attendance unavailable');
-    }) };
-    const service = new PollQueryService(prisma as never, {} as never, eligibility as never);
+    const restricted = {
+      ...poll,
+      id: 'outage-a',
+      voterEligibilitySource: 'EVENT_ATTENDANCE',
+      linkedEventId: 'event-1',
+    };
+    const publicPoll = {
+      ...poll,
+      id: 'available',
+      voterEligibilitySource: 'AUTHENTICATED_USERS',
+    };
+    const prisma = {
+      poll: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            restricted,
+            { ...restricted, id: 'outage-b' },
+            publicPoll,
+          ]),
+      },
+    };
+    const eligibility = {
+      ensureVotingAllowed: jest.fn(async (item: { id: string }) => {
+        if (item.id !== 'available')
+          throw new ServiceUnavailableException('Attendance unavailable');
+      }),
+    };
+    const service = new PollQueryService(
+      prisma as never,
+      {} as never,
+      eligibility as never,
+    );
     await expect(service.listPublicPolls(principal)).resolves.toEqual([
       expect.objectContaining({ id: 'available' }),
     ]);
@@ -68,9 +113,16 @@ describe('PollQueryService public catalog authorization', () => {
 
   it('does not disguise an unexpected programming or persistence failure as an eligibility outage', async () => {
     const prisma = { poll: { findMany: jest.fn().mockResolvedValue([poll]) } };
-    const eligibility = { ensureVotingAllowed: jest.fn().mockRejectedValue(new Error('unexpected')) };
-    const service = new PollQueryService(prisma as never, {} as never, eligibility as never);
-    await expect(service.listPublicPolls(principal)).rejects.toThrow('unexpected');
+    const eligibility = {
+      ensureVotingAllowed: jest.fn().mockRejectedValue(new Error('unexpected')),
+    };
+    const service = new PollQueryService(
+      prisma as never,
+      {} as never,
+      eligibility as never,
+    );
+    await expect(service.listPublicPolls(principal)).rejects.toThrow(
+      'unexpected',
+    );
   });
-
 });

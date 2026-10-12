@@ -39,12 +39,25 @@ export function createElectionPoll(overrides: Partial<Poll> = {}): Poll {
         id: 'cacic-election-vote',
         type: 'singleChoice',
         title: 'Escolha a chapa',
-        description: 'Selecione uma chapa aprovada ou registre voto em branco ou nulo.',
+        description:
+          'Selecione uma chapa aprovada ou registre voto em branco ou nulo.',
         required: true,
         options: [
-          { id: 'slate:slate-1', label: 'Chapa Integração', description: '6 integrantes' },
-          { id: 'cacic-election-blank', label: 'Branco', description: 'Registrar voto em branco.' },
-          { id: 'cacic-election-null', label: 'Nulo', description: 'Registrar voto nulo.' },
+          {
+            id: 'slate:slate-1',
+            label: 'Chapa Integração',
+            description: '6 integrantes',
+          },
+          {
+            id: 'cacic-election-blank',
+            label: 'Branco',
+            description: 'Registrar voto em branco.',
+          },
+          {
+            id: 'cacic-election-null',
+            label: 'Nulo',
+            description: 'Registrar voto nulo.',
+          },
         ],
       },
     ],
@@ -68,17 +81,55 @@ export function createSlateRequest(): SubmitCacicElectionSlateRequest {
   return {
     name: 'Chapa Integração',
     members: [
-      createSlateMember('Ana Presidente', '26123456', 'president', true, 'ana@example.com'),
-      createSlateMember('Bia Vice', '25123456', 'vicePresident', false, 'bia@example.com'),
-      createSlateMember('Caio Financeiro', '24123456', 'financialDirector', false, 'caio@example.com'),
-      createSlateMember('Duda Comunicação', '23123456', 'communicationDirector', false, 'duda@example.com'),
-      createSlateMember('Eva Eventos', '22123456', 'eventsDirector', false, 'eva@example.com'),
-      createSlateMember('Fabio Relações', '21123456', 'publicRelationsDirector', false, 'fabio@example.com'),
+      createSlateMember(
+        'Ana Presidente',
+        '26123456',
+        'president',
+        true,
+        'ana@example.com',
+      ),
+      createSlateMember(
+        'Bia Vice',
+        '25123456',
+        'vicePresident',
+        false,
+        'bia@example.com',
+      ),
+      createSlateMember(
+        'Caio Financeiro',
+        '24123456',
+        'financialDirector',
+        false,
+        'caio@example.com',
+      ),
+      createSlateMember(
+        'Duda Comunicação',
+        '23123456',
+        'communicationDirector',
+        false,
+        'duda@example.com',
+      ),
+      createSlateMember(
+        'Eva Eventos',
+        '22123456',
+        'eventsDirector',
+        false,
+        'eva@example.com',
+      ),
+      createSlateMember(
+        'Fabio Relações',
+        '21123456',
+        'publicRelationsDirector',
+        false,
+        'fabio@example.com',
+      ),
     ],
   };
 }
 
-export function createSlate(overrides: Partial<CacicElectionSlate> = {}): CacicElectionSlate {
+export function createSlate(
+  overrides: Partial<CacicElectionSlate> = {},
+): CacicElectionSlate {
   return {
     enabled: true,
     id: 'slate-1',
@@ -105,7 +156,9 @@ export function createSlate(overrides: Partial<CacicElectionSlate> = {}): CacicE
   };
 }
 
-export function createAdminSlate(overrides: Partial<AdminCacicElectionSlate> = {}): AdminCacicElectionSlate {
+export function createAdminSlate(
+  overrides: Partial<AdminCacicElectionSlate> = {},
+): AdminCacicElectionSlate {
   const request = createSlateRequest();
 
   return {
@@ -124,7 +177,9 @@ export function createAdminSlate(overrides: Partial<AdminCacicElectionSlate> = {
   };
 }
 
-function readEnrollmentYear(enrollmentNumber: string | undefined): string | undefined {
+function readEnrollmentYear(
+  enrollmentNumber: string | undefined,
+): string | undefined {
   return enrollmentNumber?.slice(0, 2);
 }
 

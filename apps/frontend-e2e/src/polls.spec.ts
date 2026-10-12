@@ -647,7 +647,9 @@ test('manages enrollment-list eligibility from the admin builder', async ({
   await expect(page.getByText('241200001')).toBeVisible();
   await page.getByRole('button', { name: /Salvar/ }).click();
   await expect(page.getByText('Votação salva.')).toBeVisible();
-  expect(updatedRequests[0]).toEqual(expect.objectContaining({ expectedUpdatedAt: expect.any(String) }));
+  expect(updatedRequests[0]).toEqual(
+    expect.objectContaining({ expectedUpdatedAt: expect.any(String) }),
+  );
   await page.getByRole('button', { name: /Limpar/ }).click();
   await page.locator('.manual-enrollment-row textarea').fill('241200001');
   await page.getByRole('button', { name: /^Adicionar$/ }).click();
@@ -830,8 +832,13 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
 
   const advancePollVersion = (): void => {
     const currentTimestamp = Date.parse(currentPoll.updatedAt);
-    const nextTimestamp = Number.isNaN(currentTimestamp) ? Date.now() : currentTimestamp + 1000;
-    currentPoll = { ...currentPoll, updatedAt: new Date(nextTimestamp).toISOString() };
+    const nextTimestamp = Number.isNaN(currentTimestamp)
+      ? Date.now()
+      : currentTimestamp + 1000;
+    currentPoll = {
+      ...currentPoll,
+      updatedAt: new Date(nextTimestamp).toISOString(),
+    };
     summaries = [pollToSummary(currentPoll)];
   };
 
@@ -871,7 +878,10 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
     if (method === 'PUT') {
       const request = route.request().postDataJSON() as Record<string, unknown>;
       if (request['expectedUpdatedAt'] !== currentPoll.updatedAt) {
-        await route.fulfill({ status: 409, json: { message: 'Poll version conflict.' } });
+        await route.fulfill({
+          status: 409,
+          json: { message: 'Poll version conflict.' },
+        });
         return;
       }
 
@@ -926,11 +936,14 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
         .split(/\r?\n/)
         .map((value) => value.trim())
         .filter(Boolean);
-      const replacedCount = request.mode === 'replace' ? eligibility.totalCount : 0;
+      const replacedCount =
+        request.mode === 'replace' ? eligibility.totalCount : 0;
       if (request.mode === 'replace') {
         eligibility = { entries: [], totalCount: 0 };
       }
-      const existing = new Set(eligibility.entries.map((entry) => entry.enrollmentNumber));
+      const existing = new Set(
+        eligibility.entries.map((entry) => entry.enrollmentNumber),
+      );
       const newEntries = enrollmentNumbers
         .filter((enrollmentNumber) => !existing.has(enrollmentNumber))
         .map((enrollmentNumber) => ({
@@ -1015,7 +1028,9 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
         if (request.mode === 'replace') {
           eligibility = { entries: [], totalCount: 0 };
         }
-        const existing = new Set(eligibility.entries.map((entry) => entry.enrollmentNumber));
+        const existing = new Set(
+          eligibility.entries.map((entry) => entry.enrollmentNumber),
+        );
         const newEntries = enrollmentNumbers
           .filter((enrollmentNumber) => !existing.has(enrollmentNumber))
           .map((enrollmentNumber) => ({
@@ -1077,7 +1092,10 @@ async function mockAdminApi(page: Page, mocks: AdminMocks = {}): Promise<void> {
       expectedUpdatedAt?: string;
     };
     if (request.expectedUpdatedAt !== currentPoll.updatedAt) {
-      await route.fulfill({ status: 409, json: { message: 'Poll version conflict.' } });
+      await route.fulfill({
+        status: 409,
+        json: { message: 'Poll version conflict.' },
+      });
       return;
     }
     mocks.onStatus?.(request.status ?? '');

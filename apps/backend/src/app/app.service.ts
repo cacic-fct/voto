@@ -58,7 +58,9 @@ export class AppService {
       return this.activeReadinessProbe.result;
     }
 
-    const databaseProbe = this.startProbe(() => this.prisma.$queryRaw`SELECT 1`);
+    const databaseProbe = this.startProbe(
+      () => this.prisma.$queryRaw`SELECT 1`,
+    );
     const redisProbe = this.startProbe(() => this.redis.ping());
     const result = Promise.all([databaseProbe.result, redisProbe.result]).then(
       ([database, redis]) => {
@@ -68,13 +70,19 @@ export class AppService {
         } as const;
 
         if (database.status === 'error' || redis.status === 'error') {
-          throw new ServiceUnavailableException({ status: 'error', components });
+          throw new ServiceUnavailableException({
+            status: 'error',
+            components,
+          });
         }
 
         return { status: 'ok' as const, components };
       },
     );
-    const completion = Promise.all([databaseProbe.completion, redisProbe.completion]).then(() => undefined);
+    const completion = Promise.all([
+      databaseProbe.completion,
+      redisProbe.completion,
+    ]).then(() => undefined);
     const activeProbe: ActiveReadinessProbe = { result, completion };
     this.activeReadinessProbe = activeProbe;
     void completion.finally(() => {
@@ -98,7 +106,10 @@ export class AppService {
     const result = Promise.race([
       operationResult,
       new Promise<ProbeOutcome>((resolve) => {
-        timeout = setTimeout(() => resolve({ status: 'error', timedOut: true }), this.readinessProbeTimeoutMs);
+        timeout = setTimeout(
+          () => resolve({ status: 'error', timedOut: true }),
+          this.readinessProbeTimeoutMs,
+        );
       }),
     ]).finally(() => {
       if (timeout) {
@@ -115,7 +126,10 @@ export class AppService {
       : { status: outcome.status };
   }
 
-  private parsePositiveInteger(rawValue: string | undefined, fallback: number): number {
+  private parsePositiveInteger(
+    rawValue: string | undefined,
+    fallback: number,
+  ): number {
     const value = Number.parseInt(rawValue ?? '', 10);
     if (!Number.isFinite(value) || value <= 0) {
       return fallback;

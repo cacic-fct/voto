@@ -50,13 +50,20 @@ describe('AuthGuard', () => {
     auth = {
       authenticateSession: jest.fn(),
     };
-    guard = new AuthGuard(reflector as unknown as Reflector, auth as unknown as KeycloakAuthService);
+    guard = new AuthGuard(
+      reflector as unknown as Reflector,
+      auth as unknown as KeycloakAuthService,
+    );
   });
 
   it('allows public requests without a session', async () => {
-    reflector.getAllAndOverride.mockImplementation((key) => key === IS_PUBLIC_KEY);
+    reflector.getAllAndOverride.mockImplementation(
+      (key) => key === IS_PUBLIC_KEY,
+    );
 
-    await expect(guard.canActivate(createContext({ headers: {} } as Request))).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createContext({ headers: {} } as Request)),
+    ).resolves.toBe(true);
     expect(auth.authenticateSession).not.toHaveBeenCalled();
   });
 
@@ -66,7 +73,9 @@ describe('AuthGuard', () => {
         cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
       },
     } as AuthenticatedRequest;
-    reflector.getAllAndOverride.mockImplementation((key) => key === SKIP_SESSION_AUTHENTICATION_KEY);
+    reflector.getAllAndOverride.mockImplementation(
+      (key) => key === SKIP_SESSION_AUTHENTICATION_KEY,
+    );
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
 
@@ -78,9 +87,9 @@ describe('AuthGuard', () => {
   it('rejects private requests without a session', async () => {
     reflector.getAllAndOverride.mockReturnValue(undefined);
 
-    await expect(guard.canActivate(createContext({ headers: {} } as Request))).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      guard.canActivate(createContext({ headers: {} } as Request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('authenticates sessions from parsed cookies and attaches the user', async () => {
@@ -91,12 +100,16 @@ describe('AuthGuard', () => {
         [AUTH_SESSION_COOKIE_NAME]: 'session-1',
       },
     } as AuthenticatedRequest & { cookies: Record<string, string> };
-    reflector.getAllAndOverride.mockImplementation((key) => (key === REQUIRED_PERMISSIONS_KEY ? ['poll#read'] : false));
+    reflector.getAllAndOverride.mockImplementation((key) =>
+      key === REQUIRED_PERMISSIONS_KEY ? ['poll#read'] : false,
+    );
     auth.authenticateSession.mockResolvedValue(user);
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
 
-    expect(auth.authenticateSession).toHaveBeenCalledWith('session-1', ['poll#read']);
+    expect(auth.authenticateSession).toHaveBeenCalledWith('session-1', [
+      'poll#read',
+    ]);
     expect(request.sessionId).toBe('session-1');
     expect(request.user).toBe(user);
   });
@@ -127,7 +140,9 @@ describe('AuthGuard', () => {
     } as AuthenticatedRequest & { cookies: Record<string, unknown> };
     reflector.getAllAndOverride.mockReturnValue(undefined);
 
-    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      guard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('ignores malformed percent-encoded session cookies', async () => {
@@ -136,7 +151,9 @@ describe('AuthGuard', () => {
     } as AuthenticatedRequest;
     reflector.getAllAndOverride.mockReturnValue(undefined);
 
-    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      guard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(auth.authenticateSession).not.toHaveBeenCalled();
   });
 
@@ -147,9 +164,13 @@ describe('AuthGuard', () => {
       },
     } as AuthenticatedRequest;
     reflector.getAllAndOverride.mockReturnValue(undefined);
-    auth.authenticateSession.mockRejectedValue(new UnauthorizedException('Missing authenticated session.'));
+    auth.authenticateSession.mockRejectedValue(
+      new UnauthorizedException('Missing authenticated session.'),
+    );
 
-    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      guard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(auth.authenticateSession).toHaveBeenCalledWith('session-1', []);
   });
 
@@ -159,8 +180,12 @@ describe('AuthGuard', () => {
         cookie: `${AUTH_SESSION_COOKIE_NAME}=session-1`,
       },
     } as AuthenticatedRequest;
-    auth.authenticateSession.mockRejectedValue(new UnauthorizedException('expired'));
-    reflector.getAllAndOverride.mockImplementation((key) => key === IS_PUBLIC_KEY);
+    auth.authenticateSession.mockRejectedValue(
+      new UnauthorizedException('expired'),
+    );
+    reflector.getAllAndOverride.mockImplementation(
+      (key) => key === IS_PUBLIC_KEY,
+    );
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
 
@@ -170,6 +195,8 @@ describe('AuthGuard', () => {
       }
       return key === REQUIRED_PERMISSIONS_KEY ? [] : undefined;
     });
-    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(
+      guard.canActivate(createContext(request)),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

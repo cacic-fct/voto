@@ -1,8 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnDestroy,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -43,7 +39,10 @@ import { PollVotePageLoader } from './poll-vote-page-loader';
   templateUrl: './poll-vote-page.component.html',
   styleUrl: './poll-vote-page.component.scss',
 })
-export class PollVotePageComponent extends PollVotePageLoader implements OnDestroy {
+export class PollVotePageComponent
+  extends PollVotePageLoader
+  implements OnDestroy
+{
   ngOnDestroy(): void {
     this.destroyPollState();
     this.closeResultsEvents();

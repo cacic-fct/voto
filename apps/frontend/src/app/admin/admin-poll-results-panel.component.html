@@ -34,11 +34,15 @@
                 </div>
                 <div class="metric-card">
                   <span>Pessoas identificadas</span>
-                  <strong>{{ individualResultsAvailable() ? voterRows().length : 0 }}</strong>
+                  <strong>{{
+                    individualResultsAvailable() ? voterRows().length : 0
+                  }}</strong>
                 </div>
                 <div class="metric-card">
                   <span>Tipo</span>
-                  <strong>{{ results()?.anonymous ? 'Anônima' : 'Identificada' }}</strong>
+                  <strong>{{
+                    results()?.anonymous ? 'Anônima' : 'Identificada'
+                  }}</strong>
                 </div>
               </div>
             </section>
@@ -47,12 +51,18 @@
               <div class="surface-heading">
                 <div>
                   <h3>Pessoas que votaram</h3>
-                  <p>Nomes, e-mails, vínculo Unesp e matrícula quando disponíveis.</p>
+                  <p>
+                    Nomes, e-mails, vínculo Unesp e matrícula quando
+                    disponíveis.
+                  </p>
                 </div>
               </div>
 
               @if (!individualResultsAvailable()) {
-                <p class="empty-note">Esta votação é anônima ou não possui dados de identidade nas respostas.</p>
+                <p class="empty-note">
+                  Esta votação é anônima ou não possui dados de identidade nas
+                  respostas.
+                </p>
               } @else {
                 <div class="result-table">
                   <div class="result-table-header voter-table-grid">
@@ -135,7 +145,9 @@
           <div class="result-tab-content">
             @if (questionSummaries().length === 0) {
               <section class="surface field-group">
-                <p class="empty-note">Nenhuma pergunta com resposta foi configurada.</p>
+                <p class="empty-note">
+                  Nenhuma pergunta com resposta foi configurada.
+                </p>
               </section>
             } @else {
               <section class="surface field-group">
@@ -143,9 +155,14 @@
                   <mat-label>Pergunta</mat-label>
                   <mat-select
                     [value]="selectedQuestionElementId()"
-                    (selectionChange)="selectedResultsElementChange.emit($event)">
+                    (selectionChange)="
+                      selectedResultsElementChange.emit($event)
+                    "
+                  >
                     @for (summary of questionSummaries(); track summary.key) {
-                      <mat-option [value]="summary.key">{{ summary.element.title }}</mat-option>
+                      <mat-option [value]="summary.key">{{
+                        summary.element.title
+                      }}</mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
@@ -179,13 +196,18 @@
                       <span>Pessoa</span>
                       <span>Resposta</span>
                     </div>
-                    @for (answer of summary.individualAnswers; track answer.responseId) {
+                    @for (
+                      answer of summary.individualAnswers;
+                      track answer.responseId
+                    ) {
                       <div class="result-table-row question-answer-grid">
                         <span>{{ answer.voterLabel }}</span>
                         <span>{{ answer.valueLabel }}</span>
                       </div>
                     } @empty {
-                      <p class="empty-note">Nenhuma resposta registrada para esta pergunta.</p>
+                      <p class="empty-note">
+                        Nenhuma resposta registrada para esta pergunta.
+                      </p>
                     }
                   </div>
                 }
@@ -211,10 +233,18 @@
                   <mat-label>Pessoa</mat-label>
                   <mat-select
                     [value]="selectedIndividualResponse()?.id ?? null"
-                    (selectionChange)="selectedIndividualResponseChange.emit($event)">
-                    @for (response of results()?.responses ?? []; track response.id) {
+                    (selectionChange)="
+                      selectedIndividualResponseChange.emit($event)
+                    "
+                  >
+                    @for (
+                      response of results()?.responses ?? [];
+                      track response.id
+                    ) {
                       @if (response.voter) {
-                        <mat-option [value]="response.id">{{ responseVoterLabel(response) }}</mat-option>
+                        <mat-option [value]="response.id">{{
+                          responseVoterLabel(response)
+                        }}</mat-option>
                       }
                     }
                   </mat-select>
@@ -224,16 +254,26 @@
                   <div class="individual-person">
                     <div>
                       <strong>{{ responseVoterLabel(response) }}</strong>
-                      <span>{{ response.voter?.email || 'E-mail não informado' }}</span>
+                      <span>{{
+                        response.voter?.email || 'E-mail não informado'
+                      }}</span>
                     </div>
                     <div>
-                      <span>{{ response.voter?.unespRole || 'unespRole não informado' }}</span>
-                      <span>{{ response.voter?.enrollmentNumber || 'Matrícula não informada' }}</span>
+                      <span>{{
+                        response.voter?.unespRole || 'unespRole não informado'
+                      }}</span>
+                      <span>{{
+                        response.voter?.enrollmentNumber ||
+                          'Matrícula não informada'
+                      }}</span>
                     </div>
                   </div>
 
                   <div class="individual-answer-list">
-                    @for (answer of selectedIndividualAnswers(); track answer.element.id) {
+                    @for (
+                      answer of selectedIndividualAnswers();
+                      track answer.element.id
+                    ) {
                       <div class="individual-answer">
                         <span>{{ answer.element.title }}</span>
                         <strong>{{ answer.valueLabel }}</strong>

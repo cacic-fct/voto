@@ -23,7 +23,9 @@ export class PermissionsService {
     return [...permissions].sort();
   });
 
-  readonly isAdmin = computed(() => hasVotingAdminPermission(this.rawPermissions(), this.auth.roles()));
+  readonly isAdmin = computed(() =>
+    hasVotingAdminPermission(this.rawPermissions(), this.auth.roles()),
+  );
   readonly canManageAdmin = computed(() =>
     hasVotingAdminWritePermission(this.rawPermissions(), this.auth.roles()),
   );
@@ -46,7 +48,9 @@ export class PermissionsService {
 
   private async fetchAdminPermissions(): Promise<void> {
     try {
-      const response = await firstValueFrom(this.auth.evaluatePermissions(VOTING_ADMIN_PERMISSIONS));
+      const response = await firstValueFrom(
+        this.auth.evaluatePermissions(VOTING_ADMIN_PERMISSIONS),
+      );
       this.evaluatedPermissions.set(new Set(response.permissions));
     } catch {
       this.evaluatedPermissions.set(new Set());

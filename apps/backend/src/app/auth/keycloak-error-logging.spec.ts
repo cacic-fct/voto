@@ -56,13 +56,15 @@ describe('summarizeKeycloakFailure', () => {
         code: 'ECONNREFUSED',
         message: 'connect ECONNREFUSED 127.0.0.1:18080',
       }).dedupeKey,
-    ).toBe('status=none|axiosCode=ECONNREFUSED|message=connect ECONNREFUSED 127.0.0.1:18080');
+    ).toBe(
+      'status=none|axiosCode=ECONNREFUSED|message=connect ECONNREFUSED 127.0.0.1:18080',
+    );
   });
 
   it('handles plain errors, primitives, blank response data, and long values', () => {
-    expect(summarizeKeycloakFailure(new Error('client_secret=hidden')).message).toBe(
-      'message=client_secret=[redacted]',
-    );
+    expect(
+      summarizeKeycloakFailure(new Error('client_secret=hidden')).message,
+    ).toBe('message=client_secret=[redacted]');
     expect(summarizeKeycloakFailure('failed').dedupeKey).toBe('error=failed');
     expect(
       summarizeKeycloakFailure({

@@ -76,10 +76,14 @@ describe('AdminResultsChartComponent', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockReturnValue({
-        addEventListener: vi.fn((_event: string, listener: EventListener) => mediaListeners.push(listener)),
-        removeEventListener: vi.fn((_event: string, listener: EventListener) => {
-          mediaListeners = mediaListeners.filter((item) => item !== listener);
-        }),
+        addEventListener: vi.fn((_event: string, listener: EventListener) =>
+          mediaListeners.push(listener),
+        ),
+        removeEventListener: vi.fn(
+          (_event: string, listener: EventListener) => {
+            mediaListeners = mediaListeners.filter((item) => item !== listener);
+          },
+        ),
       }),
     );
 
@@ -91,7 +95,11 @@ describe('AdminResultsChartComponent', () => {
   });
 
   it('renders an empty state without initializing ECharts when there are no buckets', () => {
-    fixture.componentRef.setInput('config', { ...baseConfig, buckets: [], emptyText: 'Sem respostas.' });
+    fixture.componentRef.setInput('config', {
+      ...baseConfig,
+      buckets: [],
+      emptyText: 'Sem respostas.',
+    });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Sem respostas.');
@@ -102,8 +110,15 @@ describe('AdminResultsChartComponent', () => {
     fixture.componentRef.setInput('config', baseConfig);
     fixture.detectChanges();
 
-    expect(init).toHaveBeenCalledWith(expect.any(HTMLDivElement), undefined, { renderer: 'canvas' });
-    expect(setOption).toHaveBeenCalledWith(expect.objectContaining({ series: [expect.objectContaining({ type: 'pie' })] }), true);
+    expect(init).toHaveBeenCalledWith(expect.any(HTMLDivElement), undefined, {
+      renderer: 'canvas',
+    });
+    expect(setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        series: [expect.objectContaining({ type: 'pie' })],
+      }),
+      true,
+    );
 
     const option = setOption.mock.calls[0]?.[0] as {
       tooltip: {
@@ -112,10 +127,15 @@ describe('AdminResultsChartComponent', () => {
       };
     };
     expect(option.tooltip.valueFormatter(2.5)).toBe('2,5');
-    expect(option.tooltip.formatter({ name: 'Sim', value: 10 })).toContain('Quantidade: 10');
-    expect(option.tooltip.formatter({ name: '<img src=x onerror=alert(1)> & "opção"', value: 10 })).toContain(
-      '&lt;img src=x onerror=alert(1)&gt; &amp; &quot;opção&quot;',
+    expect(option.tooltip.formatter({ name: 'Sim', value: 10 })).toContain(
+      'Quantidade: 10',
     );
+    expect(
+      option.tooltip.formatter({
+        name: '<img src=x onerror=alert(1)> & "opção"',
+        value: 10,
+      }),
+    ).toContain('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;opção&quot;');
     expect(option.tooltip.formatter({ value: 10 })).toBe('');
   });
 
@@ -123,7 +143,10 @@ describe('AdminResultsChartComponent', () => {
     fixture.componentRef.setInput('config', {
       ...baseConfig,
       type: 'verticalBar',
-      buckets: Array.from({ length: 6 }, (_, index) => ({ label: `Opção ${index + 1}`, value: index })),
+      buckets: Array.from({ length: 6 }, (_, index) => ({
+        label: `Opção ${index + 1}`,
+        value: index,
+      })),
     });
     fixture.detectChanges();
 
@@ -134,9 +157,16 @@ describe('AdminResultsChartComponent', () => {
     expect(verticalOption.xAxis.axisLabel.rotate).toBe(30);
     expect(verticalOption.series[0].type).toBe('bar');
 
-    fixture.componentRef.setInput('config', { ...baseConfig, type: 'horizontalBar' });
+    fixture.componentRef.setInput('config', {
+      ...baseConfig,
+      type: 'horizontalBar',
+    });
     fixture.componentInstance.ngOnChanges({
-      config: new SimpleChange(baseConfig, { ...baseConfig, type: 'horizontalBar' }, false),
+      config: new SimpleChange(
+        baseConfig,
+        { ...baseConfig, type: 'horizontalBar' },
+        false,
+      ),
     });
 
     const horizontalOption = setOption.mock.calls.at(-1)?.[0] as {
@@ -180,7 +210,10 @@ describe('AdminResultsChartComponent', () => {
   });
 
   it('returns early when refreshing before a chart exists and keeps small bar labels horizontal', () => {
-    fixture.componentRef.setInput('config', { ...baseConfig, type: 'verticalBar' });
+    fixture.componentRef.setInput('config', {
+      ...baseConfig,
+      type: 'verticalBar',
+    });
     const component = fixture.componentInstance as unknown as {
       refreshTheme(): void;
       resolveCssColor(color: string, fallback: string): string;
@@ -189,7 +222,9 @@ describe('AdminResultsChartComponent', () => {
     component.refreshTheme();
     fixture.detectChanges();
 
-    const option = setOption.mock.calls.at(-1)?.[0] as { xAxis: { axisLabel: { rotate: number } } };
+    const option = setOption.mock.calls.at(-1)?.[0] as {
+      xAxis: { axisLabel: { rotate: number } };
+    };
     expect(option.xAxis.axisLabel.rotate).toBe(0);
     expect(component.resolveCssColor('not-a-color', '#ffffff')).toBe('#ffffff');
   });

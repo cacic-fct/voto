@@ -48,7 +48,11 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
         return;
       }
       this.results.set(results);
-      if (poll.status === 'published' && poll.resultsLive && poll.votingStyle === 'public') {
+      if (
+        poll.status === 'published' &&
+        poll.resultsLive &&
+        poll.votingStyle === 'public'
+      ) {
         this.openPublicResultsEvents(poll.id, generation);
       }
     } catch (error: unknown) {
@@ -157,7 +161,10 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
         return;
       }
       this.resultsConnectionState.set(
-        typeof EventSource !== 'undefined' && source.readyState === EventSource.CLOSED ? 'closed' : 'reconnecting',
+        typeof EventSource !== 'undefined' &&
+          source.readyState === EventSource.CLOSED
+          ? 'closed'
+          : 'reconnecting',
       );
     };
     this.resultsConnectionState.set('connecting');
@@ -165,10 +172,15 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
   }
 
   private applyResultsDelta(delta: PollResultsDelta): void {
-    this.results.update((current) => applyResultsDeltaToResults(current, delta));
+    this.results.update((current) =>
+      applyResultsDeltaToResults(current, delta),
+    );
   }
 
-  private async reconcileFinalResults(pollId: string, generation: number): Promise<void> {
+  private async reconcileFinalResults(
+    pollId: string,
+    generation: number,
+  ): Promise<void> {
     await reconcilePollResults(
       () => firstValueFrom(this.getPublicPollResults(pollId)),
       {
@@ -202,13 +214,18 @@ export abstract class PollVotePageResults extends PollVotePageResponse {
       const requestRevision = this.resultsRequestRevision;
       void firstValueFrom(this.getPublicPollResults(pollId))
         .then((results) => {
-          if (this.isPollLoadCurrent(generation) && requestRevision === this.resultsRequestRevision) {
+          if (
+            this.isPollLoadCurrent(generation) &&
+            requestRevision === this.resultsRequestRevision
+          ) {
             this.results.set(results);
           }
         })
         .catch(() => {
           if (this.isPollLoadCurrent(generation)) {
-            this.resultsError.set('A atualização dos resultados está temporariamente indisponível.');
+            this.resultsError.set(
+              'A atualização dos resultados está temporariamente indisponível.',
+            );
           }
         });
     }, 250);

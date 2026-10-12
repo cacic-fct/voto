@@ -32,7 +32,11 @@ import { firstValueFrom, of } from 'rxjs';
 import { votingStylePublicResultsDescription } from './poll-metadata';
 import { PollApiService } from './poll-api.service';
 import { buildPublicQuestionSummaries } from './poll-public-results';
-import { answerValueLabel, isAnswerElement, isEmptyAnswerValue } from './poll-result-formatting';
+import {
+  answerValueLabel,
+  isAnswerElement,
+  isEmptyAnswerValue,
+} from './poll-result-formatting';
 import { reconcilePollResults } from './poll-results-reconciliation';
 
 type PublicPollAccess =
@@ -85,7 +89,9 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     this.route.paramMap ?? of(this.route.snapshot.paramMap),
     { initialValue: this.route.snapshot.paramMap },
   );
-  private readonly pollAccess = computed(() => this.resolvePollAccess(this.routeParamMap()));
+  private readonly pollAccess = computed(() =>
+    this.resolvePollAccess(this.routeParamMap()),
+  );
   private readonly dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
@@ -95,8 +101,12 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   protected readonly results = signal<PollResults | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
-  protected readonly resultsConnectionState = signal<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting');
-  protected readonly resultsFinalizationState = signal<'idle' | 'pending' | 'failed' | 'complete'>('idle');
+  protected readonly resultsConnectionState = signal<
+    'connecting' | 'connected' | 'reconnecting' | 'closed'
+  >('connecting');
+  protected readonly resultsFinalizationState = signal<
+    'idle' | 'pending' | 'failed' | 'complete'
+  >('idle');
   protected readonly resultsFinalizationError = signal<string | null>(null);
   protected readonly pendingFinalResultsPollId = signal<string | null>(null);
   protected readonly votingStylePublicResultsDescription =
@@ -130,11 +140,14 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     const poll = this.poll();
     return (
       Boolean(this.results()?.voters?.length) &&
-      (poll?.votingStyle === 'public' || poll?.votingStyle === 'partiallySecret')
+      (poll?.votingStyle === 'public' ||
+        poll?.votingStyle === 'partiallySecret')
     );
   });
   protected readonly canShowIndividualResponses = computed(
-    () => this.poll()?.votingStyle === 'public' && Boolean(this.results()?.responses.length),
+    () =>
+      this.poll()?.votingStyle === 'public' &&
+      Boolean(this.results()?.responses.length),
   );
   private resultsEvents?: EventSource;
   private refreshTimer?: ReturnType<typeof setTimeout>;
@@ -192,7 +205,10 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       : `${responseCount} pessoas votaram.`;
   }
 
-  protected responseLabel(response: PollResultsResponse, index: number): string {
+  protected responseLabel(
+    response: PollResultsResponse,
+    index: number,
+  ): string {
     const voter = response.voter;
     if (voter?.name || voter?.preferredUsername || voter?.email) {
       return voter.name ?? voter.preferredUsername ?? voter.email ?? '';
@@ -209,23 +225,34 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     return 'Resposta individual';
   }
 
-  protected responseAnswerRows(response: PollResultsResponse): ResultAnswerRow[] {
+  protected responseAnswerRows(
+    response: PollResultsResponse,
+  ): ResultAnswerRow[] {
     const poll = this.poll();
     if (!poll) {
       return [];
     }
 
-    const currentElementsById = new Map(poll.elements.map((element) => [element.id, element]));
+    const currentElementsById = new Map(
+      poll.elements.map((element) => [element.id, element]),
+    );
     return response.answers
       .map((answer) => {
-        const element = answer.element ?? currentElementsById.get(answer.elementId);
-        if (!element || !isAnswerElement(element) || isEmptyAnswerValue(answer.value)) {
+        const element =
+          answer.element ?? currentElementsById.get(answer.elementId);
+        if (
+          !element ||
+          !isAnswerElement(element) ||
+          isEmptyAnswerValue(answer.value)
+        ) {
           return null;
         }
 
         return {
           question: element.title,
-          value: answerValueLabel(element, answer.value, { includeSchedulingInvitees: false }),
+          value: answerValueLabel(element, answer.value, {
+            includeSchedulingInvitees: false,
+          }),
         };
       })
       .filter((row): row is ResultAnswerRow => row !== null)
@@ -263,7 +290,11 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       }
       this.results.set(results);
 
-      if (poll.status === 'published' && poll.resultsLive && poll.votingStyle === 'public') {
+      if (
+        poll.status === 'published' &&
+        poll.resultsLive &&
+        poll.votingStyle === 'public'
+      ) {
         this.openResultsEvents(access, poll.id, generation);
       }
     } catch (error: unknown) {
@@ -278,9 +309,7 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   }
 
   private resolvePollAccess(paramMap: ParamMap): PublicPollAccess | null {
-    const directLinkToken = paramMap
-      .get('directLinkToken')
-      ?.trim();
+    const directLinkToken = paramMap.get('directLinkToken')?.trim();
     if (directLinkToken) {
       return { kind: 'directLink', value: directLinkToken };
     }
@@ -310,13 +339,18 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       return;
     }
 
-    const access = typeof accessOrPollId === 'string'
-      ? { kind: 'id', value: accessOrPollId } as const
-      : accessOrPollId;
-    const pollId = typeof pollIdOrGeneration === 'string' ? pollIdOrGeneration : access.value;
-    const generation = typeof pollIdOrGeneration === 'number'
-      ? pollIdOrGeneration
-      : generationArgument ?? this.loadGeneration;
+    const access =
+      typeof accessOrPollId === 'string'
+        ? ({ kind: 'id', value: accessOrPollId } as const)
+        : accessOrPollId;
+    const pollId =
+      typeof pollIdOrGeneration === 'string'
+        ? pollIdOrGeneration
+        : access.value;
+    const generation =
+      typeof pollIdOrGeneration === 'number'
+        ? pollIdOrGeneration
+        : (generationArgument ?? this.loadGeneration);
     const source =
       access.kind === 'directLink'
         ? this.api.openDirectLinkPollResultsEvents(access.value)
@@ -353,7 +387,10 @@ export class PublicPollResultsPageComponent implements OnDestroy {
         source.close();
         return;
       }
-      if (typeof EventSource !== 'undefined' && source.readyState === EventSource.CLOSED) {
+      if (
+        typeof EventSource !== 'undefined' &&
+        source.readyState === EventSource.CLOSED
+      ) {
         this.resultsConnectionState.set('closed');
         return;
       }
@@ -396,7 +433,10 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     });
   }
 
-  private async reconcileFinalResults(pollId: string, generation: number): Promise<void> {
+  private async reconcileFinalResults(
+    pollId: string,
+    generation: number,
+  ): Promise<void> {
     const access = this.pollAccess();
     if (!access) {
       return;
@@ -440,13 +480,18 @@ export class PublicPollResultsPageComponent implements OnDestroy {
       }
       void firstValueFrom(this.getResults(access, this.poll()?.id ?? pollId))
         .then((results) => {
-          if (this.isLoadCurrent(generation) && requestRevision === this.resultsRequestRevision) {
+          if (
+            this.isLoadCurrent(generation) &&
+            requestRevision === this.resultsRequestRevision
+          ) {
             this.results.set(results);
           }
         })
         .catch(() => {
           if (this.isLoadCurrent(generation)) {
-            this.error.set('A atualização dos resultados está temporariamente indisponível.');
+            this.error.set(
+              'A atualização dos resultados está temporariamente indisponível.',
+            );
           }
         });
     }, 250);
@@ -630,7 +675,9 @@ export class PublicPollResultsPageComponent implements OnDestroy {
     );
   }
 
-  private schedulingSlots(element: PollElement): { id: string; label: string }[] {
+  private schedulingSlots(
+    element: PollElement,
+  ): { id: string; label: string }[] {
     const settings = element.settings?.scheduling;
     if (!settings) {
       return [];
@@ -663,7 +710,10 @@ export class PublicPollResultsPageComponent implements OnDestroy {
   private readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
     const recordValue = this.asRecord(value);
     return {
-      slotId: typeof recordValue?.['slotId'] === 'string' ? recordValue['slotId'] : '',
+      slotId:
+        typeof recordValue?.['slotId'] === 'string'
+          ? recordValue['slotId']
+          : '',
       invitees: [],
     };
   }

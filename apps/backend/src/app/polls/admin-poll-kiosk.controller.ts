@@ -59,7 +59,8 @@ export class AdminPollKioskController {
 
   @Post('authorization')
   @ApiOperation({
-    summary: 'Authorize one short-lived kiosk ballot through Account Manager TOTP',
+    summary:
+      'Authorize one short-lived kiosk ballot through Account Manager TOTP',
   })
   @ApiCreatedResponse({ description: 'Poll-bound kiosk voting context.' })
   async authorize(
@@ -97,7 +98,9 @@ export class AdminPollKioskController {
 
   @Get('context')
   @ApiOperation({ summary: 'Read the current poll-bound kiosk voting context' })
-  @ApiOkResponse({ description: 'Kiosk voter display data and poll definition.' })
+  @ApiOkResponse({
+    description: 'Kiosk voter display data and poll definition.',
+  })
   async getContext(
     @Param('id') pollId: string,
     @Req() request: AuthenticatedRequest,
@@ -117,8 +120,12 @@ export class AdminPollKioskController {
   }
 
   @Get('responses/me')
-  @ApiOperation({ summary: 'Read response state for the TOTP-authorized kiosk voter' })
-  @ApiOkResponse({ description: 'Current response state for the authorized voter.' })
+  @ApiOperation({
+    summary: 'Read response state for the TOTP-authorized kiosk voter',
+  })
+  @ApiOkResponse({
+    description: 'Current response state for the authorized voter.',
+  })
   getResponseState(
     @Param('id') pollId: string,
     @Req() request: AuthenticatedRequest,
@@ -132,7 +139,9 @@ export class AdminPollKioskController {
   }
 
   @Get('cacic-election/slates')
-  @ApiOperation({ summary: 'List ballot slates for the TOTP-authorized kiosk voter' })
+  @ApiOperation({
+    summary: 'List ballot slates for the TOTP-authorized kiosk voter',
+  })
   @ApiOkResponse({ description: 'Approved election slates.' })
   async listCacicElectionSlates(
     @Param('id') pollId: string,
@@ -148,7 +157,9 @@ export class AdminPollKioskController {
   }
 
   @Get('images/:imageId')
-  @ApiOperation({ summary: 'Read a poll image for the TOTP-authorized kiosk voter' })
+  @ApiOperation({
+    summary: 'Read a poll image for the TOTP-authorized kiosk voter',
+  })
   @ApiOkResponse({ description: 'AVIF image stream.' })
   async getPollImage(
     @Param('id') pollId: string,
@@ -163,9 +174,14 @@ export class AdminPollKioskController {
       this.getSessionId(request),
     );
     await this.polls.assertPublishedPollReadable(pollId, principal);
-    const image = await this.pollImages.getPollImage(pollId, imageId, principal, {
-      allowPublishedRead: true,
-    });
+    const image = await this.pollImages.getPollImage(
+      pollId,
+      imageId,
+      principal,
+      {
+        allowPublishedRead: true,
+      },
+    );
     response.setHeader('Content-Type', image.contentType);
     response.setHeader('Cache-Control', 'private, max-age=86400');
     if (image.contentLength !== undefined) {
@@ -175,7 +191,9 @@ export class AdminPollKioskController {
   }
 
   @Post('responses')
-  @ApiOperation({ summary: 'Submit one ballot for the TOTP-authorized kiosk voter' })
+  @ApiOperation({
+    summary: 'Submit one ballot for the TOTP-authorized kiosk voter',
+  })
   @ApiCreatedResponse({ description: 'Stored poll response.' })
   async submitResponse(
     @Param('id') pollId: string,
@@ -278,7 +296,8 @@ export class AdminPollKioskController {
         stream.destroy();
       }
     };
-    const canObserveAbort = typeof request.once === 'function' && typeof request.off === 'function';
+    const canObserveAbort =
+      typeof request.once === 'function' && typeof request.off === 'function';
     if (canObserveAbort) {
       request.once('aborted', abort);
     }

@@ -10,7 +10,10 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import { CookieBanner, type CookieBannerOptions } from '@cacic-fct/account-manager-cookie-banner';
+import {
+  CookieBanner,
+  type CookieBannerOptions,
+} from '@cacic-fct/account-manager-cookie-banner';
 
 @Component({
   selector: 'app-cookie-banner',

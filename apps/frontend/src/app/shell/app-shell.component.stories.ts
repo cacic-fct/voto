@@ -1,9 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
-import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular';
+import {
+  applicationConfig,
+  type Meta,
+  type StoryObj,
+} from '@storybook/angular';
 import { AuthService } from '../auth/auth.service';
 import { PermissionsService } from '../auth/permissions.service';
-import { createStoryUser, storybookBaseProviders } from '../testing/storybook-voting-mocks';
+import {
+  createStoryUser,
+  storybookBaseProviders,
+} from '../testing/storybook-voting-mocks';
 import { AppShellComponent } from './app-shell.component';
 
 type ShellStoryArgs = {
@@ -47,7 +62,8 @@ class ShellStoryHostComponent {
 @Component({
   selector: 'app-shell-placeholder-route',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: '<section class="placeholder-route">Conteúdo da rota selecionada.</section>',
+  template:
+    '<section class="placeholder-route">Conteúdo da rota selecionada.</section>',
   styles: [
     `
       .placeholder-route {
@@ -61,7 +77,12 @@ class ShellPlaceholderRouteComponent {}
 function createAuthServiceMock(): AuthService {
   return {
     logout: async () => undefined,
-    user: computed(() => createStoryUser(shellStoryState().email, shellStoryState().perfil === 'administrador')),
+    user: computed(() =>
+      createStoryUser(
+        shellStoryState().email,
+        shellStoryState().perfil === 'administrador',
+      ),
+    ),
   } as unknown as AuthService;
 }
 

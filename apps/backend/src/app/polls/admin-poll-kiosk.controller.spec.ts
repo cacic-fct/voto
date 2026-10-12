@@ -36,7 +36,9 @@ describe('AdminPollKioskController', () => {
 
   beforeEach(() => {
     authorizations = {
-      authorize: jest.fn().mockResolvedValue({ token: 'opaque-token', context }),
+      authorize: jest
+        .fn()
+        .mockResolvedValue({ token: 'opaque-token', context }),
       discard: jest.fn().mockResolvedValue(undefined),
       getContext: jest.fn().mockResolvedValue(context),
       getResponseState: jest.fn(),
@@ -79,9 +81,9 @@ describe('AdminPollKioskController', () => {
   });
 
   it('sets a Strict HttpOnly poll-path cookie without exposing the voter identity', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(
-      new Date('2026-08-16T15:00:00.000Z').getTime(),
-    );
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date('2026-08-16T15:00:00.000Z').getTime());
 
     await expect(
       controller.authorize(
@@ -109,13 +111,10 @@ describe('AdminPollKioskController', () => {
 
   it('rejects mutating requests without the kiosk proof header', async () => {
     await expect(
-      controller.authorize(
-        'poll-1',
-        request,
-        response as never,
-        undefined,
-        { primaryEmail: 'person@example.com', totpCode: '123456' },
-      ),
+      controller.authorize('poll-1', request, response as never, undefined, {
+        primaryEmail: 'person@example.com',
+        totpCode: '123456',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(authorizations.authorize).not.toHaveBeenCalled();
   });
@@ -140,7 +139,9 @@ describe('AdminPollKioskController', () => {
   });
 
   it('keeps the authorization cookie after a retryable submission failure', async () => {
-    authorizations.submitResponse.mockRejectedValue(new Error('db unavailable'));
+    authorizations.submitResponse.mockRejectedValue(
+      new Error('db unavailable'),
+    );
 
     await expect(
       controller.submitResponse(
@@ -164,14 +165,11 @@ describe('AdminPollKioskController', () => {
         { answers: [] },
       ),
     ).resolves.toEqual({ id: 'response-1' });
-    expect(response.clearCookie).toHaveBeenCalledWith(
-      POLL_KIOSK_COOKIE_NAME,
-      {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: true,
-        path: '/api/admin/polls/poll-1/kiosk',
-      },
-    );
+    expect(response.clearCookie).toHaveBeenCalledWith(POLL_KIOSK_COOKIE_NAME, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: true,
+      path: '/api/admin/polls/poll-1/kiosk',
+    });
   });
 });

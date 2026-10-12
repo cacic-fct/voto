@@ -15,14 +15,22 @@ describe('poll identifier boundaries', () => {
     const storedOptionId = namespacedPollOptionId(storedElementId, 'option_/1');
 
     expect(externalPollElementId(pollId, storedElementId)).toBe(elementId);
-    expect(externalPollOptionId(storedElementId, storedOptionId)).toBe('option_/1');
+    expect(externalPollOptionId(storedElementId, storedOptionId)).toBe(
+      'option_/1',
+    );
     expect(storedElementId).toMatch(/^_cacic_element_/);
     expect(storedOptionId).toMatch(/^_cacic_option_/);
   });
 
   it('does not accept internal IDs or blank/noncanonical client identifiers', () => {
-    expect(() => normalizePollIdentifier('   ', 'Element id')).toThrow(BadRequestException);
-    expect(() => normalizePollIdentifier('_cacic_element_internal', 'Element id')).toThrow(BadRequestException);
-    expect(normalizePollIdentifier(' question-1 ', 'Element id')).toBe('question-1');
+    expect(() => normalizePollIdentifier('   ', 'Element id')).toThrow(
+      BadRequestException,
+    );
+    expect(() =>
+      normalizePollIdentifier('_cacic_element_internal', 'Element id'),
+    ).toThrow(BadRequestException);
+    expect(normalizePollIdentifier(' question-1 ', 'Element id')).toBe(
+      'question-1',
+    );
   });
 });

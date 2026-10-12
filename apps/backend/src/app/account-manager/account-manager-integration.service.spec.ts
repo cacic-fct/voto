@@ -22,7 +22,9 @@ describe('AccountManagerIntegrationService', () => {
     jest.clearAllMocks();
     process.env.ACCOUNT_MANAGER_GRPC_URL = 'account-manager:50051';
     call = jest.spyOn(GrpcUnaryClient.prototype, 'call');
-    service = new AccountManagerIntegrationService(tokenService as unknown as KeycloakM2mTokenService);
+    service = new AccountManagerIntegrationService(
+      tokenService as unknown as KeycloakM2mTokenService,
+    );
   });
 
   afterEach(() => {
@@ -31,17 +33,32 @@ describe('AccountManagerIntegrationService', () => {
   });
 
   afterAll(() => {
-    if (originalGrpcUrl === undefined) delete process.env.ACCOUNT_MANAGER_GRPC_URL;
+    if (originalGrpcUrl === undefined)
+      delete process.env.ACCOUNT_MANAGER_GRPC_URL;
     else process.env.ACCOUNT_MANAGER_GRPC_URL = originalGrpcUrl;
   });
 
   it('deduplicates enrollment numbers and maps gRPC users', async () => {
     call.mockResolvedValue({
-      users: [{ userId: 'u1', enrollmentNumber: '123', name: 'Usuário', email: 'u@example.com' }],
+      users: [
+        {
+          userId: 'u1',
+          enrollmentNumber: '123',
+          name: 'Usuário',
+          email: 'u@example.com',
+        },
+      ],
     });
 
-    await expect(service.lookupPeopleByEnrollmentNumbers(['123', ' 123 ', ''])).resolves.toEqual([
-      { userId: 'u1', enrollmentNumber: '123', name: 'Usuário', email: 'u@example.com' },
+    await expect(
+      service.lookupPeopleByEnrollmentNumbers(['123', ' 123 ', '']),
+    ).resolves.toEqual([
+      {
+        userId: 'u1',
+        enrollmentNumber: '123',
+        name: 'Usuário',
+        email: 'u@example.com',
+      },
     ]);
     expect(call).toHaveBeenCalledWith(
       'LookupUsersByEnrollment',
@@ -57,14 +74,24 @@ describe('AccountManagerIntegrationService', () => {
     });
 
     const result = await service.lookupPeopleByIdentifiers([
-      { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
+      {
+        requestId: 'candidate-1',
+        identifierType: 'email',
+        identifierValue: 'u@example.com',
+      },
     ]);
-    expect(result.get('candidate-1')).toEqual([{ userId: 'u1', name: 'Usuário', email: null }]);
+    expect(result.get('candidate-1')).toEqual([
+      { userId: 'u1', name: 'Usuário', email: null },
+    ]);
     expect(call).toHaveBeenCalledWith(
       'LookupUsersByIdentifier',
       {
         identifiers: [
-          { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
+          {
+            requestId: 'candidate-1',
+            identifierType: 'email',
+            identifierValue: 'u@example.com',
+          },
         ],
       },
       authenticatedMetadata('token'),
@@ -75,10 +102,16 @@ describe('AccountManagerIntegrationService', () => {
   it('treats omitted repeated protobuf fields as empty lookup results', async () => {
     call.mockResolvedValue({});
 
-    await expect(service.lookupPeopleByEnrollmentNumbers(['123'])).resolves.toEqual([]);
+    await expect(
+      service.lookupPeopleByEnrollmentNumbers(['123']),
+    ).resolves.toEqual([]);
     await expect(
       service.lookupPeopleByIdentifiers([
-        { requestId: 'candidate-1', identifierType: 'email', identifierValue: 'u@example.com' },
+        {
+          requestId: 'candidate-1',
+          identifierType: 'email',
+          identifierValue: 'u@example.com',
+        },
       ]),
     ).resolves.toEqual(new Map());
   });
@@ -185,15 +218,18 @@ describe('AccountManagerIntegrationService', () => {
 
   it('wraps gRPC failures as service unavailable', async () => {
     call.mockRejectedValue(new Error('unavailable'));
-    await expect(service.lookupPeopleByEnrollmentNumbers(['123'])).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
+    await expect(
+      service.lookupPeopleByEnrollmentNumbers(['123']),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('requires an Account Manager gRPC target', () => {
     delete process.env.ACCOUNT_MANAGER_GRPC_URL;
-    expect(() => new AccountManagerIntegrationService(tokenService as unknown as KeycloakM2mTokenService)).toThrow(
-      'ACCOUNT_MANAGER_GRPC_URL must be configured.',
-    );
+    expect(
+      () =>
+        new AccountManagerIntegrationService(
+          tokenService as unknown as KeycloakM2mTokenService,
+        ),
+    ).toThrow('ACCOUNT_MANAGER_GRPC_URL must be configured.');
   });
 });

@@ -4,19 +4,28 @@ export function decodeJwtPayload(accessToken: string): Record<string, unknown> {
     return {};
   }
 
-  const normalizedPayload = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+  const normalizedPayload = payloadSegment
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
   const paddingLength = (4 - (normalizedPayload.length % 4)) % 4;
-  const paddedPayload = normalizedPayload.padEnd(normalizedPayload.length + paddingLength, '=');
+  const paddedPayload = normalizedPayload.padEnd(
+    normalizedPayload.length + paddingLength,
+    '=',
+  );
 
   try {
-    const payload = JSON.parse(Buffer.from(paddedPayload, 'base64').toString('utf8'));
+    const payload = JSON.parse(
+      Buffer.from(paddedPayload, 'base64').toString('utf8'),
+    );
     return isRecord(payload) ? payload : {};
   } catch {
     return {};
   }
 }
 
-export function extractRoles(...claimsSources: Record<string, unknown>[]): string[] {
+export function extractRoles(
+  ...claimsSources: Record<string, unknown>[]
+): string[] {
   const roles = new Set<string>();
   for (const claims of claimsSources) {
     for (const role of extractRealmRoles(claims['realm_access'])) {
@@ -28,7 +37,10 @@ export function extractRoles(...claimsSources: Record<string, unknown>[]): strin
   return [...roles];
 }
 
-export function extractClientRoles(resourceAccessClaim: unknown, roles: Set<string>): void {
+export function extractClientRoles(
+  resourceAccessClaim: unknown,
+  roles: Set<string>,
+): void {
   if (!isRecord(resourceAccessClaim)) {
     return;
   }
@@ -46,7 +58,9 @@ export function extractClientRoles(resourceAccessClaim: unknown, roles: Set<stri
   }
 }
 
-export function extractOidcScopes(...claimsSources: Record<string, unknown>[]): string[] {
+export function extractOidcScopes(
+  ...claimsSources: Record<string, unknown>[]
+): string[] {
   const scopes = new Set<string>();
   for (const claims of claimsSources) {
     const scopeClaim = claims['scope'];
@@ -64,7 +78,9 @@ export function extractOidcScopes(...claimsSources: Record<string, unknown>[]): 
   return [...scopes];
 }
 
-export function extractPermissions(...claimsSources: Record<string, unknown>[]): string[] {
+export function extractPermissions(
+  ...claimsSources: Record<string, unknown>[]
+): string[] {
   const permissions = new Set<string>();
   for (const claims of claimsSources) {
     extractPermissionClaims(claims['permissions'], permissions);
@@ -78,7 +94,10 @@ export function extractPermissions(...claimsSources: Record<string, unknown>[]):
   return [...permissions];
 }
 
-export function extractPermissionClaims(rawPermissions: unknown, permissionSet: Set<string>): void {
+export function extractPermissionClaims(
+  rawPermissions: unknown,
+  permissionSet: Set<string>,
+): void {
   if (!Array.isArray(rawPermissions)) {
     return;
   }
@@ -95,7 +114,9 @@ export function extractPermissionClaims(rawPermissions: unknown, permissionSet: 
       continue;
     }
 
-    const resourceName = readStringClaim(permission, 'rsname') ?? readStringClaim(permission, 'resource_name');
+    const resourceName =
+      readStringClaim(permission, 'rsname') ??
+      readStringClaim(permission, 'resource_name');
     const rawScopes = permission['scopes'];
     if (!Array.isArray(rawScopes)) {
       continue;
@@ -106,7 +127,9 @@ export function extractPermissionClaims(rawPermissions: unknown, permissionSet: 
         continue;
       }
 
-      permissionSet.add(resourceName ? `${resourceName}#${scope.trim()}` : scope.trim());
+      permissionSet.add(
+        resourceName ? `${resourceName}#${scope.trim()}` : scope.trim(),
+      );
     }
   }
 }
@@ -128,12 +151,18 @@ export function extractRealmRoles(...realmAccessSources: unknown[]): string[] {
   return [...roles];
 }
 
-export function readStringClaim(claims: Record<string, unknown>, key: string): string | undefined {
+export function readStringClaim(
+  claims: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = claims[key];
   return typeof value === 'string' ? value : undefined;
 }
 
-export function readNumberClaim(claims: Record<string, unknown>, key: string): number | undefined {
+export function readNumberClaim(
+  claims: Record<string, unknown>,
+  key: string,
+): number | undefined {
   const value = claims[key];
   return typeof value === 'number' ? value : undefined;
 }

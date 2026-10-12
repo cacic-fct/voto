@@ -54,17 +54,23 @@ export function buildQuestionSummaries(
   );
 }
 
-export function buildAnswerSummaryCharts(summaries: QuestionResultSummary[]): AdminResultsChartConfig[] {
+export function buildAnswerSummaryCharts(
+  summaries: QuestionResultSummary[],
+): AdminResultsChartConfig[] {
   return summaries.flatMap((summary) =>
     summary.charts.slice(0, summary.element.type.includes('Grid') ? 2 : 1),
   );
 }
 
-export function buildTextQuestionSummaries(summaries: QuestionResultSummary[]): QuestionResultSummary[] {
+export function buildTextQuestionSummaries(
+  summaries: QuestionResultSummary[],
+): QuestionResultSummary[] {
   return summaries.filter((summary) => summary.textAnswers.length > 0);
 }
 
-export function toVoterRows(responses: PollResultsResponse[]): ResultsVoterRow[] {
+export function toVoterRows(
+  responses: PollResultsResponse[],
+): ResultsVoterRow[] {
   return responses.map((response) => toVoterRow(response));
 }
 
@@ -93,7 +99,8 @@ export function buildDemographicsCharts(
     },
     {
       title: 'Curso',
-      subtitle: 'Código 12 é Ciência da Computação; demais códigos ficam identificados como desconhecidos.',
+      subtitle:
+        'Código 12 é Ciência da Computação; demais códigos ficam identificados como desconhecidos.',
       icon: 'school',
       type: 'horizontalBar',
       buckets: countBuckets(rows.map((row) => row.course)),
@@ -103,7 +110,12 @@ export function buildDemographicsCharts(
 
 export function responseVoterLabel(response: PollResultsResponse): string {
   const voter = response.voter;
-  return voter?.name || voter?.preferredUsername || voter?.email || 'Identidade não disponível';
+  return (
+    voter?.name ||
+    voter?.preferredUsername ||
+    voter?.email ||
+    'Identidade não disponível'
+  );
 }
 
 export function selectedIndividualAnswers(
@@ -114,7 +126,9 @@ export function selectedIndividualAnswers(
     return [];
   }
 
-  const elementsById = new Map(answerElements.map((element) => [element.id, element]));
+  const elementsById = new Map(
+    answerElements.map((element) => [element.id, element]),
+  );
   return response.answers
     .map((answer) => {
       const element = answer.element ?? elementsById.get(answer.elementId);
@@ -134,15 +148,24 @@ function buildQuestionSummary(
   responses: PollResultsResponse[],
 ): QuestionResultSummary {
   const element = version.element;
-  const answerEntries = collectAnswerEntriesForElementVersion(version.key, elements, responses)
-    .filter((entry) => !isEmptyAnswerValue(entry.value));
+  const answerEntries = collectAnswerEntriesForElementVersion(
+    version.key,
+    elements,
+    responses,
+  ).filter((entry) => !isEmptyAnswerValue(entry.value));
 
   return {
     key: version.key,
     element,
     answeredCount: answerEntries.length,
-    charts: buildQuestionCharts(element, answerEntries.map((entry) => entry.value)),
-    textAnswers: buildQuestionTextAnswers(element, answerEntries.map((entry) => entry.value)),
+    charts: buildQuestionCharts(
+      element,
+      answerEntries.map((entry) => entry.value),
+    ),
+    textAnswers: buildQuestionTextAnswers(
+      element,
+      answerEntries.map((entry) => entry.value),
+    ),
     individualAnswers: answerEntries.map((entry) => ({
       responseId: entry.response.id,
       voterLabel: responseVoterLabel(entry.response),
@@ -151,21 +174,46 @@ function buildQuestionSummary(
   };
 }
 
-export function buildQuestionCharts(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig[] {
+export function buildQuestionCharts(
+  element: PollElement,
+  values: (PollAnswerValue | undefined)[],
+): AdminResultsChartConfig[] {
   switch (element.type) {
     case 'singleChoice':
     case 'selectionDropdown':
       return [
-        optionChart(element, values, 'pie', 'radio_button_checked', 'Distribuição de escolhas únicas.'),
+        optionChart(
+          element,
+          values,
+          'pie',
+          'radio_button_checked',
+          'Distribuição de escolhas únicas.',
+        ),
       ];
     case 'multipleChoice':
-      return [optionChart(element, values, 'horizontalBar', 'check_box', 'Total por opção marcada.')];
+      return [
+        optionChart(
+          element,
+          values,
+          'horizontalBar',
+          'check_box',
+          'Total por opção marcada.',
+        ),
+      ];
     case 'linearScale':
     case 'starRating':
       return [scalarChart(element, values)];
     case 'date':
     case 'time':
-      return [rawValueChart(element, values, 'horizontalBar', 'event', 'Frequência por resposta.')];
+      return [
+        rawValueChart(
+          element,
+          values,
+          'horizontalBar',
+          'event',
+          'Frequência por resposta.',
+        ),
+      ];
     case 'scheduling':
       return [schedulingChart(element, values)];
     case 'singleSelectionGrid':
@@ -179,12 +227,18 @@ export function buildQuestionCharts(element: PollElement, values: (PollAnswerVal
   }
 }
 
-function buildQuestionTextAnswers(element: PollElement, values: (PollAnswerValue | undefined)[]): string[] {
+function buildQuestionTextAnswers(
+  element: PollElement,
+  values: (PollAnswerValue | undefined)[],
+): string[] {
   if (element.type !== 'shortText' && element.type !== 'longText') {
     return [];
   }
 
-  return values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return values.filter(
+    (value): value is string =>
+      typeof value === 'string' && value.trim().length > 0,
+  );
 }
 
 function optionChart(
@@ -222,11 +276,17 @@ function optionChart(
   };
 }
 
-function scalarChart(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig {
+function scalarChart(
+  element: PollElement,
+  values: (PollAnswerValue | undefined)[],
+): AdminResultsChartConfig {
   const counts = new Map<string, number>();
   const allowedValues =
     element.type === 'linearScale' && element.settings?.linearScale
-      ? numberRange(element.settings.linearScale.min, element.settings.linearScale.max)
+      ? numberRange(
+          element.settings.linearScale.min,
+          element.settings.linearScale.max,
+        )
       : element.type === 'starRating' && element.settings?.starRating
         ? numberRange(1, element.settings.starRating.max)
         : [];
@@ -265,7 +325,10 @@ function rawValueChart(
     icon,
     type,
     buckets: countBuckets(
-      values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+      values.filter(
+        (value): value is string =>
+          typeof value === 'string' && value.trim().length > 0,
+      ),
     ),
     emptyText: 'Nenhuma resposta registrada para esta pergunta.',
   };
@@ -275,7 +338,10 @@ export function schedulingChart(
   element: PollElement,
   values: (PollAnswerValue | undefined)[],
 ): AdminResultsChartConfig {
-  const slots = schedulingSlots(element).map((slot) => ({ id: slot.id, label: slot.fullLabel }));
+  const slots = schedulingSlots(element).map((slot) => ({
+    id: slot.id,
+    label: slot.fullLabel,
+  }));
   const labels = new Map(slots.map((slot) => [slot.id, slot.label]));
   const counts = new Map(slots.map((slot) => [slot.id, 0]));
 
@@ -304,7 +370,10 @@ export function schedulingChart(
   };
 }
 
-export function gridCharts(element: PollElement, values: (PollAnswerValue | undefined)[]): AdminResultsChartConfig[] {
+export function gridCharts(
+  element: PollElement,
+  values: (PollAnswerValue | undefined)[],
+): AdminResultsChartConfig[] {
   const grid = element.settings?.grid;
   if (!grid) {
     return [];
@@ -337,7 +406,8 @@ export function gridCharts(element: PollElement, values: (PollAnswerValue | unde
     return {
       title: `${element.title}: ${row.label}`,
       subtitle: 'Distribuição por coluna da grade.',
-      icon: element.type === 'multipleSelectionGrid' ? 'checklist' : 'table_rows',
+      icon:
+        element.type === 'multipleSelectionGrid' ? 'checklist' : 'table_rows',
       type: 'verticalBar',
       buckets: grid.columns.map((column) => ({
         label: column.label,
@@ -354,7 +424,8 @@ function toVoterRow(response: PollResultsResponse): ResultsVoterRow {
 
   return {
     response,
-    name: voter?.name || voter?.preferredUsername || 'Identidade não disponível',
+    name:
+      voter?.name || voter?.preferredUsername || 'Identidade não disponível',
     email: voter?.email || 'Não informado',
     unespRole: voter?.unespRole || 'Não informado',
     enrollmentNumber: voter?.enrollmentNumber || 'Não informado',
@@ -363,7 +434,9 @@ function toVoterRow(response: PollResultsResponse): ResultsVoterRow {
   };
 }
 
-export function enrollmentMetadata(enrollmentNumber?: string): { yearLabel: string; courseLabel: string } | null {
+export function enrollmentMetadata(
+  enrollmentNumber?: string,
+): { yearLabel: string; courseLabel: string } | null {
   const digits = enrollmentNumber?.replace(/\D/g, '') ?? '';
   if (digits.length < 4) {
     return null;
@@ -371,7 +444,10 @@ export function enrollmentMetadata(enrollmentNumber?: string): { yearLabel: stri
 
   const enrollmentYear = 2000 + Number(digits.slice(0, 2));
   const courseCode = digits.slice(2, 4);
-  const courseLabel = courseCode === '12' ? 'Ciência da Computação' : `Curso desconhecido (${courseCode})`;
+  const courseLabel =
+    courseCode === '12'
+      ? 'Ciência da Computação'
+      : `Curso desconhecido (${courseCode})`;
 
   return {
     yearLabel: String(enrollmentYear),
@@ -379,7 +455,9 @@ export function enrollmentMetadata(enrollmentNumber?: string): { yearLabel: stri
   };
 }
 
-export function countBuckets(values: readonly string[]): { label: string; value: number }[] {
+export function countBuckets(
+  values: readonly string[],
+): { label: string; value: number }[] {
   const counts = new Map<string, number>();
   for (const value of values) {
     const label = value.trim() || 'Não informado';
@@ -388,9 +466,16 @@ export function countBuckets(values: readonly string[]): { label: string; value:
 
   return [...counts.entries()]
     .map(([label, value]) => ({ label, value }))
-    .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label, 'pt-BR'));
+    .sort(
+      (left, right) =>
+        right.value - left.value ||
+        left.label.localeCompare(right.label, 'pt-BR'),
+    );
 }
 
 export function numberRange(min: number, max: number): number[] {
-  return Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => min + index);
+  return Array.from(
+    { length: Math.max(0, max - min + 1) },
+    (_, index) => min + index,
+  );
 }

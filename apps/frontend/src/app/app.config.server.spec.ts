@@ -4,6 +4,8 @@ import { config } from './app.config.server';
 
 describe('server app config', () => {
   it('merges browser app providers with server rendering providers', () => {
-    expect(config.providers?.length).toBeGreaterThan(appConfig.providers?.length ?? 0);
+    expect(config.providers?.length).toBeGreaterThan(
+      appConfig.providers?.length ?? 0,
+    );
   });
 });

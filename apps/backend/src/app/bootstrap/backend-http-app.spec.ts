@@ -1,5 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
-import { requireTrustedMutationOrigin, readMutationOrigins } from './backend-http-app';
+import {
+  requireTrustedMutationOrigin,
+  readMutationOrigins,
+} from './backend-http-app';
 
 describe('backend HTTP security middleware', () => {
   const originalEnv = process.env;
@@ -17,7 +20,10 @@ describe('backend HTTP security middleware', () => {
   });
 
   function run(request: Partial<Request>) {
-    const response = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
     const next = jest.fn() as unknown as NextFunction;
     requireTrustedMutationOrigin(request as Request, response, next);
     return { response, next };
@@ -26,7 +32,10 @@ describe('backend HTTP security middleware', () => {
   it('accepts a development same-origin mutation with the session cookie', () => {
     const { response, next } = run({
       method: 'POST',
-      headers: { cookie: 'cacic_voto_session=session-1', origin: 'http://localhost:4200' },
+      headers: {
+        cookie: 'cacic_voto_session=session-1',
+        origin: 'http://localhost:4200',
+      },
     });
 
     expect(next).toHaveBeenCalledTimes(1);
@@ -36,15 +45,21 @@ describe('backend HTTP security middleware', () => {
   it('rejects a production mutation from an untrusted origin', () => {
     process.env.NODE_ENV = 'production';
     process.env.PUBLIC_ORIGIN = 'https://voto.cacic.com.br';
-    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS = 'https://app.example';
+    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS =
+      'https://app.example';
     const { response, next } = run({
       method: 'POST',
-      headers: { cookie: '__Host-cacic_voto_session=session-1', origin: 'https://app.example' },
+      headers: {
+        cookie: '__Host-cacic_voto_session=session-1',
+        origin: 'https://app.example',
+      },
     });
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(403);
-    expect(response.json).toHaveBeenCalledWith({ message: 'Untrusted request origin.' });
+    expect(response.json).toHaveBeenCalledWith({
+      message: 'Untrusted request origin.',
+    });
   });
 
   it('requires an allowlisted Origin for cookie-authenticated logout requests', () => {
@@ -81,8 +96,11 @@ describe('backend HTTP security middleware', () => {
   it('does not include development origins in production allowlists', () => {
     process.env.NODE_ENV = 'production';
     process.env.PUBLIC_ORIGIN = 'https://voto.cacic.com.br';
-    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS = 'https://app.example';
+    process.env.KEYCLOAK_ALLOWED_POST_LOGIN_REDIRECT_ORIGINS =
+      'https://app.example';
 
-    expect(readMutationOrigins()).toEqual(new Set(['https://voto.cacic.com.br']));
+    expect(readMutationOrigins()).toEqual(
+      new Set(['https://voto.cacic.com.br']),
+    );
   });
 });

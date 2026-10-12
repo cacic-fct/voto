@@ -6,7 +6,14 @@ import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
 import { ptBR } from 'date-fns/locale';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
-import { EventManagerEvent, Poll, PollEligibilityEnrollment, PollElement, PollResults, PollSummary } from '@org/voting-contracts';
+import {
+  EventManagerEvent,
+  Poll,
+  PollEligibilityEnrollment,
+  PollElement,
+  PollResults,
+  PollSummary,
+} from '@org/voting-contracts';
 import { of, Subject, throwError } from 'rxjs';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PollApiService } from '../polls/poll-api.service';
@@ -34,32 +41,35 @@ describe('AdminPollBuilderPageComponent', () => {
     PollApiService,
     | 'listAdminPolls'
     | 'listLinkableEvents'
-	    | 'getAdminPoll'
-	    | 'getAdminPollResults'
-	    | 'exportCacicElectionVoterEnrollments'
-	    | 'openAdminPollResultsEvents'
-	    | 'parseResultsDelta'
-	    | 'listPollEligibilityEnrollments'
-	    | 'addPollEligibilityEnrollments'
-	    | 'importPollEligibilityEnrollments'
-	    | 'deletePollEligibilityEnrollment'
-	    | 'clearPollEligibilityEnrollments'
-	    | 'listAdminCacicElectionSlates'
-	    | 'createAdminCacicElectionSlate'
-	    | 'updateAdminCacicElectionSlate'
-	    | 'rejectCacicElectionSlate'
-	    | 'updateCacicElectionSlateEnabled'
-	    | 'deleteCacicElectionSlate'
-	    | 'createPoll'
-	    | 'updatePoll'
-	    | 'uploadPollImage'
-	    | 'deletePollImage'
-	    | 'updatePollStatus'
-	    | 'deletePoll'
-	  >;
+    | 'getAdminPoll'
+    | 'getAdminPollResults'
+    | 'exportCacicElectionVoterEnrollments'
+    | 'openAdminPollResultsEvents'
+    | 'parseResultsDelta'
+    | 'listPollEligibilityEnrollments'
+    | 'addPollEligibilityEnrollments'
+    | 'importPollEligibilityEnrollments'
+    | 'deletePollEligibilityEnrollment'
+    | 'clearPollEligibilityEnrollments'
+    | 'listAdminCacicElectionSlates'
+    | 'createAdminCacicElectionSlate'
+    | 'updateAdminCacicElectionSlate'
+    | 'rejectCacicElectionSlate'
+    | 'updateCacicElectionSlateEnabled'
+    | 'deleteCacicElectionSlate'
+    | 'createPoll'
+    | 'updatePoll'
+    | 'uploadPollImage'
+    | 'deletePollImage'
+    | 'updatePollStatus'
+    | 'deletePoll'
+  >;
   let snackBar: Pick<MatSnackBar, 'open'>;
   let dialog: Pick<MatDialog, 'open'>;
-  const permissions: Pick<PermissionsService, 'canManageAdmin' | 'canUseKiosk' | 'isAdmin'> = {
+  const permissions: Pick<
+    PermissionsService,
+    'canManageAdmin' | 'canUseKiosk' | 'isAdmin'
+  > = {
     canManageAdmin: signal(true),
     canUseKiosk: signal(true),
     isAdmin: signal(true),
@@ -102,7 +112,13 @@ describe('AdminPollBuilderPageComponent', () => {
     pollId: poll.id,
     enrollmentNumber: '261200001',
     createdAt: '2026-06-16T10:00:00.000Z',
-    people: [{ enrollmentNumber: '261200001', name: 'Ana Souza', email: 'ana@unesp.br' }],
+    people: [
+      {
+        enrollmentNumber: '261200001',
+        name: 'Ana Souza',
+        email: 'ana@unesp.br',
+      },
+    ],
   };
 
   beforeEach(async () => {
@@ -119,23 +135,47 @@ describe('AdminPollBuilderPageComponent', () => {
           responses: [],
         }),
       ),
-      exportCacicElectionVoterEnrollments: vi.fn().mockReturnValue(of(new Blob(['261200001']))),
-      openAdminPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      exportCacicElectionVoterEnrollments: vi
+        .fn()
+        .mockReturnValue(of(new Blob(['261200001']))),
+      openAdminPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
-      listPollEligibilityEnrollments: vi.fn().mockReturnValue(of({ entries: [eligibilityEntry], totalCount: 1 })),
+      listPollEligibilityEnrollments: vi
+        .fn()
+        .mockReturnValue(of({ entries: [eligibilityEntry], totalCount: 1 })),
       addPollEligibilityEnrollments: vi.fn().mockReturnValue(
-        of({ entries: [eligibilityEntry], totalCount: 1, createdCount: 1, existingCount: 0 }),
+        of({
+          entries: [eligibilityEntry],
+          totalCount: 1,
+          createdCount: 1,
+          existingCount: 0,
+        }),
       ),
       importPollEligibilityEnrollments: vi.fn().mockReturnValue(
-        of({ entries: [eligibilityEntry], totalCount: 1, createdCount: 1, existingCount: 0 }),
+        of({
+          entries: [eligibilityEntry],
+          totalCount: 1,
+          createdCount: 1,
+          existingCount: 0,
+        }),
       ),
       deletePollEligibilityEnrollment: vi.fn().mockReturnValue(of(undefined)),
-      clearPollEligibilityEnrollments: vi.fn().mockReturnValue(of({ entries: [], totalCount: 0 })),
+      clearPollEligibilityEnrollments: vi
+        .fn()
+        .mockReturnValue(of({ entries: [], totalCount: 0 })),
       listAdminCacicElectionSlates: vi.fn().mockReturnValue(of([])),
-      createAdminCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
-      updateAdminCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      createAdminCacicElectionSlate: vi
+        .fn()
+        .mockReturnValue(of({ id: 'slate-1' })),
+      updateAdminCacicElectionSlate: vi
+        .fn()
+        .mockReturnValue(of({ id: 'slate-1' })),
       rejectCacicElectionSlate: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
-      updateCacicElectionSlateEnabled: vi.fn().mockReturnValue(of({ id: 'slate-1' })),
+      updateCacicElectionSlateEnabled: vi
+        .fn()
+        .mockReturnValue(of({ id: 'slate-1' })),
       deleteCacicElectionSlate: vi.fn().mockReturnValue(of(undefined)),
       createPoll: vi.fn().mockReturnValue(of(poll)),
       updatePoll: vi.fn().mockReturnValue(of(poll)),
@@ -148,7 +188,9 @@ describe('AdminPollBuilderPageComponent', () => {
         }),
       ),
       deletePollImage: vi.fn().mockReturnValue(of(undefined)),
-      updatePollStatus: vi.fn().mockReturnValue(of({ ...poll, status: 'published' })),
+      updatePollStatus: vi
+        .fn()
+        .mockReturnValue(of({ ...poll, status: 'published' })),
       deletePoll: vi.fn().mockReturnValue(of(undefined)),
     };
     snackBar = {
@@ -189,7 +231,9 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(api.listLinkableEvents).toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Área restrita');
     expect(fixture.nativeElement.textContent).toContain('Assembleia CACiC');
-    expect(fixture.nativeElement.textContent).toContain('Vincular votação a um evento');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Vincular votação a um evento',
+    );
   });
 
   it('shows the kiosk deep link only for a saved published poll', () => {
@@ -210,9 +254,13 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Abrir quiosque');
   });
 
-	  it('should save a new poll draft', async () => {
-    const component = fixture.componentInstance as unknown as { save(): Promise<void> };
-    const titleInput = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+  it('should save a new poll draft', async () => {
+    const component = fixture.componentInstance as unknown as {
+      save(): Promise<void>;
+    };
+    const titleInput = fixture.nativeElement.querySelector(
+      'input',
+    ) as HTMLInputElement;
     titleInput.value = 'Nova votação';
     titleInput.dispatchEvent(new Event('input'));
 
@@ -237,8 +285,8 @@ describe('AdminPollBuilderPageComponent', () => {
       votingEndsAt: undefined,
       linkedEventId: undefined,
       elements: [],
-	    });
-	  });
+    });
+  });
 
   it('should add manual eligibility enrollments after filtering blank lines', async () => {
     const component = fixture.componentInstance as unknown as {
@@ -247,10 +295,16 @@ describe('AdminPollBuilderPageComponent', () => {
       eligibilityEntries: { (): PollEligibilityEnrollment[] };
       addManualEnrollmentNumbers(): Promise<void>;
     };
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
+    });
     component.manualEnrollmentNumbers.set(' 261200001 \n\n261200002 ');
     const refreshedVersion = '2026-06-01T10:00:01.000Z';
-    vi.mocked(api.getAdminPoll).mockReturnValueOnce(of({ ...poll, updatedAt: refreshedVersion }));
+    vi.mocked(api.getAdminPoll).mockReturnValueOnce(
+      of({ ...poll, updatedAt: refreshedVersion }),
+    );
 
     await component.addManualEnrollmentNumbers();
 
@@ -260,7 +314,11 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(component.eligibilityEntries()).toEqual([eligibilityEntry]);
     expect(component.builder.draft().updatedAt).toBe(refreshedVersion);
     expect(component.manualEnrollmentNumbers()).toBe('');
-    expect(snackBar.open).toHaveBeenCalledWith('1 matrículas adicionadas.', 'OK', { duration: 3500 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      '1 matrículas adicionadas.',
+      'OK',
+      { duration: 3500 },
+    );
   });
 
   it('should require a saved poll and enrollment text before adding manual enrollments', async () => {
@@ -271,15 +329,27 @@ describe('AdminPollBuilderPageComponent', () => {
     };
 
     await component.addManualEnrollmentNumbers();
-    expect(snackBar.open).toHaveBeenCalledWith('Salve a votação antes de adicionar matrículas.', 'OK', {
-      duration: 3000,
-    });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Salve a votação antes de adicionar matrículas.',
+      'OK',
+      {
+        duration: 3000,
+      },
+    );
 
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
+    });
     component.manualEnrollmentNumbers.set('  \n ');
     await component.addManualEnrollmentNumbers();
 
-    expect(snackBar.open).toHaveBeenCalledWith('Informe pelo menos uma matrícula.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Informe pelo menos uma matrícula.',
+      'OK',
+      { duration: 3000 },
+    );
   });
 
   it('should download voter enrollment numbers for closed CACiC elections', async () => {
@@ -297,7 +367,9 @@ describe('AdminPollBuilderPageComponent', () => {
       revokeObjectURL: revokeObjectUrl,
     });
     const blob = new Blob(['261200001\n261200002'], { type: 'text/plain' });
-    vi.mocked(api.exportCacicElectionVoterEnrollments).mockReturnValueOnce(of(blob));
+    vi.mocked(api.exportCacicElectionVoterEnrollments).mockReturnValueOnce(
+      of(blob),
+    );
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
       canExportCacicElectionVoters(): boolean;
@@ -314,11 +386,17 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(component.canExportCacicElectionVoters()).toBe(true);
     await component.exportCacicElectionVoterEnrollments();
 
-    expect(api.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith('poll-1');
+    expect(api.exportCacicElectionVoterEnrollments).toHaveBeenCalledWith(
+      'poll-1',
+    );
     expect(createObjectUrl).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalled();
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:matriculas');
-    expect(snackBar.open).toHaveBeenCalledWith('Arquivo de matrículas gerado.', 'OK', { duration: 2500 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Arquivo de matrículas gerado.',
+      'OK',
+      { duration: 2500 },
+    );
     createElement.mockRestore();
   });
 
@@ -326,9 +404,16 @@ describe('AdminPollBuilderPageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
       eligibilityEntries: { (): PollEligibilityEnrollment[] };
-      importEligibilityFile(file: File | null, mode: 'append' | 'replace'): Promise<void>;
+      importEligibilityFile(
+        file: File | null,
+        mode: 'append' | 'replace',
+      ): Promise<void>;
     };
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
+    });
 
     const file = {
       name: 'matriculas.csv',
@@ -339,24 +424,40 @@ describe('AdminPollBuilderPageComponent', () => {
     await component.importEligibilityFile(file, 'replace');
 
     expect(dialog.open).toHaveBeenCalled();
-    expect(api.importPollEligibilityEnrollments).toHaveBeenCalledWith('poll-1', {
-      content: 'matricula,nome\n261200001,Ana',
-      fileName: 'matriculas.csv',
-      format: 'csv',
-      mode: 'replace',
-      selectedHeader: 'matricula',
-    });
+    expect(api.importPollEligibilityEnrollments).toHaveBeenCalledWith(
+      'poll-1',
+      {
+        content: 'matricula,nome\n261200001,Ana',
+        fileName: 'matriculas.csv',
+        format: 'csv',
+        mode: 'replace',
+        selectedHeader: 'matricula',
+      },
+    );
     expect(component.eligibilityEntries()).toEqual([eligibilityEntry]);
-    expect(snackBar.open).toHaveBeenCalledWith('Lista substituída com 1 matrículas.', 'OK', { duration: 4000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Lista substituída com 1 matrículas.',
+      'OK',
+      { duration: 4000 },
+    );
   });
 
   it('should skip CSV import when the column dialog is cancelled', async () => {
-    vi.mocked(dialog.open).mockReturnValue({ afterClosed: () => of(undefined) } as never);
+    vi.mocked(dialog.open).mockReturnValue({
+      afterClosed: () => of(undefined),
+    } as never);
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
-      importEligibilityFile(file: File | null, mode: 'append' | 'replace'): Promise<void>;
+      importEligibilityFile(
+        file: File | null,
+        mode: 'append' | 'replace',
+      ): Promise<void>;
     };
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
+    });
 
     const file = {
       name: 'matriculas.csv',
@@ -373,15 +474,25 @@ describe('AdminPollBuilderPageComponent', () => {
     const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
-      eligibilityEntries: { set(value: PollEligibilityEnrollment[]): void; (): PollEligibilityEnrollment[] };
+      eligibilityEntries: {
+        set(value: PollEligibilityEnrollment[]): void;
+        (): PollEligibilityEnrollment[];
+      };
       deleteEligibilityEnrollment(enrollmentNumber: string): Promise<void>;
       clearEligibilityEnrollments(): Promise<void>;
     };
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
+    });
     component.eligibilityEntries.set([eligibilityEntry]);
 
     await component.deleteEligibilityEnrollment('261200001');
-    expect(api.deletePollEligibilityEnrollment).toHaveBeenCalledWith('poll-1', '261200001');
+    expect(api.deletePollEligibilityEnrollment).toHaveBeenCalledWith(
+      'poll-1',
+      '261200001',
+    );
     expect(component.eligibilityEntries()).toEqual([]);
 
     component.eligibilityEntries.set([eligibilityEntry]);
@@ -398,7 +509,10 @@ describe('AdminPollBuilderPageComponent', () => {
       type: 'multipleChoice',
       title: 'Escolhas',
       required: true,
-      options: [{ id: 'yes', label: 'Sim' }, { id: 'no', label: 'Não' }],
+      options: [
+        { id: 'yes', label: 'Sim' },
+        { id: 'no', label: 'Não' },
+      ],
     };
     const gridElement: PollElement = {
       id: 'grid',
@@ -430,21 +544,41 @@ describe('AdminPollBuilderPageComponent', () => {
           bufferAfterMinutes: 0,
           inviteeMode: 'optional',
           maxInvitees: 1,
-          availability: [{ id: 'window', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+          availability: [
+            {
+              id: 'window',
+              date: '2026-06-24',
+              startTime: '09:00',
+              endTime: '10:00',
+            },
+          ],
         },
       },
     };
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
       results: { set(value: PollResults): void };
-      voterRows: () => { enrollmentYear: string; course: string; name: string }[];
-      demographicsCharts: () => { title: string; buckets: { label: string; value: number }[] }[];
-      questionSummaries: () => { answeredCount: number; charts: { buckets: { label: string; value: number }[] }[] }[];
+      voterRows: () => {
+        enrollmentYear: string;
+        course: string;
+        name: string;
+      }[];
+      demographicsCharts: () => {
+        title: string;
+        buckets: { label: string; value: number }[];
+      }[];
+      questionSummaries: () => {
+        answeredCount: number;
+        charts: { buckets: { label: string; value: number }[] }[];
+      }[];
       responseVoterLabel(response: PollResults['responses'][number]): string;
       peopleLabel(entry: PollEligibilityEnrollment): string;
       eventDateLabel(event: EventManagerEvent): string;
     };
-    component.builder.setDraft({ ...poll, elements: [choiceElement, gridElement, schedulingElement] });
+    component.builder.setDraft({
+      ...poll,
+      elements: [choiceElement, gridElement, schedulingElement],
+    });
     component.results.set({
       pollId: poll.id,
       anonymous: false,
@@ -467,19 +601,34 @@ describe('AdminPollBuilderPageComponent', () => {
             { elementId: 'grid', value: { row: 'col' } },
             {
               elementId: 'schedule',
-              value: { slotId: 'window:09:00', invitees: [{ name: 'Bruno', email: 'bruno@unesp.br' }] },
+              value: {
+                slotId: 'window:09:00',
+                invitees: [{ name: 'Bruno', email: 'bruno@unesp.br' }],
+              },
             },
           ],
         },
       ],
     });
 
-    expect(answerValueLabel(choiceElement, ['yes', 'missing'])).toBe('Sim, missing');
+    expect(answerValueLabel(choiceElement, ['yes', 'missing'])).toBe(
+      'Sim, missing',
+    );
     expect(answerValueLabel(gridElement, { row: 'col' })).toBe('Linha: Coluna');
-    expect(answerValueLabel(schedulingElement, { slotId: 'window:09:00' })).toContain('09:00 - 09:30');
+    expect(
+      answerValueLabel(schedulingElement, { slotId: 'window:09:00' }),
+    ).toContain('09:00 - 09:30');
     expect(answerValueLabel(choiceElement, undefined)).toBe('Sem resposta');
-    expect(component.responseVoterLabel({ id: 'empty', submittedAt: '', answers: [] })).toBe('Identidade não disponível');
-    expect(component.peopleLabel({ ...eligibilityEntry, people: [] })).toBe('Nenhum usuário encontrado');
+    expect(
+      component.responseVoterLabel({
+        id: 'empty',
+        submittedAt: '',
+        answers: [],
+      }),
+    ).toBe('Identidade não disponível');
+    expect(component.peopleLabel({ ...eligibilityEntry, people: [] })).toBe(
+      'Nenhum usuário encontrado',
+    );
     expect(component.peopleLabel(eligibilityEntry)).toBe('Ana Souza');
     expect(component.eventDateLabel(event)).toContain('16/06/2026');
     expect(component.voterRows()[0]).toMatchObject({
@@ -490,7 +639,14 @@ describe('AdminPollBuilderPageComponent', () => {
     expect(component.demographicsCharts()).toHaveLength(3);
     expect(component.questionSummaries()[0]).toMatchObject({
       answeredCount: 1,
-      charts: [{ buckets: [{ label: 'Sim', value: 1 }, { label: 'Não', value: 0 }] }],
+      charts: [
+        {
+          buckets: [
+            { label: 'Sim', value: 1 },
+            { label: 'Não', value: 0 },
+          ],
+        },
+      ],
     });
   });
 
@@ -531,11 +687,24 @@ describe('AdminPollBuilderPageComponent', () => {
     component.builder.setDraft({ ...poll, linkedEvent: event });
     expect(component.eventOptions()).toEqual([event]);
 
-    component.builder.setDraft({ ...poll, linkedEvent, elements: [textElement] });
+    component.builder.setDraft({
+      ...poll,
+      linkedEvent,
+      elements: [textElement],
+    });
     component.linkableEvents.set([]);
-    expect(component.eventOptions()[0]).toMatchObject({ id: 'archived-event', shouldCollectAttendance: false });
+    expect(component.eventOptions()[0]).toMatchObject({
+      id: 'archived-event',
+      shouldCollectAttendance: false,
+    });
 
-    component.results.set({ pollId: poll.id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] });
+    component.results.set({
+      pollId: poll.id,
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 0,
+      responses: [],
+    });
     component.selectedIndividualResponseId.set('missing');
     expect(component.selectedIndividualResponse()).toBeNull();
     expect(component.selectedIndividualAnswers()).toEqual([]);
@@ -544,7 +713,13 @@ describe('AdminPollBuilderPageComponent', () => {
       anonymous: false,
       answersReleased: true,
       responseCount: 1,
-      responses: [{ id: 'anonymous-response', submittedAt: '2026-06-18T12:00:00.000Z', answers: [] }],
+      responses: [
+        {
+          id: 'anonymous-response',
+          submittedAt: '2026-06-18T12:00:00.000Z',
+          answers: [],
+        },
+      ],
     });
     expect(component.selectedIndividualResponse()).toBeNull();
 
@@ -568,7 +743,9 @@ describe('AdminPollBuilderPageComponent', () => {
 
     expect(component.selectedQuestionElementId()).toBe(textQuestionKey);
     expect(component.selectedIndividualResponse()?.id).toBe('response-1');
-    expect(component.selectedIndividualAnswers()).toEqual([{ element: textElement, valueLabel: 'Ótimo' }]);
+    expect(component.selectedIndividualAnswers()).toEqual([
+      { element: textElement, valueLabel: 'Ótimo' },
+    ]);
     expect(component.textQuestionSummaries()[0].textAnswers).toEqual(['Ótimo']);
     expect(component.answerSummaryCharts()).toEqual([]);
 
@@ -607,11 +784,21 @@ describe('AdminPollBuilderPageComponent', () => {
 
     component.builder.newPoll();
     await component.save();
-    expect(snackBar.open).toHaveBeenCalledWith('Informe o título da votação.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Informe o título da votação.',
+      'OK',
+      { duration: 3000 },
+    );
 
-    vi.mocked(api.getAdminPoll).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.getAdminPoll).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.selectPoll('missing');
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível abrir a votação.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível abrir a votação.',
+      'OK',
+      { duration: 3000 },
+    );
 
     confirm.mockRestore();
   });
@@ -624,7 +811,13 @@ describe('AdminPollBuilderPageComponent', () => {
       (id === poll.id ? firstPoll : secondPoll).asObservable(),
     );
     vi.mocked(api.getAdminPollResults).mockImplementation((id: string) =>
-      of({ pollId: id, anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
+      of({
+        pollId: id,
+        anonymous: false,
+        answersReleased: true,
+        responseCount: 0,
+        responses: [],
+      }),
     );
 
     const component = fixture.componentInstance as unknown as {
@@ -650,13 +843,23 @@ describe('AdminPollBuilderPageComponent', () => {
   });
 
   it('should apply live admin result snapshots and close event sources', async () => {
-    const source = { close: vi.fn(), onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined };
+    const source = {
+      close: vi.fn(),
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
+    };
     const initialResults: PollResults = {
       pollId: poll.id,
       anonymous: false,
       answersReleased: true,
       responseCount: 1,
-      responses: [{ id: 'response-1', submittedAt: '2026-06-18T12:00:00.000Z', answers: [] }],
+      responses: [
+        {
+          id: 'response-1',
+          submittedAt: '2026-06-18T12:00:00.000Z',
+          answers: [],
+        },
+      ],
     };
     const delta = {
       pollId: poll.id,
@@ -672,12 +875,17 @@ describe('AdminPollBuilderPageComponent', () => {
       ],
     };
     vi.mocked(api.getAdminPollResults).mockReturnValueOnce(of(initialResults));
-    vi.mocked(api.openAdminPollResultsEvents).mockReturnValueOnce(source as unknown as EventSource);
+    vi.mocked(api.openAdminPollResultsEvents).mockReturnValueOnce(
+      source as unknown as EventSource,
+    );
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce(delta);
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
       results: { (): PollResults | null; set(value: PollResults | null): void };
-      selectedIndividualResponseId: { (): string | null; set(value: string | null): void };
+      selectedIndividualResponseId: {
+        (): string | null;
+        set(value: string | null): void;
+      };
       loadResults(showLoading?: boolean): Promise<void>;
       ngOnDestroy(): void;
     };
@@ -688,7 +896,10 @@ describe('AdminPollBuilderPageComponent', () => {
 
     expect(api.openAdminPollResultsEvents).toHaveBeenCalledWith('poll-1');
     expect(component.results()?.responseCount).toBe(2);
-    expect(component.results()?.responses.map((item) => item.id)).toEqual(['response-1', 'response-2']);
+    expect(component.results()?.responses.map((item) => item.id)).toEqual([
+      'response-1',
+      'response-2',
+    ]);
     expect(component.selectedIndividualResponseId()).toBe('response-2');
 
     component.ngOnDestroy();
@@ -698,7 +909,8 @@ describe('AdminPollBuilderPageComponent', () => {
   it('keeps final admin results recoverable when reconciliation temporarily fails', async () => {
     const source = {
       close: vi.fn(),
-      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
     };
     const initialResults: PollResults = {
       pollId: poll.id,
@@ -712,7 +924,9 @@ describe('AdminPollBuilderPageComponent', () => {
       .mockReturnValueOnce(of(initialResults))
       .mockReturnValueOnce(throwError(() => new Error('temporary outage')))
       .mockReturnValueOnce(of(finalResults));
-    vi.mocked(api.openAdminPollResultsEvents).mockReturnValueOnce(source as unknown as EventSource);
+    vi.mocked(api.openAdminPollResultsEvents).mockReturnValueOnce(
+      source as unknown as EventSource,
+    );
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce({
       pollId: poll.id,
       final: true,
@@ -775,7 +989,10 @@ describe('AdminPollBuilderPageComponent', () => {
         settings: {
           grid: {
             rows: [{ id: 'row', label: 'Linha' }],
-            columns: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+            columns: [
+              { id: 'a', label: 'A' },
+              { id: 'b', label: 'B' },
+            ],
           },
         },
       },
@@ -796,7 +1013,14 @@ describe('AdminPollBuilderPageComponent', () => {
             bufferAfterMinutes: 0,
             inviteeMode: 'optional',
             maxInvitees: 1,
-            availability: [{ id: 'window', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+            availability: [
+              {
+                id: 'window',
+                date: '2026-06-24',
+                startTime: '09:00',
+                endTime: '10:00',
+              },
+            ],
           },
         },
       },
@@ -804,7 +1028,10 @@ describe('AdminPollBuilderPageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       builder: PollBuilderDraftService;
       results: { set(value: PollResults): void };
-      questionSummaries: () => { element: PollElement; charts: { buckets: { label: string; value: number }[] }[] }[];
+      questionSummaries: () => {
+        element: PollElement;
+        charts: { buckets: { label: string; value: number }[] }[];
+      }[];
       answerSummaryCharts: () => unknown[];
     };
     component.builder.setDraft({ ...poll, elements });
@@ -831,19 +1058,30 @@ describe('AdminPollBuilderPageComponent', () => {
     });
 
     const summaries = component.questionSummaries();
-    expect(summaries.find((summary) => summary.element.id === 'dropdown')?.charts[0].buckets).toEqual([
-      { label: 'Manhã', value: 1 },
-    ]);
-    expect(summaries.find((summary) => summary.element.id === 'scale')?.charts[0].buckets).toEqual([
+    expect(
+      summaries.find((summary) => summary.element.id === 'dropdown')?.charts[0]
+        .buckets,
+    ).toEqual([{ label: 'Manhã', value: 1 }]);
+    expect(
+      summaries.find((summary) => summary.element.id === 'scale')?.charts[0]
+        .buckets,
+    ).toEqual([
       { label: '0', value: 0 },
       { label: '1', value: 0 },
       { label: '2', value: 1 },
     ]);
-    expect(summaries.find((summary) => summary.element.id === 'grid')?.charts[0].buckets).toEqual([
+    expect(
+      summaries.find((summary) => summary.element.id === 'grid')?.charts[0]
+        .buckets,
+    ).toEqual([
       { label: 'A', value: 1 },
       { label: 'B', value: 1 },
     ]);
-    expect(summaries.find((summary) => summary.element.id === 'schedule')?.charts[0].buckets.at(-1)).toEqual({
+    expect(
+      summaries
+        .find((summary) => summary.element.id === 'schedule')
+        ?.charts[0].buckets.at(-1),
+    ).toEqual({
       label: 'missing-slot',
       value: 1,
     });
@@ -854,20 +1092,30 @@ describe('AdminPollBuilderPageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       results: { set(value: PollResults | null): void };
     };
-    const emptyElement: PollElement = { id: 'empty', type: 'section', title: 'Seção', required: false, options: [] };
+    const emptyElement: PollElement = {
+      id: 'empty',
+      type: 'section',
+      title: 'Seção',
+      required: false,
+      options: [],
+    };
     const gridElement: PollElement = {
       id: 'grid',
       type: 'singleSelectionGrid',
       title: 'Grade',
       required: true,
       options: [],
-      settings: { grid: { rows: [{ id: 'row', label: 'Linha' }], columns: [] } },
+      settings: {
+        grid: { rows: [{ id: 'row', label: 'Linha' }], columns: [] },
+      },
     };
 
     component.results.set(null);
     expect(buildDemographicsCharts([], false)).toEqual([]);
     expect(answerValueLabel(emptyElement, { x: 1 })).toBe('Sem resposta');
-    expect(answerValueLabel(gridElement, { row: ['a', 'b'] })).toBe('Linha: a, b');
+    expect(answerValueLabel(gridElement, { row: ['a', 'b'] })).toBe(
+      'Linha: a, b',
+    );
     expect(gridCharts(gridElement, [null])[0].buckets).toEqual([]);
     expect(schedulingSlots(emptyElement)).toEqual([]);
     expect(formatDateLabel('invalid')).toBe('invalid');
@@ -895,7 +1143,11 @@ describe('AdminPollBuilderPageComponent', () => {
       eventOptions: () => EventManagerEvent[];
       save(): Promise<void>;
       loadResults(showLoading?: boolean): Promise<void>;
-      applyResultsDelta(delta: { pollId: string; responseCount: number; responses: PollResults['responses'] }): void;
+      applyResultsDelta(delta: {
+        pollId: string;
+        responseCount: number;
+        responses: PollResults['responses'];
+      }): void;
       loadEligibilityEnrollments(showLoading?: boolean): Promise<void>;
       loadPolls(showLoading?: boolean): Promise<void>;
       loadLinkableEvents(): Promise<void>;
@@ -905,10 +1157,17 @@ describe('AdminPollBuilderPageComponent', () => {
       updateVoterEligibilitySource(event: { value: string }): void;
       updateManualEnrollmentNumbers(event: Event): void;
       addManualEnrollmentNumbers(): Promise<void>;
-      importEligibilityFile(file: File | null, mode: 'append' | 'replace'): Promise<void>;
+      importEligibilityFile(
+        file: File | null,
+        mode: 'append' | 'replace',
+      ): Promise<void>;
       deleteEligibilityEnrollment(enrollmentNumber: string): Promise<void>;
       clearEligibilityEnrollments(): Promise<void>;
-      importResultLabel(createdCount: number, existingCount: number, mode?: 'append' | 'replace'): string;
+      importResultLabel(
+        createdCount: number,
+        existingCount: number,
+        mode?: 'append' | 'replace',
+      ): string;
     };
     const schedulingElement: PollElement = {
       id: 'schedule',
@@ -927,7 +1186,14 @@ describe('AdminPollBuilderPageComponent', () => {
           bufferAfterMinutes: 0,
           inviteeMode: 'optional',
           maxInvitees: 1,
-          availability: [{ id: 'window', date: '2026-06-24', startTime: '09:00', endTime: '10:00' }],
+          availability: [
+            {
+              id: 'window',
+              date: '2026-06-24',
+              startTime: '09:00',
+              endTime: '10:00',
+            },
+          ],
         },
       },
     };
@@ -945,91 +1211,200 @@ describe('AdminPollBuilderPageComponent', () => {
 
     const textarea = document.createElement('textarea');
     textarea.value = '123';
-    component.updateManualEnrollmentNumbers({ target: textarea } as unknown as Event);
+    component.updateManualEnrollmentNumbers({
+      target: textarea,
+    } as unknown as Event);
     component.updateLinkedEvent({ value: event.id });
     component.updateVoterEligibilitySource({ value: 'enrollmentList' });
 
-    component.builder.setDraft({ ...poll, id: 'poll-1', voterEligibilitySource: 'enrollmentList' });
-    vi.mocked(api.updatePoll).mockReturnValueOnce(throwError(() => new Error('offline')));
-    await component.save();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível salvar. Confira os itens e opções.', 'OK', {
-      duration: 4000,
+    component.builder.setDraft({
+      ...poll,
+      id: 'poll-1',
+      voterEligibilitySource: 'enrollmentList',
     });
+    vi.mocked(api.updatePoll).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
+    await component.save();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível salvar. Confira os itens e opções.',
+      'OK',
+      {
+        duration: 4000,
+      },
+    );
 
-    vi.mocked(api.updatePollStatus).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.updatePollStatus).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.setStatus('published');
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível atualizar o status.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível atualizar o status.',
+      'OK',
+      { duration: 3000 },
+    );
 
     confirm.mockReturnValue(true);
-    vi.mocked(api.deletePoll).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.deletePoll).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.deletePoll();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível excluir a votação.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível excluir a votação.',
+      'OK',
+      { duration: 3000 },
+    );
 
-    vi.mocked(api.addPollEligibilityEnrollments).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.addPollEligibilityEnrollments).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.addManualEnrollmentNumbers();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível adicionar as matrículas.', 'OK', { duration: 4000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível adicionar as matrículas.',
+      'OK',
+      { duration: 4000 },
+    );
 
-    vi.mocked(api.importPollEligibilityEnrollments).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.importPollEligibilityEnrollments).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     const file = {
       name: 'matriculas.txt',
       type: 'text/plain',
       text: vi.fn().mockResolvedValue('123'),
     } as unknown as File;
     await component.importEligibilityFile(file, 'append');
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível importar o arquivo.', 'OK', { duration: 4000 });
-
-    vi.mocked(api.getAdminPollResults).mockReturnValueOnce(throwError(() => new Error('offline')));
-    await component.loadResults();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível carregar os resultados.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível importar o arquivo.',
+      'OK',
+      { duration: 4000 },
+    );
 
     vi.mocked(api.getAdminPollResults).mockReturnValueOnce(
-      of({ pollId: 'poll-1', anonymous: false, answersReleased: true, responseCount: 0, responses: [] }),
+      throwError(() => new Error('offline')),
+    );
+    await component.loadResults();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível carregar os resultados.',
+      'OK',
+      { duration: 3000 },
+    );
+
+    vi.mocked(api.getAdminPollResults).mockReturnValueOnce(
+      of({
+        pollId: 'poll-1',
+        anonymous: false,
+        answersReleased: true,
+        responseCount: 0,
+        responses: [],
+      }),
     );
     component.isBrowser = false;
     await component.loadResults();
     expect(api.openAdminPollResultsEvents).not.toHaveBeenCalled();
 
     component.results.set(null);
-    component.applyResultsDelta({ pollId: 'poll-1', responseCount: 1, responses: [] });
+    component.applyResultsDelta({
+      pollId: 'poll-1',
+      responseCount: 1,
+      responses: [],
+    });
     expect(component.results()).toBeNull();
-    component.results.set({ pollId: 'poll-1', anonymous: false, answersReleased: true, responseCount: 1, responses: [] });
-    component.applyResultsDelta({ pollId: 'other', responseCount: 2, responses: [] });
+    component.results.set({
+      pollId: 'poll-1',
+      anonymous: false,
+      answersReleased: true,
+      responseCount: 1,
+      responses: [],
+    });
+    component.applyResultsDelta({
+      pollId: 'other',
+      responseCount: 2,
+      responses: [],
+    });
     expect(component.results()?.responseCount).toBe(1);
 
-    vi.mocked(api.listPollEligibilityEnrollments).mockReturnValueOnce(of({ entries: [eligibilityEntry], totalCount: 1 }));
+    vi.mocked(api.listPollEligibilityEnrollments).mockReturnValueOnce(
+      of({ entries: [eligibilityEntry], totalCount: 1 }),
+    );
     await component.loadEligibilityEnrollments(true);
     expect(component.eligibilityEntries()).toEqual([eligibilityEntry]);
-    vi.mocked(api.listPollEligibilityEnrollments).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.listPollEligibilityEnrollments).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.loadEligibilityEnrollments(true);
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível carregar as matrículas habilitadas.', 'OK', {
-      duration: 3000,
-    });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível carregar as matrículas habilitadas.',
+      'OK',
+      {
+        duration: 3000,
+      },
+    );
 
-    vi.mocked(api.deletePollEligibilityEnrollment).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.deletePollEligibilityEnrollment).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.deleteEligibilityEnrollment('261200001');
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível remover a matrícula.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível remover a matrícula.',
+      'OK',
+      { duration: 3000 },
+    );
 
-    vi.mocked(api.clearPollEligibilityEnrollments).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.clearPollEligibilityEnrollments).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.clearEligibilityEnrollments();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível limpar a lista.', 'OK', { duration: 3000 });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível limpar a lista.',
+      'OK',
+      { duration: 3000 },
+    );
 
-    vi.mocked(api.listAdminPolls).mockReturnValueOnce(throwError(() => new Error('offline')));
+    vi.mocked(api.listAdminPolls).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.loadPolls(true);
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível carregar a lista de votações.', 'OK', {
-      duration: 3000,
-    });
-    vi.mocked(api.listLinkableEvents).mockReturnValueOnce(throwError(() => new Error('offline')));
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível carregar a lista de votações.',
+      'OK',
+      {
+        duration: 3000,
+      },
+    );
+    vi.mocked(api.listLinkableEvents).mockReturnValueOnce(
+      throwError(() => new Error('offline')),
+    );
     await component.loadLinkableEvents();
-    expect(snackBar.open).toHaveBeenCalledWith('Não foi possível carregar os eventos disponíveis.', 'OK', {
-      duration: 3000,
-    });
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Não foi possível carregar os eventos disponíveis.',
+      'OK',
+      {
+        duration: 3000,
+      },
+    );
 
-    expect(schedulingChart(schedulingElement, [null]).buckets.every((bucket) => bucket.value === 0)).toBe(true);
-    expect(gridCharts({ ...schedulingElement, type: 'singleSelectionGrid', settings: undefined }, [])).toEqual([]);
+    expect(
+      schedulingChart(schedulingElement, [null]).buckets.every(
+        (bucket) => bucket.value === 0,
+      ),
+    ).toBe(true);
+    expect(
+      gridCharts(
+        {
+          ...schedulingElement,
+          type: 'singleSelectionGrid',
+          settings: undefined,
+        },
+        [],
+      ),
+    ).toEqual([]);
     expect(answerValueLabel(schedulingElement, {})).toBe('Sem resposta');
     expect(readSchedulingAnswerOrNull(null)).toBeNull();
     expect(readSchedulingAnswerOrNull({})).toBeNull();
-    expect(component.importResultLabel(2, 3)).toBe('2 matrículas adicionadas; 3 já estavam na lista.');
+    expect(component.importResultLabel(2, 3)).toBe(
+      '2 matrículas adicionadas; 3 já estavam na lista.',
+    );
 
     confirm.mockRestore();
   });

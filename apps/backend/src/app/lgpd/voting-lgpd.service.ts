@@ -1,9 +1,17 @@
-import { BadRequestException, Injectable, Logger, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ConflictException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { revokedSubjectHash } from './subject-revocation';
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { isRecord, readEnrollmentNumberFromClaims } from '../polls/poll-user-claims';
+import {
+  isRecord,
+  readEnrollmentNumberFromClaims,
+} from '../polls/poll-user-claims';
 
 type LgpdUserInput = {
   userId: string;
@@ -20,8 +28,17 @@ export class VotingLgpdService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async collectUserData(input: LgpdUserInput): Promise<Record<string, unknown>> {
-    const [user, responses, votes, managedPolls, electionSlates, administrativeActions] = await Promise.all([
+  async collectUserData(
+    input: LgpdUserInput,
+  ): Promise<Record<string, unknown>> {
+    const [
+      user,
+      responses,
+      votes,
+      managedPolls,
+      electionSlates,
+      administrativeActions,
+    ] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: input.userId },
         select: {
@@ -101,14 +118,22 @@ export class VotingLgpdService {
       this.prisma.pollAdminAudit.findMany({
         where: { actorId: input.userId },
         orderBy: { createdAt: 'asc' },
-        select: { pollId: true, action: true, beforeVersion: true, afterVersion: true, createdAt: true },
+        select: {
+          pollId: true,
+          action: true,
+          beforeVersion: true,
+          afterVersion: true,
+          createdAt: true,
+        },
       }),
     ]);
 
     const claims = user && isRecord(user.claims) ? user.claims : {};
     const enrollmentNumber = readEnrollmentNumberFromClaims(claims);
     const userProfile = user
-      ? Object.fromEntries(Object.entries(user).filter(([key]) => key !== 'claims'))
+      ? Object.fromEntries(
+          Object.entries(user).filter(([key]) => key !== 'claims'),
+        )
       : null;
     const [eligibilityEntries, slateMembers] = await Promise.all([
       enrollmentNumber
@@ -118,24 +143,24 @@ export class VotingLgpdService {
           })
         : Promise.resolve([]),
       this.prisma.cacicElectionSlateMember.findMany({
-            where: {
-              verifiedSubjectHash: revokedSubjectHash(input.userId),
-            },
-            select: {
-              id: true,
-              slateId: true,
-              fullName: true,
-              enrollmentNumber: true,
-              role: true,
-              customRole: true,
-              isRepresentative: true,
-              identifierType: true,
-              identifierValue: true,
-              position: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          }),
+        where: {
+          verifiedSubjectHash: revokedSubjectHash(input.userId),
+        },
+        select: {
+          id: true,
+          slateId: true,
+          fullName: true,
+          enrollmentNumber: true,
+          role: true,
+          customRole: true,
+          isRepresentative: true,
+          identifierType: true,
+          identifierValue: true,
+          position: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
     ]);
 
     return {
@@ -150,11 +175,13 @@ export class VotingLgpdService {
       pollResponses: responses,
       pollVotes: votes,
       pollAdministrativeActions: administrativeActions,
-      pollManagement: managedPolls.map(({ createdById, updatedById, ...poll }) => ({
-        ...poll,
-        createdByRequester: createdById === input.userId,
-        updatedByRequester: updatedById === input.userId,
-      })),
+      pollManagement: managedPolls.map(
+        ({ createdById, updatedById, ...poll }) => ({
+          ...poll,
+          createdByRequester: createdById === input.userId,
+          updatedByRequester: updatedById === input.userId,
+        }),
+      ),
       cacicElectionSlateActivities: electionSlates.map(
         ({ submittedById, adminCreatedById, reviewedById, ...slate }) => ({
           ...slate,
@@ -168,12 +195,16 @@ export class VotingLgpdService {
     };
   }
 
-  async scheduleDeletion(input: LgpdDeletionInput): Promise<Record<string, unknown>> {
+  async scheduleDeletion(
+    input: LgpdDeletionInput,
+  ): Promise<Record<string, unknown>> {
     this.validateDeletionInput(input);
     return this.recordDeletionIntent(input, 'PENDING');
   }
 
-  async cancelDeletion(input: LgpdDeletionInput): Promise<Record<string, unknown>> {
+  async cancelDeletion(
+    input: LgpdDeletionInput,
+  ): Promise<Record<string, unknown>> {
     this.validateDeletionInput(input);
     return this.recordDeletionIntent(input, 'CANCELLED');
   }
@@ -186,9 +217,17 @@ export class VotingLgpdService {
     const requestHash = buildAnonymizedSubjectId(input.userId, input.requestId);
     return this.prisma.$transaction(async (tx) => {
       await this.lockSubject(tx, subjectHash);
-      const existing = await tx.votingDeletionRequest.findUnique({ where: { requestHash } });
-      if (existing && existing.state !== 'PENDING' && existing.state !== requestedState) {
-        throw new ConflictException('The deletion request has already reached a terminal state.');
+      const existing = await tx.votingDeletionRequest.findUnique({
+        where: { requestHash },
+      });
+      if (
+        existing &&
+        existing.state !== 'PENDING' &&
+        existing.state !== requestedState
+      ) {
+        throw new ConflictException(
+          'The deletion request has already reached a terminal state.',
+        );
       }
       const request = await tx.votingDeletionRequest.upsert({
         where: { requestHash },
@@ -203,40 +242,66 @@ export class VotingLgpdService {
     });
   }
 
-  private async lockSubject(tx: Prisma.TransactionClient, subjectHash: string): Promise<void> {
+  private async lockSubject(
+    tx: Prisma.TransactionClient,
+    subjectHash: string,
+  ): Promise<void> {
     // Serialize schedule/cancel/delete for a subject, including different request IDs.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${subjectHash}, 0))`;
   }
 
   async hardDelete(input: LgpdDeletionInput): Promise<Record<string, unknown>> {
     this.validateDeletionInput(input);
-    const anonymizedSubjectId = buildAnonymizedSubjectId(input.userId, input.requestId);
+    const anonymizedSubjectId = buildAnonymizedSubjectId(
+      input.userId,
+      input.requestId,
+    );
     const subjectHash = revokedSubjectHash(input.userId);
     const result = await this.prisma.$transaction(async (tx) => {
       await this.lockSubject(tx, subjectHash);
-      const request = await tx.votingDeletionRequest.findUnique({ where: { requestHash: anonymizedSubjectId } });
+      const request = await tx.votingDeletionRequest.findUnique({
+        where: { requestHash: anonymizedSubjectId },
+      });
       if (request?.state === 'CANCELLED') {
         throw new ConflictException('The deletion request was cancelled.');
       }
-      const previouslyRevoked = await tx.revokedVotingSubject.findUnique({ where: { subjectHash } });
+      const previouslyRevoked = await tx.revokedVotingSubject.findUnique({
+        where: { subjectHash },
+      });
       await tx.revokedVotingSubject.upsert({
-        where: { subjectHash }, create: { subjectHash }, update: {},
+        where: { subjectHash },
+        create: { subjectHash },
+        update: {},
       });
       await tx.votingDeletionRequest.upsert({
         where: { requestHash: anonymizedSubjectId },
-        create: { requestHash: anonymizedSubjectId, subjectHash, state: 'COMPLETED' },
+        create: {
+          requestHash: anonymizedSubjectId,
+          subjectHash,
+          state: 'COMPLETED',
+        },
         update: { state: 'COMPLETED' },
       });
       const slateMembers = await tx.cacicElectionSlateMember.updateMany({
-        where: { verifiedSubjectHash: subjectHash, NOT: { identifierValue: { startsWith: 'anonymized:' } } },
+        where: {
+          verifiedSubjectHash: subjectHash,
+          NOT: { identifierValue: { startsWith: 'anonymized:' } },
+        },
         data: {
-          fullName: 'Anonimizado', enrollmentNumber: null,
+          fullName: 'Anonimizado',
+          enrollmentNumber: null,
           identifierValue: anonymizedSubjectId,
         },
       });
-      const user = await tx.user.findUnique({ where: { id: input.userId }, select: { id: true } });
+      const user = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      });
       if (!user) {
-        const anonymizedUser = await tx.user.findUnique({ where: { id: anonymizedSubjectId }, select: { id: true } });
+        const anonymizedUser = await tx.user.findUnique({
+          where: { id: anonymizedSubjectId },
+          select: { id: true },
+        });
         return {
           users: { count: 0 },
           pollImages: { count: 0 },
@@ -245,25 +310,49 @@ export class VotingLgpdService {
         };
       }
 
-      await tx.user.create({ data: { id: anonymizedSubjectId, roles: [], permissions: [], claims: Prisma.JsonNull } });
-      const relatedRecordsAnonymized = await this.updateRelatedSubjectReferences(tx, input.userId, anonymizedSubjectId);
+      await tx.user.create({
+        data: {
+          id: anonymizedSubjectId,
+          roles: [],
+          permissions: [],
+          claims: Prisma.JsonNull,
+        },
+      });
+      const relatedRecordsAnonymized =
+        await this.updateRelatedSubjectReferences(
+          tx,
+          input.userId,
+          anonymizedSubjectId,
+        );
       const pollImages = await tx.pollImage.updateMany({
         where: { createdById: input.userId },
         data: { createdById: anonymizedSubjectId },
       });
       await tx.user.delete({ where: { id: input.userId } });
-      return { users: { count: 1 }, pollImages, relatedRecordsAnonymized: relatedRecordsAnonymized + slateMembers.count, alreadyAnonymized: false };
+      return {
+        users: { count: 1 },
+        pollImages,
+        relatedRecordsAnonymized: relatedRecordsAnonymized + slateMembers.count,
+        alreadyAnonymized: false,
+      };
     });
 
-    this.logger.log({ event: 'lgpd-deletion-completed', requestRef: this.requestReference(input.requestId) });
+    this.logger.log({
+      event: 'lgpd-deletion-completed',
+      requestRef: this.requestReference(input.requestId),
+    });
 
     return {
       success: true,
       usersAnonymized: result.users.count,
-      relatedRecordsAnonymized: result.relatedRecordsAnonymized + result.pollImages.count,
+      relatedRecordsAnonymized:
+        result.relatedRecordsAnonymized + result.pollImages.count,
       alreadyAnonymized: result.alreadyAnonymized,
       identityInventoryComplete: false,
-      retainedUnlinkedData: ['legacy_unlinked_slate_member_identity_fields', 'eligibility_enrollment_numbers'],
+      retainedUnlinkedData: [
+        'legacy_unlinked_slate_member_identity_fields',
+        'eligibility_enrollment_numbers',
+      ],
       note: 'Linked requester identity is anonymized with a fixed-length subject/request HMAC across related voting, response, poll-management, and election-activity records. Voting records and results are preserved.',
     };
   }
@@ -273,29 +362,86 @@ export class VotingLgpdService {
     userId: string,
     anonymizedSubjectId: string,
   ): Promise<number> {
-    const [responses, voters, createdPolls, updatedPolls, eligibility, submittedSlates, createdSlates, reviewedSlates, administrativeActions] = await Promise.all([
-      tx.pollResponse.updateMany({ where: { userId }, data: { userId: anonymizedSubjectId } }),
-      tx.pollVoter.updateMany({ where: { userId }, data: { userId: anonymizedSubjectId } }),
-      tx.poll.updateMany({ where: { createdById: userId }, data: { createdById: anonymizedSubjectId } }),
-      tx.poll.updateMany({ where: { updatedById: userId }, data: { updatedById: anonymizedSubjectId } }),
-      tx.pollEligibilityEnrollment.updateMany({ where: { createdById: userId }, data: { createdById: anonymizedSubjectId } }),
-      tx.cacicElectionSlate.updateMany({ where: { submittedById: userId }, data: { submittedById: anonymizedSubjectId } }),
-      tx.cacicElectionSlate.updateMany({ where: { adminCreatedById: userId }, data: { adminCreatedById: anonymizedSubjectId } }),
-      tx.cacicElectionSlate.updateMany({ where: { reviewedById: userId }, data: { reviewedById: anonymizedSubjectId } }),
-      tx.pollAdminAudit.updateMany({ where: { actorId: userId }, data: { actorId: anonymizedSubjectId } }),
+    const [
+      responses,
+      voters,
+      createdPolls,
+      updatedPolls,
+      eligibility,
+      submittedSlates,
+      createdSlates,
+      reviewedSlates,
+      administrativeActions,
+    ] = await Promise.all([
+      tx.pollResponse.updateMany({
+        where: { userId },
+        data: { userId: anonymizedSubjectId },
+      }),
+      tx.pollVoter.updateMany({
+        where: { userId },
+        data: { userId: anonymizedSubjectId },
+      }),
+      tx.poll.updateMany({
+        where: { createdById: userId },
+        data: { createdById: anonymizedSubjectId },
+      }),
+      tx.poll.updateMany({
+        where: { updatedById: userId },
+        data: { updatedById: anonymizedSubjectId },
+      }),
+      tx.pollEligibilityEnrollment.updateMany({
+        where: { createdById: userId },
+        data: { createdById: anonymizedSubjectId },
+      }),
+      tx.cacicElectionSlate.updateMany({
+        where: { submittedById: userId },
+        data: { submittedById: anonymizedSubjectId },
+      }),
+      tx.cacicElectionSlate.updateMany({
+        where: { adminCreatedById: userId },
+        data: { adminCreatedById: anonymizedSubjectId },
+      }),
+      tx.cacicElectionSlate.updateMany({
+        where: { reviewedById: userId },
+        data: { reviewedById: anonymizedSubjectId },
+      }),
+      tx.pollAdminAudit.updateMany({
+        where: { actorId: userId },
+        data: { actorId: anonymizedSubjectId },
+      }),
     ]);
-    return [responses, voters, createdPolls, updatedPolls, eligibility, submittedSlates, createdSlates, reviewedSlates, administrativeActions]
-      .reduce((total, current) => total + current.count, 0);
+    return [
+      responses,
+      voters,
+      createdPolls,
+      updatedPolls,
+      eligibility,
+      submittedSlates,
+      createdSlates,
+      reviewedSlates,
+      administrativeActions,
+    ].reduce((total, current) => total + current.count, 0);
   }
 
   private validateDeletionInput(input: LgpdDeletionInput): void {
-    if (!input.userId.trim() || input.userId.trim().length > 256 || !input.requestId.trim() || input.requestId.trim().length > 128) {
-      throw new BadRequestException('A bounded user and request identifier are required.');
+    if (
+      !input.userId.trim() ||
+      input.userId.trim().length > 256 ||
+      !input.requestId.trim() ||
+      input.requestId.trim().length > 128
+    ) {
+      throw new BadRequestException(
+        'A bounded user and request identifier are required.',
+      );
     }
   }
 
   private requestReference(requestId: string): string {
-    return createHmac('sha256', process.env.LGPD_ANONYMIZATION_SECRET?.trim() || 'local-development-lgpd-anonymization-secret')
+    return createHmac(
+      'sha256',
+      process.env.LGPD_ANONYMIZATION_SECRET?.trim() ||
+        'local-development-lgpd-anonymization-secret',
+    )
       .update(requestId)
       .digest('hex')
       .slice(0, 16);

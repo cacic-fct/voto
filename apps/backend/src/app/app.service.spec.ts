@@ -26,7 +26,8 @@ describe('AppService', () => {
   });
 
   afterAll(() => {
-    if (originalReadinessTimeout === undefined) delete process.env.READINESS_PROBE_TIMEOUT_MS;
+    if (originalReadinessTimeout === undefined)
+      delete process.env.READINESS_PROBE_TIMEOUT_MS;
     else process.env.READINESS_PROBE_TIMEOUT_MS = originalReadinessTimeout;
   });
 
@@ -53,7 +54,9 @@ describe('AppService', () => {
   });
 
   it('reports the failed component without exposing dependency errors', async () => {
-    prisma.$queryRaw.mockRejectedValueOnce(new Error('database password leaked here'));
+    prisma.$queryRaw.mockRejectedValueOnce(
+      new Error('database password leaked here'),
+    );
 
     await expect(service.getReadiness()).rejects.toEqual(
       new ServiceUnavailableException({
@@ -67,12 +70,16 @@ describe('AppService', () => {
     jest.useFakeTimers();
     let resolveDatabase: (() => void) | undefined;
     let resolveRedis: (() => void) | undefined;
-    prisma.$queryRaw.mockReturnValueOnce(new Promise((resolve) => {
-      resolveDatabase = () => resolve([{ '?column?': 1 }]);
-    }));
-    redis.ping.mockReturnValueOnce(new Promise((resolve) => {
-      resolveRedis = () => resolve('PONG');
-    }));
+    prisma.$queryRaw.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDatabase = () => resolve([{ '?column?': 1 }]);
+      }),
+    );
+    redis.ping.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRedis = () => resolve('PONG');
+      }),
+    );
 
     const firstReadiness = service.getReadiness();
     const secondReadiness = service.getReadiness();
@@ -87,8 +94,10 @@ describe('AppService', () => {
         redis: { status: 'error', reason: 'timeout' },
       },
     });
-    const firstExpectation = expect(firstReadiness).rejects.toEqual(expectedTimeout);
-    const secondExpectation = expect(secondReadiness).rejects.toEqual(expectedTimeout);
+    const firstExpectation =
+      expect(firstReadiness).rejects.toEqual(expectedTimeout);
+    const secondExpectation =
+      expect(secondReadiness).rejects.toEqual(expectedTimeout);
     await jest.advanceTimersByTimeAsync(11);
     await firstExpectation;
     await secondExpectation;
@@ -103,15 +112,21 @@ describe('AppService', () => {
     jest.useFakeTimers();
     let resolveDatabase: (() => void) | undefined;
     let resolveRedis: (() => void) | undefined;
-    prisma.$queryRaw.mockReturnValueOnce(new Promise((resolve) => {
-      resolveDatabase = () => resolve([{ '?column?': 1 }]);
-    }));
-    redis.ping.mockReturnValueOnce(new Promise((resolve) => {
-      resolveRedis = () => resolve('PONG');
-    }));
+    prisma.$queryRaw.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDatabase = () => resolve([{ '?column?': 1 }]);
+      }),
+    );
+    redis.ping.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRedis = () => resolve('PONG');
+      }),
+    );
 
     const stalled = service.getReadiness();
-    const stalledExpectation = expect(stalled).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const stalledExpectation = expect(stalled).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
     await jest.advanceTimersByTimeAsync(11);
     await stalledExpectation;
 

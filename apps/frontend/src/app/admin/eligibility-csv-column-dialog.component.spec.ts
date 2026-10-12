@@ -8,7 +8,10 @@ import {
 
 describe('EligibilityCsvColumnDialogComponent', () => {
   let fixture: ComponentFixture<EligibilityCsvColumnDialogComponent>;
-  let dialogRef: Pick<MatDialogRef<EligibilityCsvColumnDialogComponent, string | null>, 'close'>;
+  let dialogRef: Pick<
+    MatDialogRef<EligibilityCsvColumnDialogComponent, string | null>,
+    'close'
+  >;
 
   const data: EligibilityCsvColumnDialogData = {
     fileName: 'matriculas.csv',
@@ -38,13 +41,21 @@ describe('EligibilityCsvColumnDialogComponent', () => {
   });
 
   it('selects the first header and previews non-empty values by default', () => {
-    expect(fixture.componentInstance.form.controls.selectedHeader.value).toBe('nome');
-    expect(fixture.componentInstance.previewValues()).toEqual(['Ana', 'Bruno', 'Sem matrícula']);
+    expect(fixture.componentInstance.form.controls.selectedHeader.value).toBe(
+      'nome',
+    );
+    expect(fixture.componentInstance.previewValues()).toEqual([
+      'Ana',
+      'Bruno',
+      'Sem matrícula',
+    ]);
     expect(fixture.nativeElement.textContent).toContain('matriculas.csv');
   });
 
   it('updates preview values when the selected header changes', () => {
-    fixture.componentInstance.form.controls.selectedHeader.setValue('matricula');
+    fixture.componentInstance.form.controls.selectedHeader.setValue(
+      'matricula',
+    );
 
     expect(fixture.componentInstance.previewValues()).toEqual(['123', '456']);
   });

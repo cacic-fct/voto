@@ -14,7 +14,10 @@ export type CacicElectionBallotOption = {
 };
 
 export function isSlateSubmissionPoll(poll: Poll): boolean {
-  return poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'slateSubmission';
+  return (
+    poll.mode === 'cacicElection' &&
+    poll.cacicElectionPhase === 'slateSubmission'
+  );
 }
 
 export function isCacicElectionPoll(poll: Poll): boolean {
@@ -22,15 +25,23 @@ export function isCacicElectionPoll(poll: Poll): boolean {
 }
 
 export function isCacicElectionVotingPoll(poll: Poll): boolean {
-  return poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election';
+  return (
+    poll.mode === 'cacicElection' && poll.cacicElectionPhase === 'election'
+  );
 }
 
 export function cacicElectionVoteElement(poll: Poll): PollElement | null {
-  return poll.elements.find((element) => element.id === CACIC_ELECTION_VOTE_ELEMENT_ID) ?? null;
+  return (
+    poll.elements.find(
+      (element) => element.id === CACIC_ELECTION_VOTE_ELEMENT_ID,
+    ) ?? null
+  );
 }
 
 export function voteFormElements(poll: Poll): PollElement[] {
-  return poll.elements.filter((element) => element.id !== CACIC_ELECTION_VOTE_ELEMENT_ID);
+  return poll.elements.filter(
+    (element) => element.id !== CACIC_ELECTION_VOTE_ELEMENT_ID,
+  );
 }
 
 export function cacicElectionBallotOptions(
@@ -42,7 +53,9 @@ export function cacicElectionBallotOptions(
     return [];
   }
 
-  const slatesByOptionId = new Map(slates.map((slate) => [cacicElectionSlateOptionId(slate.id), slate]));
+  const slatesByOptionId = new Map(
+    slates.map((slate) => [cacicElectionSlateOptionId(slate.id), slate]),
+  );
   return voteElement.options.map((option) => {
     const slate = slatesByOptionId.get(option.id);
     return {
@@ -54,13 +67,17 @@ export function cacicElectionBallotOptions(
   });
 }
 
-export function memberEnrollmentYearLabel(member: CacicElectionSlate['members'][number]): string {
+export function memberEnrollmentYearLabel(
+  member: CacicElectionSlate['members'][number],
+): string {
   if (!member.enrollmentYear) {
     return 'Ano não informado';
   }
 
   const normalizedYear = member.enrollmentYear.trim();
-  return /^\d{2}$/.test(normalizedYear) ? `20${normalizedYear}` : normalizedYear;
+  return /^\d{2}$/.test(normalizedYear)
+    ? `20${normalizedYear}`
+    : normalizedYear;
 }
 
 export function slateStatusLabel(status: CacicElectionSlate['status']): string {

@@ -38,7 +38,9 @@ export function schedulingSlots(element: PollElement): SchedulingSlotView[] {
   }));
 }
 
-export function schedulingSlotGroups(element: PollElement): SchedulingSlotGroup[] {
+export function schedulingSlotGroups(
+  element: PollElement,
+): SchedulingSlotGroup[] {
   const groups = new Map<string, SchedulingSlotView[]>();
   for (const slot of schedulingSlots(element)) {
     groups.set(slot.date, [...(groups.get(slot.date) ?? []), slot]);
@@ -57,11 +59,18 @@ export function schedulingInviteeIndexes(element: PollElement): number[] {
     return [];
   }
 
-  return Array.from({ length: Math.max(0, settings.maxInvitees) }, (_, index) => index);
+  return Array.from(
+    { length: Math.max(0, settings.maxInvitees) },
+    (_, index) => index,
+  );
 }
 
-export function schedulingInviteeLabel(settings: PollSchedulingSettings): string {
-  return settings.inviteeMode === 'required' ? 'Convidados obrigatórios' : 'Convidados opcionais';
+export function schedulingInviteeLabel(
+  settings: PollSchedulingSettings,
+): string {
+  return settings.inviteeMode === 'required'
+    ? 'Convidados obrigatórios'
+    : 'Convidados opcionais';
 }
 
 export function readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
@@ -74,20 +83,28 @@ export function readSchedulingAnswer(value: unknown): PollSchedulingAnswer {
   }
 
   const invitees = Array.isArray(recordValue['invitees'])
-    ? Array.from(recordValue['invitees'], (invitee) => asRecord(invitee))
-        .map((invitee) => (invitee ? readSchedulingInvitee(invitee) : { name: '', email: '' }))
+    ? Array.from(recordValue['invitees'], (invitee) => asRecord(invitee)).map(
+        (invitee) =>
+          invitee ? readSchedulingInvitee(invitee) : { name: '', email: '' },
+      )
     : [];
 
   return {
-    slotId: typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '',
+    slotId:
+      typeof recordValue['slotId'] === 'string' ? recordValue['slotId'] : '',
     invitees,
   };
 }
 
-function readSchedulingInvitee(invitee: Record<string, unknown>): PollSchedulingInvitee {
-  const email = 'email' in invitee
-    ? typeof invitee['email'] === 'string' ? invitee['email'] : ''
-    : undefined;
+function readSchedulingInvitee(
+  invitee: Record<string, unknown>,
+): PollSchedulingInvitee {
+  const email =
+    'email' in invitee
+      ? typeof invitee['email'] === 'string'
+        ? invitee['email']
+        : ''
+      : undefined;
   return {
     name: typeof invitee['name'] === 'string' ? invitee['name'] : '',
     ...(email === undefined ? {} : { email }),

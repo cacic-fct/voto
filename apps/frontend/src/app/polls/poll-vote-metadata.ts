@@ -17,7 +17,9 @@ export type PollMetadataRuleItem = {
   text: string;
 };
 
-export function buildPollMetadataSummaryItems(poll: Poll): PollMetadataSummaryItem[] {
+export function buildPollMetadataSummaryItems(
+  poll: Poll,
+): PollMetadataSummaryItem[] {
   const items: PollMetadataSummaryItem[] = [
     {
       icon: poll.votingStyle === 'anonymous' ? 'visibility_off' : 'lock',
@@ -45,7 +47,8 @@ export function buildPollMetadataSummaryItems(poll: Poll): PollMetadataSummaryIt
 export function buildPollMetadataRuleItems(poll: Poll): PollMetadataRuleItem[] {
   const items: PollMetadataRuleItem[] = [
     {
-      icon: poll.votingStyle === 'anonymous' ? 'shield' : 'admin_panel_settings',
+      icon:
+        poll.votingStyle === 'anonymous' ? 'shield' : 'admin_panel_settings',
       text: votingStyleVoterDescription(poll.votingStyle),
     },
     {

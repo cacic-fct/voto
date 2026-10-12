@@ -57,7 +57,11 @@ export class SseReplayService {
     return `${channel}:${digest}`;
   }
 
-  replay(scope: string, lastEventId: string | undefined, source: Observable<MessageEvent>): Observable<MessageEvent> {
+  replay(
+    scope: string,
+    lastEventId: string | undefined,
+    source: Observable<MessageEvent>,
+  ): Observable<MessageEvent> {
     return new Observable((subscriber) => {
       let replayFinished = false;
       let lastDeliveredId = lastEventId;
@@ -100,17 +104,19 @@ export class SseReplayService {
         complete: () => subscriber.complete(),
       });
 
-      void this.readReplayWithTimeout(scope, lastEventId).then((events) => {
-        events.forEach(deliver);
-        replayFinished = true;
-        buffered.forEach(deliver);
-      }).catch(() => {
-        // Replay is an optimization. Redis may be slow or unavailable while
-        // the live subscription is still healthy; keep the connection alive
-        // and deliver the bounded live buffer instead of terminating it.
-        replayFinished = true;
-        buffered.forEach(deliver);
-      });
+      void this.readReplayWithTimeout(scope, lastEventId)
+        .then((events) => {
+          events.forEach(deliver);
+          replayFinished = true;
+          buffered.forEach(deliver);
+        })
+        .catch(() => {
+          // Replay is an optimization. Redis may be slow or unavailable while
+          // the live subscription is still healthy; keep the connection alive
+          // and deliver the bounded live buffer instead of terminating it.
+          replayFinished = true;
+          buffered.forEach(deliver);
+        });
 
       return () => sourceSubscription.unsubscribe();
     });
@@ -125,7 +131,10 @@ export class SseReplayService {
       return await Promise.race([
         this.readReplay(scope, lastEventId),
         new Promise<StoredSseEvent[]>((_, reject) => {
-          timeout = setTimeout(() => reject(new Error('SSE replay read timed out.')), MAX_REPLAY_READ_MS);
+          timeout = setTimeout(
+            () => reject(new Error('SSE replay read timed out.')),
+            MAX_REPLAY_READ_MS,
+          );
         }),
       ]);
     } finally {
@@ -135,24 +144,42 @@ export class SseReplayService {
     }
   }
 
-  async record(scope: string, event: MessageEvent, options: SseRecordOptions = {}): Promise<MessageEvent> {
-    const serialized = typeof event.data === 'string'
-      ? { data: event.data, dataEncoding: 'text-v1' as const }
-      : { data: JSON.stringify(event.data) ?? 'null', dataEncoding: DATA_ENCODING };
-    const fingerprint = createHash('sha256').update(JSON.stringify({
-      ...serialized,
-      retry: event.retry ?? 3_000,
-      type: event.type,
-      deduplicationKey: options.deduplicationKey,
-    })).digest('base64url');
-    const generation = Math.floor(Date.now() / GENERATION_DURATION_MS).toString(36);
+  async record(
+    scope: string,
+    event: MessageEvent,
+    options: SseRecordOptions = {},
+  ): Promise<MessageEvent> {
+    const serialized =
+      typeof event.data === 'string'
+        ? { data: event.data, dataEncoding: 'text-v1' as const }
+        : {
+            data: JSON.stringify(event.data) ?? 'null',
+            dataEncoding: DATA_ENCODING,
+          };
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          ...serialized,
+          retry: event.retry ?? 3_000,
+          type: event.type,
+          deduplicationKey: options.deduplicationKey,
+        }),
+      )
+      .digest('base64url');
+    const generation = Math.floor(Date.now() / GENERATION_DURATION_MS).toString(
+      36,
+    );
     const stored = await this.redis.eval(
       PUBLISH_SCRIPT,
       2,
       this.eventsKey(scope),
       `sse-replay:v1:${scope}:sequence:${generation}`,
       fingerprint,
-      JSON.stringify({ ...serialized, retry: event.retry ?? 3_000, type: event.type }),
+      JSON.stringify({
+        ...serialized,
+        retry: event.retry ?? 3_000,
+        type: event.type,
+      }),
       `sse1.${this.scopeTag(scope)}.${generation}.`,
       String(MAX_REPLAY_EVENTS),
       String(REPLAY_TTL_SECONDS),
@@ -162,7 +189,10 @@ export class SseReplayService {
     return this.toMessageEvent(parsed);
   }
 
-  private async readReplay(scope: string, lastEventId: string | undefined): Promise<StoredSseEvent[]> {
+  private async readReplay(
+    scope: string,
+    lastEventId: string | undefined,
+  ): Promise<StoredSseEvent[]> {
     const events = (await this.redis.lrange(this.eventsKey(scope), 0, -1))
       .map((value) => this.parse(value))
       .filter((event): event is StoredSseEvent => event !== null)
@@ -170,19 +200,30 @@ export class SseReplayService {
     if (events.length === 0) return [];
     const latest = events.at(-1);
     if (!latest) return [];
-    if (!lastEventId || !this.isCursorForScope(lastEventId, scope)) return [latest];
+    if (!lastEventId || !this.isCursorForScope(lastEventId, scope))
+      return [latest];
     const index = events.findIndex((event) => event.id === lastEventId);
     return index < 0 ? [latest] : events.slice(index + 1);
   }
 
   private fromMessageEvent(event: MessageEvent, id: string): StoredSseEvent {
-    return { id, data: event.data ?? '', fingerprint: '', retry: event.retry, type: event.type };
+    return {
+      id,
+      data: event.data ?? '',
+      fingerprint: '',
+      retry: event.retry,
+      type: event.type,
+    };
   }
 
   private toMessageEvent(event: StoredSseEvent): MessageEvent {
     let data = event.data;
     if (event.dataEncoding === DATA_ENCODING && typeof data === 'string') {
-      try { data = JSON.parse(data) as object; } catch { /* Preserve malformed legacy data. */ }
+      try {
+        data = JSON.parse(data) as object;
+      } catch {
+        /* Preserve malformed legacy data. */
+      }
     }
     return { id: event.id, data, retry: event.retry, type: event.type };
   }
@@ -198,21 +239,33 @@ export class SseReplayService {
   private parse(value: string): StoredSseEvent | null {
     try {
       const event = JSON.parse(value) as StoredSseEvent;
-      return typeof event.id === 'string' && typeof event.fingerprint === 'string' ? event : null;
-    } catch { return null; }
+      return typeof event.id === 'string' &&
+        typeof event.fingerprint === 'string'
+        ? event
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   private isCursorForScope(cursor: string, scope: string): boolean {
-    return new RegExp(`^sse1\\.${this.scopeTag(scope)}\\.[0-9a-z]+\\.[0-9a-z]+$`).test(cursor);
+    return new RegExp(
+      `^sse1\\.${this.scopeTag(scope)}\\.[0-9a-z]+\\.[0-9a-z]+$`,
+    ).test(cursor);
   }
 
-  private eventsKey(scope: string): string { return `sse-replay:v1:${scope}:events`; }
-  private scopeTag(scope: string): string { return scope.slice(scope.lastIndexOf(':') + 1); }
+  private eventsKey(scope: string): string {
+    return `sse-replay:v1:${scope}:events`;
+  }
+  private scopeTag(scope: string): string {
+    return scope.slice(scope.lastIndexOf(':') + 1);
+  }
 
   private readCursorSecret(): string {
     const secret = process.env.SSE_REPLAY_CURSOR_SECRET?.trim();
     if (secret) return secret;
-    if (process.env.NODE_ENV === 'production') throw new Error('SSE_REPLAY_CURSOR_SECRET is required in production.');
+    if (process.env.NODE_ENV === 'production')
+      throw new Error('SSE_REPLAY_CURSOR_SECRET is required in production.');
     return 'local-development-sse-replay-secret';
   }
 }

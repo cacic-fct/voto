@@ -25,7 +25,9 @@ describe('CacicElectionSlateFormComponent', () => {
       form: FormGroup;
       formError: () => string | null;
       members: FormArray<FormGroup>;
-      addMember(role?: SubmitCacicElectionSlateRequest['members'][number]['role']): void;
+      addMember(
+        role?: SubmitCacicElectionSlateRequest['members'][number]['role'],
+      ): void;
       submit(): void;
     };
   }
@@ -36,14 +38,15 @@ describe('CacicElectionSlateFormComponent', () => {
       name: 'Chapa Aurora',
     });
 
-    const roles: SubmitCacicElectionSlateRequest['members'][number]['role'][] = [
-      'president',
-      'vicePresident',
-      'financialDirector',
-      'communicationDirector',
-      'eventsDirector',
-      'publicRelationsDirector',
-    ];
+    const roles: SubmitCacicElectionSlateRequest['members'][number]['role'][] =
+      [
+        'president',
+        'vicePresident',
+        'financialDirector',
+        'communicationDirector',
+        'eventsDirector',
+        'publicRelationsDirector',
+      ];
     internals().members.controls.forEach((member, index) => {
       member.patchValue({
         fullName: `Integrante ${index + 1}`,
@@ -65,7 +68,9 @@ describe('CacicElectionSlateFormComponent', () => {
     internals().submit();
 
     expect(submitted).not.toHaveBeenCalled();
-    expect(internals().formError()).toBe('Confirme os compromissos obrigatórios para enviar a chapa.');
+    expect(internals().formError()).toBe(
+      'Confirme os compromissos obrigatórios para enviar a chapa.',
+    );
 
     internals().form.patchValue({
       noOnlineAccountsAgreement: true,
@@ -110,6 +115,8 @@ describe('CacicElectionSlateFormComponent', () => {
     internals().submit();
 
     expect(submitted).not.toHaveBeenCalled();
-    expect(internals().formError()).toBe('Informe o cargo adicional dos integrantes marcados como Outro.');
+    expect(internals().formError()).toBe(
+      'Informe o cargo adicional dos integrantes marcados como Outro.',
+    );
   });
 });

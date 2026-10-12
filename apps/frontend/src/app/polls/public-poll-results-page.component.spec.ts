@@ -1,6 +1,11 @@
 import { PLATFORM_ID } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, ParamMap, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  ParamMap,
+  provideRouter,
+} from '@angular/router';
 import { Poll, PollResults } from '@org/voting-contracts';
 import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -105,8 +110,12 @@ describe('PublicPollResultsPageComponent', () => {
       getDirectLinkPoll: vi.fn().mockReturnValue(of(poll)),
       getPublicPollResults: vi.fn().mockReturnValue(of(results)),
       getDirectLinkPollResults: vi.fn().mockReturnValue(of(results)),
-      openPublicPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
-      openDirectLinkPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      openPublicPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      openDirectLinkPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
       parseResultsDelta: vi.fn().mockReturnValue(null),
     };
 
@@ -137,7 +146,9 @@ describe('PublicPollResultsPageComponent', () => {
     expect(api.getPublicPoll).toHaveBeenCalledWith('poll-1');
     expect(api.getPublicPollResults).toHaveBeenCalledWith('poll-1');
     expect(api.openPublicPollResultsEvents).toHaveBeenCalledWith('poll-1');
-    expect(fixture.nativeElement.textContent).toContain('Resultados de Consulta pública');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Resultados de Consulta pública',
+    );
     expect(fixture.nativeElement.textContent).toContain('1 pessoa votou.');
     expect(fixture.nativeElement.textContent).toContain('Ada Lovelace');
     expect(fixture.nativeElement.textContent).toContain('Comentário público');
@@ -145,12 +156,17 @@ describe('PublicPollResultsPageComponent', () => {
 
   it('renders individual answers from their historical element snapshots', () => {
     const component = fixture.componentInstance as unknown as {
-      responseAnswerRows(response: PollResults['responses'][number]): { question: string; value: string }[];
+      responseAnswerRows(
+        response: PollResults['responses'][number],
+      ): { question: string; value: string }[];
     };
     const historicalChoice = {
       ...poll.elements[0],
       title: 'Prioridade no envio',
-      options: [{ id: 'a', label: 'Infraestrutura original' }, { id: 'b', label: 'Eventos' }],
+      options: [
+        { id: 'a', label: 'Infraestrutura original' },
+        { id: 'b', label: 'Eventos' },
+      ],
     };
     const retiredElement = {
       id: 'retired',
@@ -182,7 +198,9 @@ describe('PublicPollResultsPageComponent', () => {
       retryFinalResults(): void;
     };
     component.pendingFinalResultsPollId.set(poll.id);
-    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(throwError(() => new Error('temporary outage')));
+    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
+      throwError(() => new Error('temporary outage')),
+    );
 
     await component.reconcileFinalResults(poll.id, 1);
 
@@ -199,9 +217,12 @@ describe('PublicPollResultsPageComponent', () => {
   it('should summarize answers and apply live result snapshots', () => {
     const eventSource = {
       close: vi.fn(),
-      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
     };
-    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(eventSource as unknown as EventSource);
+    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(
+      eventSource as unknown as EventSource,
+    );
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce({
       pollId: poll.id,
       responseCount: 2,
@@ -216,8 +237,14 @@ describe('PublicPollResultsPageComponent', () => {
 
     const component = fixture.componentInstance as unknown as {
       results: { (): PollResults | null };
-      questionSummaries: () => { answeredCount: number; buckets: { label: string; count: number }[] }[];
-      resultBucketPercent(summary: { answeredCount: number }, bucket: { count: number }): number;
+      questionSummaries: () => {
+        answeredCount: number;
+        buckets: { label: string; count: number }[];
+      }[];
+      resultBucketPercent(
+        summary: { answeredCount: number },
+        bucket: { count: number },
+      ): number;
       voteCountText(responseCount: number): string;
       ngOnDestroy(): void;
       openResultsEvents(pollId: string): void;
@@ -231,8 +258,12 @@ describe('PublicPollResultsPageComponent', () => {
       { label: 'Eventos', count: 1 },
       { label: 'Infraestrutura', count: 1 },
     ]);
-    expect(component.resultBucketPercent({ answeredCount: 2 }, { count: 1 })).toBe(50);
-    expect(component.resultBucketPercent({ answeredCount: 0 }, { count: 1 })).toBe(0);
+    expect(
+      component.resultBucketPercent({ answeredCount: 2 }, { count: 1 }),
+    ).toBe(50);
+    expect(
+      component.resultBucketPercent({ answeredCount: 0 }, { count: 1 }),
+    ).toBe(0);
     expect(component.voteCountText(2)).toBe('2 pessoas votaram.');
 
     component.ngOnDestroy();
@@ -241,7 +272,9 @@ describe('PublicPollResultsPageComponent', () => {
 
   it('should show text answer summaries for secret voting style', async () => {
     TestBed.resetTestingModule();
-    api.getPublicPoll = vi.fn().mockReturnValue(of({ ...poll, votingStyle: 'secret' }));
+    api.getPublicPoll = vi
+      .fn()
+      .mockReturnValue(of({ ...poll, votingStyle: 'secret' }));
 
     await TestBed.configureTestingModule({
       imports: [PublicPollResultsPageComponent],
@@ -261,11 +294,17 @@ describe('PublicPollResultsPageComponent', () => {
       ],
     }).compileComponents();
 
-    const secretFixture = TestBed.createComponent(PublicPollResultsPageComponent);
+    const secretFixture = TestBed.createComponent(
+      PublicPollResultsPageComponent,
+    );
     await renderAsync(secretFixture);
 
-    expect(secretFixture.nativeElement.textContent).toContain('Comentário público');
-    expect(secretFixture.nativeElement.textContent).not.toContain('Respostas individuais');
+    expect(secretFixture.nativeElement.textContent).toContain(
+      'Comentário público',
+    );
+    expect(secretFixture.nativeElement.textContent).not.toContain(
+      'Respostas individuais',
+    );
   });
 
   it('should support direct-link result routes', async () => {
@@ -290,7 +329,9 @@ describe('PublicPollResultsPageComponent', () => {
       ],
     }).compileComponents();
 
-    const directFixture = TestBed.createComponent(PublicPollResultsPageComponent);
+    const directFixture = TestBed.createComponent(
+      PublicPollResultsPageComponent,
+    );
     await renderAsync(directFixture);
 
     expect(api.getDirectLinkPoll).toHaveBeenCalledWith('direct-token');
@@ -299,7 +340,9 @@ describe('PublicPollResultsPageComponent', () => {
 
   it('should expose localized load errors', async () => {
     TestBed.resetTestingModule();
-    api.getPublicPoll = vi.fn().mockReturnValue(throwError(() => new Error('offline')));
+    api.getPublicPoll = vi
+      .fn()
+      .mockReturnValue(throwError(() => new Error('offline')));
 
     await TestBed.configureTestingModule({
       imports: [PublicPollResultsPageComponent],
@@ -319,7 +362,9 @@ describe('PublicPollResultsPageComponent', () => {
       ],
     }).compileComponents();
 
-    const errorFixture = TestBed.createComponent(PublicPollResultsPageComponent);
+    const errorFixture = TestBed.createComponent(
+      PublicPollResultsPageComponent,
+    );
     await renderAsync(errorFixture);
 
     expect(errorFixture.nativeElement.textContent).toContain(
@@ -330,13 +375,26 @@ describe('PublicPollResultsPageComponent', () => {
   it('reloads results and replaces the live stream when route parameters change', async () => {
     TestBed.resetTestingModule();
     const routeParams = new Subject<ParamMap>();
-    const pollB = { ...poll, id: 'poll-2', title: 'Outra consulta', resultsLive: false };
+    const pollB = {
+      ...poll,
+      id: 'poll-2',
+      title: 'Outra consulta',
+      resultsLive: false,
+    };
     const resultsB = { ...results, pollId: pollB.id, responseCount: 7 };
     const dynamicApi = {
       ...api,
-      getPublicPoll: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
-      getPublicPollResults: vi.fn().mockImplementation((id: string) => of(id === pollB.id ? resultsB : results)),
-      openPublicPollResultsEvents: vi.fn().mockReturnValue({ close: vi.fn() } as unknown as EventSource),
+      getPublicPoll: vi
+        .fn()
+        .mockImplementation((id: string) => of(id === pollB.id ? pollB : poll)),
+      getPublicPollResults: vi
+        .fn()
+        .mockImplementation((id: string) =>
+          of(id === pollB.id ? resultsB : results),
+        ),
+      openPublicPollResultsEvents: vi
+        .fn()
+        .mockReturnValue({ close: vi.fn() } as unknown as EventSource),
     };
     await TestBed.configureTestingModule({
       imports: [PublicPollResultsPageComponent],
@@ -353,7 +411,9 @@ describe('PublicPollResultsPageComponent', () => {
       ],
     }).compileComponents();
 
-    const dynamicFixture = TestBed.createComponent(PublicPollResultsPageComponent);
+    const dynamicFixture = TestBed.createComponent(
+      PublicPollResultsPageComponent,
+    );
     await renderAsync(dynamicFixture);
     routeParams.next(convertToParamMap({ id: pollB.id }));
     await new Promise<void>((resolve) => setTimeout(resolve));
@@ -361,8 +421,12 @@ describe('PublicPollResultsPageComponent', () => {
 
     expect(dynamicApi.getPublicPoll).toHaveBeenCalledWith(pollB.id);
     expect(dynamicApi.getPublicPollResults).toHaveBeenCalledWith(pollB.id);
-    expect(dynamicFixture.nativeElement.textContent).toContain(`Resultados de ${pollB.title}`);
-    expect(dynamicFixture.nativeElement.textContent).not.toContain(`Resultados de ${poll.title}`);
+    expect(dynamicFixture.nativeElement.textContent).toContain(
+      `Resultados de ${pollB.title}`,
+    );
+    expect(dynamicFixture.nativeElement.textContent).not.toContain(
+      `Resultados de ${poll.title}`,
+    );
     dynamicFixture.destroy();
   });
 
@@ -372,7 +436,9 @@ describe('PublicPollResultsPageComponent', () => {
       results: { (): PollResults | null };
       reconcileFinalResults(pollId: string, generation: number): Promise<void>;
     };
-    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(pendingResults.asObservable());
+    vi.mocked(api.getPublicPollResults).mockReturnValueOnce(
+      pendingResults.asObservable(),
+    );
 
     const reconciliation = component.reconcileFinalResults(poll.id, 1);
     fixture.destroy();
@@ -388,13 +454,16 @@ describe('PublicPollResultsPageComponent', () => {
     const pendingRefresh = new Subject<PollResults>();
     const source = {
       close: vi.fn(),
-      onmessage: undefined as ((event: MessageEvent<string>) => void) | undefined,
+      onmessage: undefined as
+        ((event: MessageEvent<string>) => void) | undefined,
     };
     const finalResults = { ...results, responseCount: 8 };
     vi.mocked(api.getPublicPollResults)
       .mockReturnValueOnce(pendingRefresh.asObservable())
       .mockReturnValueOnce(of(finalResults));
-    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(source as unknown as EventSource);
+    vi.mocked(api.openPublicPollResultsEvents).mockReturnValueOnce(
+      source as unknown as EventSource,
+    );
     vi.mocked(api.parseResultsDelta).mockReturnValueOnce({
       pollId: poll.id,
       final: true,
