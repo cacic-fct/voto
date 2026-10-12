@@ -95,6 +95,36 @@ async function format() {
 }
 
 try {
+  writeFileSync(
+    join(sandbox, 'package.json'),
+    JSON.stringify({
+      name: 'hook-install-verification',
+      version: '0.0.0',
+      private: true,
+      scripts: { prepare: manifest.scripts.prepare },
+    }),
+  );
+  for (const flags of [[], ['--production']]) {
+    const args = ['install', '--frozen-lockfile', ...flags];
+    const result = spawnSync('bun', args, {
+      cwd: sandbox,
+      encoding: 'utf8',
+      env: { ...process.env, CI: 'false', NODE_ENV: 'development', HUSKY: '1' },
+    });
+    assert.equal(
+      result.status,
+      0,
+      [
+        `Manifest-only ${args.join(' ')} must succeed without .git or .husky.`,
+        result.error?.message,
+        result.stdout,
+        result.stderr,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+  rmSync(join(sandbox, 'node_modules'), { recursive: true, force: true });
   process.env.PATH = `${join(root, 'node_modules/.bin')}${delimiter}${originalPath}`;
   symlinkSync(
     join(root, 'node_modules'),
@@ -116,20 +146,19 @@ try {
   writeFileSync(
     join(sandbox, 'package.json'),
     JSON.stringify({
-      scripts: { 'format:staged': manifest.scripts['format:staged'] },
+      scripts: {
+        prepare: manifest.scripts.prepare,
+        'format:staged': manifest.scripts['format:staged'],
+      },
       'lint-staged': manifest['lint-staged'],
     }),
   );
-  const install = spawnSync(process.execPath, ['.husky/install.mjs'], {
+  const install = spawnSync('bun', ['run', 'prepare'], {
     cwd: sandbox,
     encoding: 'utf8',
     env: { ...process.env, CI: 'false', NODE_ENV: 'development', HUSKY: '1' },
   });
-  assert.equal(
-    install.status,
-    0,
-    diagnostics(`${process.execPath} .husky/install.mjs`, install),
-  );
+  assert.equal(install.status, 0, diagnostics('bun run prepare', install));
   assert.equal(git('config', '--get', 'core.hooksPath').trim(), '.husky/_');
   process.chdir(sandbox);
 
@@ -181,7 +210,7 @@ try {
     verifyMessage('The rejected hook must report the invalid fixture syntax'),
   );
   console.log(
-    'Hook formatting checks passed: spaces, partial staging, ignores, unknown types, and syntax failures.',
+    'Hook checks passed: manifest-only installs, Git checkout installation, spaces, partial staging, ignores, unknown types, and syntax failures.',
   );
 } finally {
   process.chdir(root);

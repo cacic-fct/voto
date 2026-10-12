@@ -5,7 +5,7 @@
   "scripts": {
     "e2e:backend:keycloak": "bunx nx run backend-e2e:e2e-keycloak",
     "format:staged": "node node_modules/lint-staged/bin/lint-staged.js",
-    "prepare": "node .husky/install.mjs"
+    "prepare": "node -e \"if (require('node:fs').existsSync('.git')) import('./.husky/install.mjs')\""
   },
   "private": true,
   "dependencies": {
