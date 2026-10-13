@@ -1,12 +1,15 @@
 # syntax=docker/dockerfile:1
-FROM oven/bun:1 AS bun
+FROM oven/bun:1-alpine AS bun
 
-FROM node:26-trixie-slim AS base
+FROM node:26-alpine AS base
 ENV BUN_INSTALL=/usr/local \
+    NX_DAEMON=false \
     PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROME_DOWNLOAD=true
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+
+RUN apk add --no-cache openssl
 
 WORKDIR /workspace
 
@@ -43,36 +46,34 @@ RUN bun x nx run backend:build:production
 FROM base AS production-deps
 ENV NODE_ENV=production
 
-COPY package.json bun.lock ./
+COPY bun.lock ./
 COPY .npmrc ./
+COPY --from=builder /workspace/dist/apps/backend/package.json ./package.json
 
+# Nx emits the backend-only manifest but cannot prune Bun lockfiles. Reconcile
+# the workspace lockfile with that manifest before the frozen runtime install.
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     --mount=type=secret,id=NPM_CONFIG_TOKEN,required=true \
     set -eu; \
     export NPM_CONFIG_TOKEN="$(cat /run/secrets/NPM_CONFIG_TOKEN)"; \
+    bun install --lockfile-only --ignore-scripts; \
     bun install --frozen-lockfile --production
 
 COPY --from=prisma-deps /workspace/node_modules/.prisma ./node_modules/.prisma
-COPY --from=prisma-deps /workspace/node_modules/@prisma ./node_modules/@prisma
 
-COPY apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
-COPY apps/backend/prisma ./apps/backend/prisma
-
-FROM base AS runtime
+FROM node:26-alpine AS runtime
 ENV NODE_ENV=production \
     PORT=3000
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends dumb-init \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system app \
-    && useradd --system --gid app --home-dir /app app
+RUN apk add --no-cache dumb-init openssl \
+    && addgroup -S app \
+    && adduser -S app -G app
 
 COPY --from=production-deps --chown=app:app /workspace/node_modules ./node_modules
-COPY --from=production-deps --chown=app:app /workspace/apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
-COPY --from=production-deps --chown=app:app /workspace/apps/backend/prisma ./apps/backend/prisma
+COPY --chown=app:app apps/backend/prisma.config.ts ./apps/backend/prisma.config.ts
+COPY --chown=app:app apps/backend/prisma ./apps/backend/prisma
 COPY --from=builder --chown=app:app /workspace/dist/apps/backend ./
 
 USER app
