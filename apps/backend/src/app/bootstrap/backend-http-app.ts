@@ -6,16 +6,30 @@ import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { getAuthSessionCookieName } from '../auth/auth.constants';
+import { logBackendError } from './backend-error-logging';
 
 const globalPrefix = 'api';
 
 export async function createBackendHttpApp(): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    abortOnError: false,
+  });
   try {
     await configureBackendHttpApp(app);
     return app;
   } catch (error) {
-    await app.close();
+    logBackendError('Backend HTTP configuration failed.', error, 'Bootstrap');
+    // Keep the configuration failure as the primary startup error.
+    try {
+      await app.close();
+    } catch (cleanupError) {
+      logBackendError(
+        'Backend cleanup failed after configuration error.',
+        cleanupError,
+        'Bootstrap',
+      );
+    }
     throw error;
   }
 }

@@ -1,5 +1,5 @@
 import { Metadata, status, type handleUnaryCall } from '@grpc/grpc-js';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { KeycloakAuthService } from '../auth/keycloak-auth.service';
 import { VotingLgpdService } from '../lgpd/voting-lgpd.service';
 import {
@@ -9,6 +9,46 @@ import {
 } from './voting-grpc.server';
 
 describe('Voting gRPC LGPD handlers', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('logs unexpected failures while keeping client errors generic', async () => {
+    const error = new Error('Database operation failed');
+    const logError = jest
+      .spyOn(Logger, 'error')
+      .mockImplementation(() => undefined);
+    const auth = {
+      authenticateMachineToMachineToken: jest.fn().mockRejectedValue(error),
+    } as unknown as KeycloakAuthService;
+    const handlers = createVotingGrpcHandlers({
+      auth,
+      lgpd: {} as VotingLgpdService,
+    });
+    const metadata = new Metadata();
+    metadata.set('authorization', 'Bearer service-token');
+    const callback = jest.fn();
+
+    handlers.collectLgpdUserData(
+      { metadata, request: { userId: 'user-1' } } as never,
+      callback,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(logError).toHaveBeenCalledWith(
+      'gRPC collectLgpdUserData failed.',
+      error.stack,
+      'VotingGrpc',
+    );
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: status.INTERNAL,
+        details: 'Internal gRPC service error.',
+      }),
+      null,
+    );
+  });
+
   it('requires the LGPD role and passes only the requested user identifier to the collector', async () => {
     const auth = {
       authenticateMachineToMachineToken: jest.fn().mockResolvedValue({}),
@@ -65,6 +105,9 @@ describe('Voting gRPC LGPD handlers', () => {
   });
 
   it('rejects oversized, malformed, and non-canonical LGPD fields', async () => {
+    const logError = jest
+      .spyOn(Logger, 'error')
+      .mockImplementation(() => undefined);
     const auth = {
       authenticateMachineToMachineToken: jest.fn().mockResolvedValue({}),
     } as unknown as KeycloakAuthService;
@@ -113,9 +156,13 @@ describe('Voting gRPC LGPD handlers', () => {
       code: status.INVALID_ARGUMENT,
     });
     expect(lgpd.collectUserData).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
   });
 
   it('forces gRPC shutdown after the configured deadline', async () => {
+    const logWarning = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     jest.useFakeTimers();
     const server = {
       tryShutdown: jest.fn(),
@@ -131,6 +178,9 @@ describe('Voting gRPC LGPD handlers', () => {
 
     expect(server.tryShutdown).toHaveBeenCalledTimes(1);
     expect(server.forceShutdown).toHaveBeenCalledTimes(1);
+    expect(logWarning).toHaveBeenCalledWith(
+      'gRPC shutdown timed out after 10ms; forcing shutdown.',
+    );
     delete process.env.VOTING_GRPC_SHUTDOWN_TIMEOUT_MS;
     jest.useRealTimers();
   });

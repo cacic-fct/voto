@@ -22,6 +22,7 @@ import {
 import { KeycloakAuthService } from '../auth/keycloak-auth.service';
 import { VotingLgpdService } from '../lgpd/voting-lgpd.service';
 import { loadService } from './grpc-runtime';
+import { logBackendError } from '../bootstrap/backend-error-logging';
 
 type GrpcRequest = Record<string, unknown>;
 type GrpcResponse = Record<string, unknown>;
@@ -108,6 +109,9 @@ export async function shutdownVotingGrpcServer(server: Server): Promise<void> {
     }
   }
   if (!settled) {
+    logger.warn(
+      `gRPC shutdown timed out after ${timeoutMs}ms; forcing shutdown.`,
+    );
     server.forceShutdown();
     resolveShutdown?.();
   }
@@ -125,7 +129,7 @@ export function createVotingGrpcHandlers(
   dependencies: VotingGrpcDependencies,
 ): UntypedServiceImplementation {
   return {
-    collectLgpdUserData: unary(async (call) => {
+    collectLgpdUserData: unary('collectLgpdUserData', async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:read']);
       return {
         json: JSON.stringify(
@@ -133,7 +137,7 @@ export function createVotingGrpcHandlers(
         ),
       };
     }),
-    scheduleLgpdDeletion: unary(async (call) => {
+    scheduleLgpdDeletion: unary('scheduleLgpdDeletion', async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
       return {
         json: JSON.stringify(
@@ -143,7 +147,7 @@ export function createVotingGrpcHandlers(
         ),
       };
     }),
-    cancelLgpdDeletion: unary(async (call) => {
+    cancelLgpdDeletion: unary('cancelLgpdDeletion', async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
       return {
         json: JSON.stringify(
@@ -153,7 +157,7 @@ export function createVotingGrpcHandlers(
         ),
       };
     }),
-    deleteLgpdData: unary(async (call) => {
+    deleteLgpdData: unary('deleteLgpdData', async (call) => {
       await authorize(call.metadata, dependencies.auth, ['lgpd:delete']);
       return {
         json: JSON.stringify(
@@ -165,6 +169,7 @@ export function createVotingGrpcHandlers(
 }
 
 function unary(
+  method: string,
   handler: (
     call: ServerUnaryCall<GrpcRequest, GrpcResponse>,
   ) => Promise<GrpcResponse>,
@@ -175,7 +180,12 @@ function unary(
   ) => {
     void handler(call).then(
       (response) => callback(null, response),
-      (error: unknown) => callback(toServiceError(error), null),
+      (error: unknown) => {
+        if (!(error instanceof HttpException) || error.getStatus() >= 500) {
+          logBackendError(`gRPC ${method} failed.`, error, 'VotingGrpc');
+        }
+        callback(toServiceError(error), null);
+      },
     );
   };
 }
