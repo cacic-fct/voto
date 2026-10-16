@@ -78,6 +78,11 @@ COPY --from=builder --chown=app:app /workspace/dist/apps/backend ./
 
 USER app
 
+# Validate the migration command, config, and schema without connecting to a database.
+RUN cd /app/apps/backend \
+    && DATABASE_URL="postgresql://user:password@localhost:5432/db?schema=public" \
+    ../../node_modules/.bin/prisma validate --config ./prisma.config.ts
+
 EXPOSE 3000 50051
 
 ENTRYPOINT ["dumb-init", "--"]

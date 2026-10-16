@@ -19,6 +19,7 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
+      runtimeDependencies: ['prisma', 'dotenv'],
       sourceMap: true,
     }),
   ],
