@@ -12,6 +12,14 @@ const config: StorybookConfig = {
       },
     },
   },
+  webpackFinal: async (config) => {
+    config.resolve ??= {};
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts'],
+    };
+    return config;
+  },
 };
 
 export default config;

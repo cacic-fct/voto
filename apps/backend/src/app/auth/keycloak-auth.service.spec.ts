@@ -165,7 +165,7 @@ describe('KeycloakAuthService', () => {
     mockedAxios.post.mockReset();
     jest
       .spyOn(KeycloakTokenClient.prototype, 'introspectAccessToken')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ active: true });
     mockedAxios.get.mockReset();
     mockedAxios.get.mockResolvedValue({
       data: { keys: [publicJwk] },
@@ -494,7 +494,10 @@ describe('KeycloakAuthService', () => {
     const accessToken = tokenWithClaims({
       sub: 'other-client-admin',
       exp: Math.floor(Date.now() / 1000) + 120,
-      resource_access: { 'other-client': { roles: ['super-admin'] } },
+      realm_access: { roles: ['voto-client:super-admin'] },
+      resource_access: {
+        'other-client': { roles: ['super-admin', 'poll#delete'] },
+      },
     });
     sessions.get.mockResolvedValue({
       accessToken,
@@ -507,6 +510,129 @@ describe('KeycloakAuthService', () => {
     await expect(
       service.authenticateSession('session-1', ['poll#delete']),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('recognizes the administrator role on the configured voting client', async () => {
+    const service = createService();
+    sessions.get.mockResolvedValue({
+      accessToken: tokenWithClaims({
+        sub: 'client-admin',
+        resource_access: { 'voto-client': { roles: ['super-admin'] } },
+      }),
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).resolves.toMatchObject({
+      roles: ['voto-client:super-admin', 'super-admin'],
+    });
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#delete']),
+    ).resolves.toEqual(['poll#delete']);
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('denies admin access to access-only users when UMA is not configured', async () => {
+    const service = createService();
+    sessions.get.mockResolvedValue({
+      accessToken: tokenWithClaims({
+        sub: 'ordinary-voter',
+        resource_access: { 'voto-client': { roles: ['access'] } },
+      }),
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post.mockRejectedValue({
+      response: {
+        status: 400,
+        data: {
+          error: 'invalid_request',
+          error_description: 'Client does not support permissions',
+        },
+      },
+    });
+
+    await expect(
+      service.authenticateSession('session-1'),
+    ).resolves.toMatchObject({
+      roles: ['voto-client:access', 'access'],
+      permissions: [],
+    });
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#read']),
+    ).resolves.toEqual([]);
+    await expect(
+      service.authenticateSession('session-1', ['poll#read']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('uses introspected client roles for scoped access with lightweight tokens', async () => {
+    const service = createService();
+    sessions.get.mockResolvedValue({
+      accessToken: tokenWithClaims({
+        resource_access: { account: { roles: ['manage-account'] } },
+      }),
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+    jest
+      .mocked(KeycloakTokenClient.prototype.introspectAccessToken)
+      .mockResolvedValue({
+        active: true,
+        sub: 'lightweight-reader',
+        resource_access: { 'voto-client': { roles: ['poll#read'] } },
+      });
+    mockedAxios.post.mockResolvedValue({ data: [] });
+
+    await expect(
+      service.authenticateSession('session-1', ['poll#read']),
+    ).resolves.toMatchObject({
+      sub: 'lightweight-reader',
+      roles: expect.arrayContaining([
+        'account:manage-account',
+        'voto-client:poll#read',
+      ]),
+      permissions: ['poll#read'],
+    });
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+    await expect(
+      service.evaluateSessionPermissions('session-1', [
+        'poll#read',
+        'poll#delete',
+      ]),
+    ).resolves.toEqual(['poll#read']);
+    await expect(
+      service.authenticateSession('session-1', ['poll#delete']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('preserves restricted observer reads when UMA is unavailable', async () => {
+    const service = createService();
+    sessions.get.mockResolvedValue({
+      accessToken: tokenWithClaims({
+        sub: 'client-observer',
+        resource_access: { 'voto-client': { roles: ['election-observer'] } },
+      }),
+      accessTokenExpiresAt: Date.now() + 120_000,
+      sessionExpiresAt: Date.now() + 600_000,
+    });
+    mockedAxios.post.mockRejectedValue(new Error('provider unavailable'));
+
+    await expect(
+      service.authenticateSession('session-1', ['poll#read']),
+    ).resolves.toMatchObject({
+      roles: expect.arrayContaining(['election-observer']),
+      permissions: [],
+    });
+    await expect(
+      service.evaluateSessionPermissions('session-1', ['poll#read']),
+    ).resolves.toEqual(['poll#read']);
+    await expect(
+      service.authenticateSession('session-1', ['poll#edit']),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('creates sessions, derives expiration, and syncs principals from verified JWT claims', async () => {
@@ -756,7 +882,7 @@ describe('KeycloakAuthService', () => {
     expect(mockedAxios.post).toHaveBeenCalled();
   });
 
-  it('evaluates session permissions with normalization and persistence', async () => {
+  it('normalizes and reevaluates UMA grants without storing them in the principal cache', async () => {
     const service = createService();
     const accessToken = tokenWithClaims({
       sub: 'user-1',
@@ -769,9 +895,9 @@ describe('KeycloakAuthService', () => {
       sessionExpiresAt: Date.now() + 600000,
     });
     mockUserInfo({ sub: 'user-1' });
-    mockedAxios.post.mockResolvedValue({
-      data: [{ rsname: 'poll', scopes: ['read'] }],
-    });
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: [{ rsname: 'poll', scopes: ['read'] }] })
+      .mockResolvedValueOnce({ data: [] });
 
     await expect(
       service.evaluateSessionPermissions('session-1', [
@@ -782,6 +908,9 @@ describe('KeycloakAuthService', () => {
       ]),
     ).resolves.toEqual(['poll#read']);
     expect(prisma.user.upsert).toHaveBeenCalled();
+    await expect(
+      service.authenticateSession('session-1', ['poll#read']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('returns already granted session permissions without Keycloak evaluation', async () => {

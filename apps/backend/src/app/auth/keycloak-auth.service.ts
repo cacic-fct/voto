@@ -7,6 +7,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  ELECTIONS_OBSERVER_ROLE,
+  VOTING_ADMIN_PERMISSIONS,
+  VOTING_ADMIN_ROLE,
   hasElectionsObserverRole,
   hasVotingAdminRole,
   normalizePermissions,
@@ -31,6 +34,7 @@ import {
   extractOidcScopes,
   extractPermissionClaims,
   extractPermissions,
+  extractRealmRoles,
   extractRoles,
   isRecord,
   readNumberClaim,
@@ -274,60 +278,20 @@ export class KeycloakAuthService {
     sessionId: string,
     requiredPermissions: readonly string[] = [],
   ): Promise<AuthenticatedPrincipal> {
-    let session = await this.sessions.get(sessionId);
-    if (!session) {
-      throw new UnauthorizedException('Missing authenticated session.');
-    }
-
-    if (
-      this.shouldRefreshSessionAccessToken(session.accessTokenExpiresAt) &&
-      session.refreshToken
-    ) {
-      session = await this.refreshStoredSession(sessionId, session);
-    }
-
-    let principal: AuthenticatedPrincipal;
-    try {
-      principal = await this.getOrCreatePrincipal(session.accessToken);
-    } catch (error) {
-      if (
-        !session.refreshToken ||
-        !this.isRefreshableAccessTokenFailure(error)
-      ) {
-        throw error;
-      }
-
-      session = await this.refreshStoredSession(sessionId, session);
-      principal = await this.getOrCreatePrincipal(session.accessToken);
-    }
-    const missingPermissions = requiredPermissions.filter(
-      (permission) => !principal.permissionSet.has(permission),
-    );
-
-    if (missingPermissions.length > 0 && !hasVotingAdminRole(principal.roles)) {
-      const granted = await this.evaluatePermissions(
-        session.accessToken,
-        missingPermissions,
+    let principal = await this.getSessionPrincipal(sessionId);
+    if (!hasVotingAdminRole(principal.roles)) {
+      principal = await this.withEvaluatedPermissions(
+        principal,
+        requiredPermissions,
       );
-
-      for (const permission of granted) {
-        principal.permissionSet.add(permission);
-      }
-
-      principal.permissions = [...principal.permissionSet];
-    }
-
-    const stillMissing = requiredPermissions.filter(
-      (permission) => !principal.permissionSet.has(permission),
-    );
-    if (
-      stillMissing.length > 0 &&
-      !hasVotingAdminRole(principal.roles) &&
-      !this.isObserverReadOnlyGrant(principal, stillMissing)
-    ) {
-      throw new ForbiddenException(
-        `Missing permissions: ${stillMissing.join(', ')}.`,
+      const denied = requiredPermissions.filter(
+        (permission) => !this.hasVotingPermission(principal, permission),
       );
+      if (denied.length > 0) {
+        throw new ForbiddenException(
+          `Missing permissions: ${denied.join(', ')}.`,
+        );
+      }
     }
 
     await this.syncUser(principal);
@@ -374,39 +338,22 @@ export class KeycloakAuthService {
     sessionId: string,
     requiredPermissions: string[],
   ): Promise<string[]> {
-    const session = await this.sessions.get(sessionId);
-    if (!session) {
-      throw new UnauthorizedException('Missing authenticated session.');
-    }
-
     this.assertPermissionRequest(requiredPermissions);
     const normalized = normalizePermissions(requiredPermissions);
-    this.assertPermissionRequest(normalized);
-    const principal = await this.getOrCreatePrincipal(session.accessToken);
+    const principal = await this.getSessionPrincipal(sessionId);
     if (hasVotingAdminRole(principal.roles)) {
       return normalized;
     }
 
-    const missingPermissions = normalized.filter(
-      (permission) => !principal.permissionSet.has(permission),
+    const evaluated = await this.withEvaluatedPermissions(
+      principal,
+      normalized,
     );
-    if (missingPermissions.length > 0) {
-      const grantedPermissions = await this.evaluatePermissions(
-        session.accessToken,
-        missingPermissions,
-      );
-      for (const permission of grantedPermissions) {
-        principal.permissionSet.add(permission);
-      }
-      principal.permissions = [...principal.permissionSet];
-      await this.syncUser(principal);
+    if (evaluated !== principal) {
+      await this.syncUser(evaluated);
     }
-
-    return normalized.filter(
-      (permission) =>
-        principal.permissionSet.has(permission) ||
-        (permission === 'poll#read' &&
-          hasElectionsObserverRole(principal.roles)),
+    return normalized.filter((permission) =>
+      this.hasVotingPermission(evaluated, permission),
     );
   }
 
@@ -656,6 +603,36 @@ export class KeycloakAuthService {
     }
   }
 
+  private async getSessionPrincipal(
+    sessionId: string,
+  ): Promise<AuthenticatedPrincipal> {
+    let session = await this.sessions.get(sessionId);
+    if (!session) {
+      throw new UnauthorizedException('Missing authenticated session.');
+    }
+
+    if (
+      this.shouldRefreshSessionAccessToken(session.accessTokenExpiresAt) &&
+      session.refreshToken
+    ) {
+      session = await this.refreshStoredSession(sessionId, session);
+    }
+
+    try {
+      return await this.getOrCreatePrincipal(session.accessToken);
+    } catch (error) {
+      if (
+        !session.refreshToken ||
+        !this.isRefreshableAccessTokenFailure(error)
+      ) {
+        throw error;
+      }
+
+      session = await this.refreshStoredSession(sessionId, session);
+      return this.getOrCreatePrincipal(session.accessToken);
+    }
+  }
+
   private async getOrCreatePrincipal(
     accessToken: string,
     options: { checkRevocation?: boolean } = {},
@@ -675,9 +652,19 @@ export class KeycloakAuthService {
     }
     this.pruneUserCache(now);
 
-    const mergedClaims =
+    const verifiedClaims =
       await this.tokenVerifier.verifyAccessTokenClaims(accessToken);
-    await this.tokenClient.introspectAccessToken(accessToken);
+    const introspectedClaims =
+      await this.tokenClient.introspectAccessToken(accessToken);
+    const mergedClaims = { ...introspectedClaims, ...verifiedClaims };
+    const introspectedClientAccess = introspectedClaims['resource_access'];
+    const verifiedClientAccess = verifiedClaims['resource_access'];
+    if (isRecord(introspectedClientAccess) && isRecord(verifiedClientAccess)) {
+      mergedClaims['resource_access'] = {
+        ...introspectedClientAccess,
+        ...verifiedClientAccess,
+      };
+    }
 
     const roles = extractRoles(mergedClaims);
     const permissions = extractPermissions(mergedClaims);
@@ -697,11 +684,11 @@ export class KeycloakAuthService {
       permissionSet: new Set(permissions),
     };
     this.assertAccessTokenClientAllowed(principal);
-    if (
-      options.checkRevocation !== false &&
-      !this.isServiceAccountPrincipal(principal)
-    ) {
-      await this.assertSubjectNotRevoked(principal.sub);
+    if (!this.isServiceAccountPrincipal(principal)) {
+      this.applyVotingClientRoles(principal);
+      if (options.checkRevocation !== false) {
+        await this.assertSubjectNotRevoked(principal.sub);
+      }
     }
 
     const expSeconds = readNumberClaim(mergedClaims, 'exp');
@@ -718,27 +705,77 @@ export class KeycloakAuthService {
     return principal;
   }
 
+  private applyVotingClientRoles(principal: AuthenticatedPrincipal): void {
+    const resourceAccess = principal.claims['resource_access'];
+    const clientRoles = new Set(
+      extractRealmRoles(
+        isRecord(resourceAccess) ? resourceAccess[this.clientId] : undefined,
+      ),
+    );
+    for (const role of ['access', VOTING_ADMIN_ROLE, ELECTIONS_OBSERVER_ROLE]) {
+      if (clientRoles.has(role)) {
+        principal.roleSet.add(role);
+      }
+    }
+    for (const permission of VOTING_ADMIN_PERMISSIONS) {
+      if (clientRoles.has(permission)) {
+        principal.permissionSet.add(permission);
+      }
+    }
+    principal.roles = [...principal.roleSet];
+    principal.permissions = [...principal.permissionSet];
+  }
+
+  private async withEvaluatedPermissions(
+    principal: AuthenticatedPrincipal,
+    requiredPermissions: readonly string[],
+  ): Promise<AuthenticatedPrincipal> {
+    const missing = requiredPermissions.filter(
+      (permission) => !principal.permissionSet.has(permission),
+    );
+    if (missing.length === 0) {
+      return principal;
+    }
+
+    let granted: string[];
+    try {
+      granted = await this.evaluatePermissions(principal.token, missing);
+    } catch (error) {
+      if (
+        error instanceof ServiceUnavailableException &&
+        missing.every((permission) =>
+          this.hasVotingPermission(principal, permission),
+        )
+      ) {
+        return principal;
+      }
+      throw error;
+    }
+
+    const permissionSet = new Set([...principal.permissionSet, ...granted]);
+    return { ...principal, permissionSet, permissions: [...permissionSet] };
+  }
+
   private async evaluatePermissions(
     accessToken: string,
     requiredPermissions: string[],
   ): Promise<string[]> {
-    const payload = new URLSearchParams();
-    payload.set('grant_type', 'urn:ietf:params:oauth:grant-type:uma-ticket');
-    payload.set('audience', this.clientId);
-    payload.set('response_mode', 'permissions');
-    payload.set('response_include_resource_name', 'true');
-    payload.set('client_id', this.clientId);
-
+    const payload = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:uma-ticket',
+      audience: this.clientId,
+      response_mode: 'permissions',
+      response_include_resource_name: 'true',
+      client_id: this.clientId,
+    });
     if (this.clientSecret) {
       payload.set('client_secret', this.clientSecret);
     }
-
     for (const permission of requiredPermissions) {
       payload.append('permission', permission);
     }
 
     try {
-      const { data } = await axios.post(
+      const { data } = await axios.post<unknown>(
         `${this.realmUrl}/protocol/openid-connect/token`,
         payload.toString(),
         {
@@ -749,38 +786,43 @@ export class KeycloakAuthService {
           timeout: this.keycloakRequestTimeoutMs,
         },
       );
-
-      const grantedPermissions = new Set<string>();
-      extractPermissionClaims(data, grantedPermissions);
-      return [...grantedPermissions];
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid Keycloak permission response.');
+      }
+      const granted = new Set<string>();
+      extractPermissionClaims(data, granted);
+      return requiredPermissions.filter((permission) =>
+        granted.has(permission),
+      );
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      const response = axios.isAxiosError(error) ? error.response : undefined;
+      const status = response?.status;
+      const data: unknown = response?.data;
+      if (
+        status === 403 ||
+        (status === 400 &&
+          isRecord(data) &&
+          data['error'] === 'invalid_request' &&
+          data['error_description'] === 'Client does not support permissions')
+      ) {
         return [];
       }
-
-      const status = axios.isAxiosError(error)
-        ? error.response?.status
-        : undefined;
       this.logger.warn(
         `Keycloak authorization permission evaluation failed. status=${status ?? 'none'}.`,
       );
-      if (status === 401) {
-        return [];
-      }
-
       throw new ServiceUnavailableException(
         'Keycloak authorization service is unavailable.',
       );
     }
   }
 
-  private isObserverReadOnlyGrant(
+  private hasVotingPermission(
     principal: AuthenticatedPrincipal,
-    missingPermissions: readonly string[],
+    permission: string,
   ): boolean {
     return (
-      hasElectionsObserverRole(principal.roles) &&
-      missingPermissions.every((permission) => permission === 'poll#read')
+      principal.permissionSet.has(permission) ||
+      (permission === 'poll#read' && hasElectionsObserverRole(principal.roles))
     );
   }
 

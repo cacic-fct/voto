@@ -36,6 +36,7 @@ export const VOTING_ADMIN_PERMISSIONS = [
 
 export type VotingAdminPermission = (typeof VOTING_ADMIN_PERMISSIONS)[number];
 
+export const VOTING_ADMIN_ROLE = 'super-admin';
 export const ELECTIONS_OBSERVER_ROLE = 'election-observer';
 
 export type AuthenticatedUser = {
@@ -504,7 +505,7 @@ export function normalizePermissions(permissions: readonly string[]): string[] {
 }
 
 export function hasVotingAdminRole(roles: readonly string[] = []): boolean {
-  return roles.includes('super-admin');
+  return roles.includes(VOTING_ADMIN_ROLE);
 }
 
 export function hasElectionsObserverRole(

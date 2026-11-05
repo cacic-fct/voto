@@ -1,6 +1,9 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { VOTING_ADMIN_PERMISSIONS } from '@org/voting-contracts';
+import {
+  AuthenticatedUser,
+  VOTING_ADMIN_PERMISSIONS,
+} from '@org/voting-contracts';
 import { of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
@@ -10,20 +13,27 @@ describe('PermissionsService', () => {
   let permissions: PermissionsService;
   let authPermissions: ReturnType<typeof signal<string[]>>;
   let roles: ReturnType<typeof signal<string[]>>;
-  let isAuthenticated: ReturnType<typeof signal<boolean>>;
+  let currentUser: ReturnType<typeof signal<AuthenticatedUser | null>>;
   let auth: Pick<
     AuthService,
-    'permissions' | 'roles' | 'isAuthenticated' | 'evaluatePermissions'
+    'permissions' | 'roles' | 'user' | 'evaluatePermissions'
   >;
+  const user: AuthenticatedUser = {
+    sub: 'user-1',
+    permissions: [],
+    roles: [],
+    scopes: [],
+    oidcScopes: [],
+  };
 
   beforeEach(() => {
     authPermissions = signal([]);
     roles = signal([]);
-    isAuthenticated = signal(false);
+    currentUser = signal(null);
     auth = {
       permissions: authPermissions,
       roles,
-      isAuthenticated,
+      user: currentUser,
       evaluatePermissions: vi.fn().mockReturnValue(of({ permissions: [] })),
     };
 
@@ -36,7 +46,7 @@ describe('PermissionsService', () => {
 
   it('combines direct and evaluated permissions in sorted order', async () => {
     authPermissions.set(['polls:write', 'polls:read']);
-    isAuthenticated.set(true);
+    currentUser.set(user);
     vi.mocked(auth.evaluatePermissions).mockReturnValue(
       of({ permissions: ['admin:polls', 'polls:read'] }),
     );
@@ -59,7 +69,7 @@ describe('PermissionsService', () => {
 
   it('reuses the in-flight admin permission evaluation', async () => {
     const evaluation = new Subject<{ permissions: string[] }>();
-    isAuthenticated.set(true);
+    currentUser.set(user);
     vi.mocked(auth.evaluatePermissions).mockReturnValue(evaluation);
 
     const first = permissions.evaluateAdminPermissions();
@@ -78,7 +88,7 @@ describe('PermissionsService', () => {
 
   it('clears evaluated permissions when remote evaluation fails', async () => {
     authPermissions.set(['polls:read']);
-    isAuthenticated.set(true);
+    currentUser.set(user);
     vi.mocked(auth.evaluatePermissions)
       .mockReturnValueOnce(of({ permissions: ['admin:polls'] }))
       .mockReturnValueOnce(throwError(() => new Error('offline')));
@@ -97,5 +107,34 @@ describe('PermissionsService', () => {
     roles.set([]);
     authPermissions.set([...VOTING_ADMIN_PERMISSIONS]);
     expect(permissions.isAdmin()).toBe(true);
+  });
+
+  it('drops evaluated grants as soon as the session changes', async () => {
+    currentUser.set(user);
+    vi.mocked(auth.evaluatePermissions).mockReturnValue(
+      of({ permissions: ['poll#read'] }),
+    );
+    await permissions.evaluateAdminPermissions();
+    expect(permissions.isAdmin()).toBe(true);
+
+    currentUser.set(null);
+    expect(permissions.isAdmin()).toBe(false);
+  });
+
+  it('ignores an evaluation that completes for a previous user', async () => {
+    const previousEvaluation = new Subject<{ permissions: string[] }>();
+    vi.mocked(auth.evaluatePermissions)
+      .mockReturnValueOnce(previousEvaluation)
+      .mockReturnValueOnce(of({ permissions: ['poll#read'] }));
+
+    currentUser.set(user);
+    const pending = permissions.evaluateAdminPermissions();
+    currentUser.set({ ...user, sub: 'user-2' });
+    await permissions.evaluateAdminPermissions();
+    previousEvaluation.next({ permissions: ['poll#delete'] });
+    await pending;
+
+    expect(auth.evaluatePermissions).toHaveBeenCalledTimes(2);
+    expect(permissions.rawPermissions()).toEqual(['poll#read']);
   });
 });

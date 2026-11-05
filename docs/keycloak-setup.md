@@ -32,18 +32,30 @@ subject revocation checks still apply.
 
 ## Admin access
 
-Users can access `Area restrita` when either of these is true:
+The `super-admin` realm role or the same role on the configured
+`KEYCLOAK_CLIENT_ID` grants full access to `Área restrita`. The
+`election-observer` role in either location grants read-only access to the
+eligible CACiC elections. The `access` role alone grants no workspace privileges.
 
-- The token includes one of these roles: `admin`, `administrator`, `voting-admin`.
-- The token or permission evaluation endpoint grants at least one poll permission:
-  - `poll#read`
-  - `poll#create`
-  - `poll#edit`
-  - `poll#delete`
-  - `poll#publish`
-  - `poll#kiosk` (required to authorize kiosk ballots)
+For scoped access, define client roles on `KEYCLOAK_CLIENT_ID` with the exact
+permission names below. Keycloak can assign these roles directly or through a
+group or composite role.
 
-Expose roles and permissions in tokens with Keycloak protocol mappers, or keep permissions in the sister authorization resource and let `/api/auth/permissions/evaluate` check them.
+- `poll#read` lists and opens polls in the workspace.
+- `poll#create`, `poll#edit`, `poll#delete`, and `poll#publish` grant the
+  corresponding write operations.
+- `poll#kiosk` grants kiosk access and ballot authorization.
+
+Include the role claims in the access token or enable **Add to token
+introspection** on their protocol mappers. CACiC Voto evaluates these roles
+directly from Keycloak. Account Manager can schedule and synchronize role
+assignments to Keycloak. Voto authorization requires no Account Manager call
+or shared database. After changing role assignments, sign in again to obtain a
+token with the updated roles.
+
+If you use Keycloak Authorization Services, configure the `poll` resource and
+its scopes on the voting client. The backend evaluates those policies for
+permissions absent from the session's claims.
 
 ## Machine-to-machine client
 

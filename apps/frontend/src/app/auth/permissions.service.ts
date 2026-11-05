@@ -1,5 +1,6 @@
-import { Service, computed, inject, signal } from '@angular/core';
+import { Service, computed, inject, linkedSignal } from '@angular/core';
 import {
+  AuthenticatedUser,
   VOTING_ADMIN_PERMISSIONS,
   hasPollKioskPermission,
   hasVotingAdminPermission,
@@ -11,8 +12,14 @@ import { AuthService } from './auth.service';
 @Service()
 export class PermissionsService {
   private readonly auth = inject(AuthService);
-  private readonly evaluatedPermissions = signal<Set<string>>(new Set());
-  private evaluationPromise: Promise<void> | null = null;
+  private readonly evaluatedPermissions = linkedSignal({
+    source: this.auth.user,
+    computation: (): string[] => [],
+  });
+  private evaluation: {
+    user: AuthenticatedUser;
+    promise: Promise<void>;
+  } | null = null;
 
   readonly rawPermissions = computed(() => {
     const permissions = new Set(this.auth.permissions());
@@ -34,26 +41,38 @@ export class PermissionsService {
   );
 
   async evaluateAdminPermissions(): Promise<void> {
-    if (!this.auth.isAuthenticated() || this.evaluationPromise) {
-      return this.evaluationPromise ?? undefined;
+    const user = this.auth.user();
+    if (!user) {
+      return;
+    }
+    if (this.evaluation?.user === user) {
+      return this.evaluation.promise;
     }
 
-    this.evaluationPromise = this.fetchAdminPermissions();
+    const evaluation = { user, promise: this.fetchAdminPermissions(user) };
+    this.evaluation = evaluation;
     try {
-      await this.evaluationPromise;
+      await evaluation.promise;
     } finally {
-      this.evaluationPromise = null;
+      if (this.evaluation === evaluation) {
+        this.evaluation = null;
+      }
     }
   }
 
-  private async fetchAdminPermissions(): Promise<void> {
+  private async fetchAdminPermissions(user: AuthenticatedUser): Promise<void> {
+    let permissions: string[] = [];
     try {
       const response = await firstValueFrom(
         this.auth.evaluatePermissions(VOTING_ADMIN_PERMISSIONS),
       );
-      this.evaluatedPermissions.set(new Set(response.permissions));
+      permissions = response.permissions;
     } catch {
-      this.evaluatedPermissions.set(new Set());
+      // Token grants remain available if the policy lookup fails.
+    }
+
+    if (this.auth.user() === user) {
+      this.evaluatedPermissions.set(permissions);
     }
   }
 }

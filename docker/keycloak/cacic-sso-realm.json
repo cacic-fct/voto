@@ -7,6 +7,19 @@
   "resetPasswordAllowed": false,
   "editUsernameAllowed": false,
   "roles": {
+    "client": {
+      "cacic-voto": [
+        { "name": "access" },
+        { "name": "super-admin" },
+        { "name": "election-observer" },
+        { "name": "poll#read" },
+        { "name": "poll#create" },
+        { "name": "poll#edit" },
+        { "name": "poll#delete" },
+        { "name": "poll#publish" },
+        { "name": "poll#kiosk" }
+      ]
+    },
     "realm": [
       {
         "name": "access"

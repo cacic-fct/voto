@@ -58,9 +58,9 @@ describe('KeycloakTokenClient', () => {
         tokenEndpointAuthMethod,
       });
       mockedAxios.post.mockResolvedValue({ data: { active: true } });
-      await expect(
-        client.introspectAccessToken('access'),
-      ).resolves.toBeUndefined();
+      await expect(client.introspectAccessToken('access')).resolves.toEqual({
+        active: true,
+      });
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'https://sso.example/realms/cacic/protocol/openid-connect/token/introspect',
         expect.stringContaining('token=access&token_type_hint=access_token'),

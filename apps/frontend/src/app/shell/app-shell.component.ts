@@ -2,7 +2,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
+  untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -68,7 +70,11 @@ export class AppShellComponent {
   ]);
 
   constructor() {
-    void this.permissions.evaluateAdminPermissions();
+    effect(() => {
+      if (this.auth.user()) {
+        untracked(() => void this.permissions.evaluateAdminPermissions());
+      }
+    });
   }
 
   protected isActive(path: string): boolean {

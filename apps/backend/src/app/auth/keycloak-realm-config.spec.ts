@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  ELECTIONS_OBSERVER_ROLE,
+  VOTING_ADMIN_PERMISSIONS,
+  VOTING_ADMIN_ROLE,
+} from '@org/voting-contracts';
 
 type RealmEntry = {
   clientId?: string;
@@ -15,7 +20,10 @@ const realm = JSON.parse(
     resolve(__dirname, '../../../../../docker/keycloak/cacic-sso-realm.json'),
     'utf8',
   ),
-) as { clients: RealmEntry[]; clientScopes: RealmEntry[] };
+) as {
+  clients: RealmEntry[];
+  roles: { client: Record<string, { name: string }[]> };
+};
 
 describe('Keycloak realm introspection audience', () => {
   it.each([
@@ -40,5 +48,16 @@ describe('Keycloak realm introspection audience', () => {
         ]),
       );
     },
+  );
+});
+
+it('defines the supported voting roles on the voting client', () => {
+  expect(realm.roles.client['cacic-voto'].map(({ name }) => name)).toEqual(
+    expect.arrayContaining([
+      'access',
+      VOTING_ADMIN_ROLE,
+      ELECTIONS_OBSERVER_ROLE,
+      ...VOTING_ADMIN_PERMISSIONS,
+    ]),
   );
 });

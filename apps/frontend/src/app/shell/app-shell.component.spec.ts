@@ -70,6 +70,16 @@ describe('AppShellComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Área restrita');
   });
 
+  it('reevaluates permissions when the authenticated user is refreshed', () => {
+    const permissions = TestBed.inject(PermissionsService);
+    expect(permissions.evaluateAdminPermissions).toHaveBeenCalledTimes(1);
+
+    auth.user.set({ ...user });
+    fixture.detectChanges();
+
+    expect(permissions.evaluateAdminPermissions).toHaveBeenCalledTimes(2);
+  });
+
   it('should detect active routes and forward logout to the auth service', async () => {
     const component = fixture.componentInstance as unknown as {
       isActive(path: string): boolean;

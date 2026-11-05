@@ -31,7 +31,9 @@ export class KeycloakTokenClient {
 
   constructor(private readonly options: KeycloakTokenClientOptions) {}
 
-  async introspectAccessToken(accessToken: string): Promise<void> {
+  async introspectAccessToken(
+    accessToken: string,
+  ): Promise<Record<string, unknown>> {
     const payload = new URLSearchParams({
       token: accessToken,
       token_type_hint: 'access_token',
@@ -55,6 +57,8 @@ export class KeycloakTokenClient {
     if (!isRecord(introspection) || introspection['active'] !== true) {
       throw new UnauthorizedException('Token is not active.');
     }
+
+    return introspection;
   }
 
   async exchangeCodeForTokens(
