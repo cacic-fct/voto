@@ -78,6 +78,7 @@ export class KeycloakM2mTokenService {
         payload.toString(),
         {
           headers: {
+            'Accept-Encoding': 'identity',
             'content-type': 'application/x-www-form-urlencoded',
           },
           timeout: this.requestTimeoutMs,

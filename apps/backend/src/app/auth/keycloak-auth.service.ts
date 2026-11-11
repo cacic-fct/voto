@@ -781,6 +781,7 @@ export class KeycloakAuthService {
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            'Accept-Encoding': 'identity',
             'content-type': 'application/x-www-form-urlencoded',
           },
           timeout: this.keycloakRequestTimeoutMs,

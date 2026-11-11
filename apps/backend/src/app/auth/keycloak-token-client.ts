@@ -156,6 +156,7 @@ export class KeycloakTokenClient {
     extraHeaders?: Record<string, string>,
   ): Record<string, string> {
     return {
+      'Accept-Encoding': 'identity',
       'content-type': 'application/x-www-form-urlencoded',
       ...extraHeaders,
     };

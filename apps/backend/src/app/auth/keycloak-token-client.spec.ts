@@ -117,7 +117,10 @@ describe('KeycloakTokenClient', () => {
       'https://sso.example/realms/cacic/protocol/openid-connect/token',
       expect.any(String),
       expect.objectContaining({
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Accept-Encoding': 'identity',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
         timeout: 10_000,
       }),
     );
@@ -252,7 +255,10 @@ describe('KeycloakTokenClient', () => {
       'https://sso.example/realms/cacic/protocol/openid-connect/logout',
       'refresh_token=refresh-1&client_id=voto+client',
       expect.objectContaining({
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Accept-Encoding': 'identity',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
       }),
     );
 

@@ -149,7 +149,10 @@ describe('KeycloakTokenVerifier', () => {
     expect(axiosGet).toHaveBeenCalledWith(
       `${TEST_ISSUER}/protocol/openid-connect/certs`,
       expect.objectContaining({
-        headers: { accept: 'application/json' },
+        headers: {
+          'Accept-Encoding': 'identity',
+          accept: 'application/json',
+        },
         timeout: 10_000,
         validateStatus: expect.any(Function),
       }),

@@ -55,6 +55,7 @@ describe('FeatureFlagService', () => {
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.headers).toMatchObject({
+      'Accept-Encoding': 'identity',
       Authorization: 'client-key',
       'UNLEASH-APPNAME': 'cacic-voto-backend-test',
       'UNLEASH-ENVIRONMENT': 'production',

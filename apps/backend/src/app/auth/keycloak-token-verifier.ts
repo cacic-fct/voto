@@ -138,6 +138,7 @@ export class KeycloakTokenVerifier {
     try {
       const response = await axios.get<unknown>(jwksUrl, {
         headers: {
+          'Accept-Encoding': 'identity',
           accept: 'application/json',
         },
         validateStatus: () => true,

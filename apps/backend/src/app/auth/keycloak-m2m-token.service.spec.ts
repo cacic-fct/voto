@@ -59,6 +59,10 @@ describe('KeycloakM2mTokenService', () => {
       'audience=event-manager',
     );
     expect(mockedAxios.post.mock.calls[0][1]).toContain('scope=events%3Aread');
+    expect(mockedAxios.post.mock.calls[0][2]?.headers).toMatchObject({
+      'Accept-Encoding': 'identity',
+      'content-type': 'application/x-www-form-urlencoded',
+    });
   });
 
   it('refreshes cached tokens inside the refresh skew and supports option credentials', async () => {

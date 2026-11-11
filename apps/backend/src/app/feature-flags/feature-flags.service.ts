@@ -68,6 +68,7 @@ export class FeatureFlagService {
 
     const response = await fetch(this.readFrontendUrl(), {
       headers: {
+        'Accept-Encoding': 'identity',
         Authorization: clientKey,
         'UNLEASH-APPNAME': this.readAppName(),
         'UNLEASH-ENVIRONMENT': this.readEnvironment(),
